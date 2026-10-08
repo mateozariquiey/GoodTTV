@@ -1,11 +1,6 @@
 import { randomUUID } from "node:crypto"
 import ky from "ky"
-import {
-  type AuthSnapshot,
-  ClientIdSchema,
-  type DeviceChallenge,
-  type SettingsSnapshot,
-} from "../shared/contracts"
+import type { AuthSnapshot, DeviceChallenge } from "../shared/contracts"
 import type { SettingsStore } from "./settings-store"
 import type { StoredToken, TokenVault } from "./token-vault"
 import { ConfigurationError, SessionChangedError } from "./twitch-errors"
@@ -38,20 +33,8 @@ export class TwitchAuth {
     this.#session = new TwitchSession(settings, vault)
   }
 
-  public async settingsSnapshot(): Promise<SettingsSnapshot> {
-    const settings = await this.#settings.load()
-    return { clientId: settings.clientId, secureStorage: this.#vault.isSecure }
-  }
-
-  public async saveClientId(clientId: string): Promise<SettingsSnapshot> {
-    const parsedClientId = ClientIdSchema.parse(clientId)
-    const previous = await this.#settings.load()
-    if (previous.clientId !== parsedClientId) {
-      this.#cancelAuthorization()
-      await this.#clearAndRevoke(previous.clientId)
-    }
-    const settings = await this.#settings.saveClientId(parsedClientId)
-    return { clientId: settings.clientId, secureStorage: this.#vault.isSecure }
+  public status(): { secureStorage: boolean } {
+    return { secureStorage: this.#vault.isSecure }
   }
 
   public async begin(): Promise<DeviceChallenge> {
@@ -62,7 +45,11 @@ export class TwitchAuth {
         .post("https://id.twitch.tv/oauth2/device", { body, timeout: 15_000 })
         .json<unknown>(),
     )
-    const challenge = toDeviceChallenge(response, randomUUID(), new Date())
+    const issued = toDeviceChallenge(response, randomUUID(), new Date())
+    // The address becomes a QR code on the TV: only ever Twitch's own activation page.
+    const challenge = isAllowedActivationUrl(issued.verificationUri)
+      ? issued
+      : { ...issued, verificationUri: "https://www.twitch.tv/activate" }
     this.#flowVersion += 1
     this.#pending = { challenge, deviceCode: response.device_code, lastPollAt: 0 }
     this.#polling = undefined
@@ -117,17 +104,6 @@ export class TwitchAuth {
     } finally {
       await this.#clearAndRevoke(clientId)
     }
-  }
-
-  public activationUrl(flowId: string): string {
-    if (this.#pending?.challenge.flowId !== flowId) {
-      throw new ConfigurationError("The device authorization request is no longer active")
-    }
-    const activationUrl = this.#pending.challenge.verificationUri
-    if (!isAllowedActivationUrl(activationUrl)) {
-      throw new ConfigurationError("Twitch returned an unexpected activation address")
-    }
-    return activationUrl
   }
 
   async #pollSingleFlight(pending: PendingAuthorization): Promise<AuthSnapshot> {
@@ -234,7 +210,7 @@ export class TwitchAuth {
   async #requireClientId(): Promise<string> {
     const settings = await this.#settings.load()
     if (settings.clientId === "") {
-      throw new ConfigurationError("Add a public Twitch Client ID in Settings first")
+      throw new ConfigurationError("This build has no Twitch Client ID")
     }
     return settings.clientId
   }

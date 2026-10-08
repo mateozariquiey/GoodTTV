@@ -1,13 +1,6 @@
 import { z } from "zod"
-import type {
-  CategoryCard,
-  ChannelCard,
-  DeviceChallenge,
-  FollowedChannelCard,
-  Page,
-  StreamCard,
-  VideoCard,
-} from "../shared/contracts"
+import type { ChatBadge } from "../shared/chat"
+import type { ChannelCard, DeviceChallenge, Page, StreamCard } from "../shared/contracts"
 
 const PaginationSchema = z.object({ cursor: z.string().optional() })
 
@@ -30,12 +23,6 @@ const HelixStreamSchema = z.object({
   viewer_count: z.number().int().nonnegative(),
 })
 
-const HelixCategorySchema = z.object({
-  box_art_url: z.url(),
-  id: z.string(),
-  name: z.string(),
-})
-
 const HelixChannelSchema = z.object({
   broadcaster_language: z.string(),
   broadcaster_login: z.string(),
@@ -48,28 +35,9 @@ const HelixChannelSchema = z.object({
   title: z.string(),
 })
 
-const HelixFollowedChannelSchema = z.object({
-  broadcaster_id: z.string(),
-  broadcaster_login: z.string(),
-  broadcaster_name: z.string(),
-})
-
 const HelixUserSchema = z.object({
   id: z.string(),
   profile_image_url: z.url(),
-})
-
-const HelixVideoSchema = z.object({
-  created_at: z.string(),
-  duration: z.string(),
-  id: z.string(),
-  published_at: z.string(),
-  thumbnail_url: z.string(),
-  title: z.string(),
-  user_id: z.string(),
-  user_login: z.string(),
-  user_name: z.string(),
-  view_count: z.number().int().nonnegative(),
 })
 
 const DeviceCodeResponseSchema = z.object({
@@ -148,17 +116,6 @@ export const mergeStreamProfiles = (
   }),
 })
 
-export const parseCategoriesResponse = (input: unknown): Page<CategoryCard> => {
-  const response = z
-    .object({ data: z.array(HelixCategorySchema), pagination: PaginationSchema })
-    .parse(input)
-  return mapPage(response.data, response.pagination.cursor, (category) => ({
-    boxArtUrl: category.box_art_url.replace("{width}", "384").replace("{height}", "512"),
-    id: category.id,
-    name: category.name,
-  }))
-}
-
 export const parseChannelsResponse = (input: unknown): Page<ChannelCard> => {
   const response = z
     .object({ data: z.array(HelixChannelSchema), pagination: PaginationSchema })
@@ -171,41 +128,6 @@ export const parseChannelsResponse = (input: unknown): Page<ChannelCard> => {
     login: channel.broadcaster_login,
     thumbnailUrl: channel.thumbnail_url,
     title: channel.title,
-  }))
-}
-
-export const parseFollowedChannelsResponse = (input: unknown): Page<FollowedChannelCard> => {
-  const response = z
-    .object({ data: z.array(HelixFollowedChannelSchema), pagination: PaginationSchema })
-    .parse(input)
-  return mapPage(response.data, response.pagination.cursor, (channel) => ({
-    displayName: channel.broadcaster_name,
-    id: channel.broadcaster_id,
-    // The service replaces this placeholder with the required streams snapshot before returning.
-    isLive: false,
-    login: channel.broadcaster_login,
-  }))
-}
-
-export const parseVideosResponse = (input: unknown): Page<VideoCard> => {
-  const response = z
-    .object({ data: z.array(HelixVideoSchema), pagination: PaginationSchema })
-    .parse(input)
-  return mapPage(response.data, response.pagination.cursor, (video) => ({
-    createdAt: video.created_at,
-    duration: video.duration,
-    id: video.id,
-    publishedAt: video.published_at,
-    ...(video.thumbnail_url === ""
-      ? {}
-      : {
-          thumbnailUrl: video.thumbnail_url.replace("%{width}", "320").replace("%{height}", "180"),
-        }),
-    title: video.title,
-    userId: video.user_id,
-    userLogin: video.user_login,
-    userName: video.user_name,
-    viewCount: video.view_count,
   }))
 }
 
@@ -223,3 +145,34 @@ export const toDeviceChallenge = (
   userCode: response.user_code,
   verificationUri: response.verification_uri,
 })
+
+const HelixBadgeSetSchema = z.object({
+  set_id: z.string(),
+  versions: z.array(
+    z.object({
+      id: z.string(),
+      image_url_2x: z.url(),
+      title: z.string(),
+    }),
+  ),
+})
+
+// Keyed by "set_id/id", the shape EventSub chat messages reference.
+export const parseBadgesResponse = (input: unknown): Map<string, ChatBadge> => {
+  const response = z.object({ data: z.array(HelixBadgeSetSchema) }).parse(input)
+  const badges = new Map<string, ChatBadge>()
+  for (const set of response.data) {
+    for (const version of set.versions) {
+      if (!version.image_url_2x.startsWith("https://static-cdn.jtvnw.net/")) continue
+      badges.set(`${set.set_id}/${version.id}`, {
+        title: version.title.slice(0, 100),
+        url: version.image_url_2x,
+      })
+    }
+  }
+  return badges
+}
+
+export const parseSubscriptionResponse = (input: unknown): string =>
+  z.object({ data: z.array(z.object({ id: z.string().min(1) })).min(1) }).parse(input).data[0]
+    ?.id ?? ""

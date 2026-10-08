@@ -1,46 +1,37 @@
-import { mkdir, readFile, rename, writeFile } from "node:fs/promises"
-import { join } from "node:path"
-import { z } from "zod"
 import { type ClientId, ClientIdSchema } from "../shared/contracts"
 
-const StoredSettingsSchema = z.object({ clientId: ClientIdSchema })
-const DEFAULT_CLIENT_ID = ClientIdSchema.parse("eakftex39l79dzb7irvxxvr3i0o7d0")
+// The Client ID identifies this *application* to Twitch, not the viewer. It is public (not a
+// secret), registered once in the Twitch developer console as a Public client. Forks should
+// register their own and build with MAIN_VITE_TWITCH_CLIENT_ID; TWITCH_CLIENT_ID overrides it at
+// run time. Nobody types it with a remote.
+export const PROJECT_CLIENT_ID = "q5asa7tpmoateti374pbjyfepb5gnx"
 
 export type PublicSettings = {
   readonly clientId: ClientId | ""
 }
 
-const isMissingFile = (error: unknown): boolean =>
-  error instanceof Error && "code" in error && error.code === "ENOENT"
+export const resolveClientId = (
+  runtime: string | undefined,
+  builtIn: string | undefined,
+): ClientId | "" => {
+  for (const candidate of [runtime, builtIn, PROJECT_CLIENT_ID]) {
+    const parsed = ClientIdSchema.safeParse(candidate)
+    if (parsed.success) return parsed.data
+  }
+  return ""
+}
 
 export class SettingsStore {
-  readonly #directory: string
-  readonly #path: string
+  readonly #clientId: ClientId | ""
 
-  public constructor(directory: string) {
-    this.#directory = directory
-    this.#path = join(directory, "settings.json")
+  public constructor(
+    runtime: string | undefined = process.env["TWITCH_CLIENT_ID"],
+    builtIn: string | undefined = import.meta.env.MAIN_VITE_TWITCH_CLIENT_ID,
+  ) {
+    this.#clientId = resolveClientId(runtime, builtIn)
   }
 
   public async load(): Promise<PublicSettings> {
-    let contents: string
-    try {
-      contents = await readFile(this.#path, "utf8")
-    } catch (error) {
-      if (isMissingFile(error)) {
-        return { clientId: DEFAULT_CLIENT_ID }
-      }
-      throw error
-    }
-    return StoredSettingsSchema.parse(JSON.parse(contents))
-  }
-
-  public async saveClientId(input: string): Promise<PublicSettings> {
-    const settings = { clientId: ClientIdSchema.parse(input) }
-    await mkdir(this.#directory, { recursive: true })
-    const temporaryPath = `${this.#path}.tmp`
-    await writeFile(temporaryPath, JSON.stringify(settings, undefined, 2), { mode: 0o600 })
-    await rename(temporaryPath, this.#path)
-    return settings
+    return { clientId: this.#clientId }
   }
 }

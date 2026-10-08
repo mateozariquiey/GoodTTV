@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest"
 import {
   createDeviceTokenBody,
   createLiveSearchParams,
-  createVideoSearchParams,
   isAllowedActivationUrl,
   isIdentityCacheCurrent,
   shouldRefreshResponse,
@@ -17,18 +16,13 @@ describe("Twitch request contracts", () => {
     const body = createDeviceTokenBody(clientId, "device-code")
 
     // Then Twitch receives the documented scope set
-    expect(body.get("scopes")).toBe("user:read:follows")
+    expect(body.get("scopes")).toBe("user:read:follows user:read:chat")
   })
 
-  it("maps category live input to game_id without leaking gameId", () => {
-    expect(createLiveSearchParams({ first: 20, gameId: "33214" })).toEqual({
+  it("maps the language filter to Helix's parameter", () => {
+    expect(createLiveSearchParams({ first: 20, language: "es" })).toEqual({
       first: 20,
-      game_id: "33214",
-    })
-    expect(createLiveSearchParams({ after: "next+/=", first: 20, gameId: "33214" })).toEqual({
-      after: "next+/=",
-      first: 20,
-      game_id: "33214",
+      language: "es",
     })
   })
 
@@ -38,18 +32,6 @@ describe("Twitch request contracts", () => {
       after: "cursor",
       first: 20,
     })
-  })
-
-  it("maps VOD input without leaking camel-case parameters", () => {
-    // Given typed VOD pagination input
-    const input = { after: "cursor", first: 30, userId: "123" }
-
-    // When Helix query parameters are created
-    const search = createVideoSearchParams(input)
-
-    // Then only documented snake-case parameters are emitted
-    expect(search).toEqual({ after: "cursor", first: 30, type: "archive", user_id: "123" })
-    expect("userId" in search).toBe(false)
   })
 
   it("refreshes only an unauthorized response", () => {

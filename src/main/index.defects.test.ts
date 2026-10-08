@@ -20,8 +20,6 @@ const deferred = <Value>(): Deferred<Value> => {
 const setup = () => {
   vi.resetModules()
   vi.stubEnv("ELECTRON_RENDERER_URL", undefined)
-  vi.stubEnv("SteamGamepadUI", "0")
-  vi.stubEnv("SteamOS", "0")
 
   const ready = deferred<void>()
   const loaded = deferred<void>()
@@ -41,6 +39,7 @@ const setup = () => {
   const app = Object.assign(new EventEmitter(), {
     exit: vi.fn(() => exited.resolve()),
     getAppPath: vi.fn(() => "/application"),
+    getName: vi.fn(() => "App"),
     getPath: vi.fn(() => "/profile"),
     isPackaged: false,
     quit: vi.fn(),
@@ -51,7 +50,9 @@ const setup = () => {
     loaded.resolve()
   })
   class MockWindow extends EventEmitter {
+    public readonly focus = vi.fn()
     public readonly loadURL = loadURL
+    public readonly show = vi.fn()
     public readonly webContents = Object.assign(new EventEmitter(), {
       id: 1,
       setWindowOpenHandler: vi.fn(),
@@ -64,10 +65,16 @@ const setup = () => {
     origin: "https://localhost:1234",
   }
   const startStaticHttpsServer = vi.fn(async () => server)
-  const createChatInput = vi.fn(() => ({ blur: vi.fn(), cancel: vi.fn() }))
+  const createInputRouter = vi.fn(() => ({}))
+  const createPlayerInteraction = vi.fn(() => ({ windowBlurred: vi.fn() }))
   const registerIpc = vi.fn()
-  const FavouritesStore = vi.fn(class {})
-  const PlaybackProgressStore = vi.fn(class {})
+  const LocalStore = vi.fn(class {})
+  const EmoteCatalog = vi.fn(class {})
+  const EventSubChat = vi.fn(
+    class {
+      public readonly close = vi.fn()
+    },
+  )
   const SettingsStore = vi.fn(class {})
   const TokenVault = vi.fn(
     class {
@@ -85,14 +92,18 @@ const setup = () => {
     app,
     BrowserWindow,
     dialog: { showErrorBox },
+    Menu: { setApplicationMenu: vi.fn() },
+    powerSaveBlocker: { start: vi.fn(() => 1), stop: vi.fn() },
     safeStorage: {},
     session: { defaultSession },
   }))
-  vi.doMock("./chat-input", () => ({ createChatInput }))
-  vi.doMock("./favourites-store", () => ({ FavouritesStore }))
+  vi.doMock("./chat/emote-catalog", () => ({ EmoteCatalog }))
+  vi.doMock("./chat/eventsub-chat", () => ({ EventSubChat }))
   vi.doMock("./https-server", () => ({ startStaticHttpsServer }))
+  vi.doMock("./input-router", () => ({ createInputRouter }))
   vi.doMock("./ipc", () => ({ registerIpc }))
-  vi.doMock("./playback-progress-store", () => ({ PlaybackProgressStore }))
+  vi.doMock("./local-store", () => ({ LocalStore }))
+  vi.doMock("./player-interaction", () => ({ createPlayerInteraction }))
   vi.doMock("./settings-store", () => ({ SettingsStore }))
   vi.doMock("./token-vault", () => ({ TokenVault }))
   vi.doMock("./twitch-service", () => ({ TwitchService }))

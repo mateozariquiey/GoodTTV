@@ -14,3 +14,6 @@ flatpak/generated-sources.json
 .env
 .env.*
 !.env.example
+
+# Local lab tooling and captures (not part of the app)
+.lab/

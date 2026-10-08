@@ -1,411 +1,155 @@
-import { BroadcastIcon, SignInIcon } from "@phosphor-icons/react"
-import { useEffect, useLayoutEffect, useRef, useState } from "react"
-import { createPortal } from "react-dom"
-import { CategoryShelf } from "./components/CategoryShelf"
-import { CategoryView } from "./components/CategoryView"
-import { ContinueWatchingShelf, recordingTitle } from "./components/ContinueWatchingShelf"
-import { FavouritesShelf } from "./components/FavouritesShelf"
-import { FollowedChannelsView } from "./components/FollowedChannelsView"
-import { Navigation, type RouteName } from "./components/Navigation"
-import { PlayerView } from "./components/PlayerView"
-import { SearchView } from "./components/SearchView"
-import { SettingsPanel, settingsAccountFocusId } from "./components/SettingsPanel"
-import { StreamShelf } from "./components/StreamShelf"
-import { VideoShelf } from "./components/VideoShelf"
-import { PREVIEW_STREAMS } from "./demo-data"
-import { useControllerNavigation } from "./focus-navigation"
-import { homeFocus } from "./home-focus"
-import { screenEntryFocusId } from "./screen"
-import { useAppController } from "./useAppController"
-import { useFavourites } from "./useFavourites"
+import { useCallback, useEffect, useRef, useState } from "react"
+import { type Channel, fromStream, toRecent } from "./channel"
+import { useAppStatus, useAuth, usePreferences } from "./data"
+import { useLayer, useRemoteInput } from "./navigation"
+import { PlayerScreen } from "./player/PlayerScreen"
+import { AccountScreen } from "./screens/AccountScreen"
+import { HomeScreen } from "./screens/HomeScreen"
+import { SearchScreen } from "./screens/SearchScreen"
+import { Avatar } from "./ui"
 
-const ROUTE_TITLES: Readonly<Record<RouteName, string>> = {
-  following: "Following",
-  home: "Home",
-  search: "Search",
-  settings: "Settings",
-}
+type Tab = "home" | "search" | "account"
+
+const TABS: readonly { readonly id: Tab; readonly label: string }[] = [
+  { id: "home", label: "Siguiendo" },
+  { id: "search", label: "Buscar" },
+  { id: "account", label: "Ajustes" },
+]
+
+type Watching = { readonly channel: Channel; readonly lineup: readonly Channel[] }
 
 export const App = () => {
-  useControllerNavigation()
-  const controller = useAppController()
-  const favourites = useFavourites()
-  const accountGeneration = useRef(0)
-  const accountContext = useRef({
-    auth: controller.auth,
-    clientId: controller.settings.clientId,
-  })
-  const focusedControl = useRef<HTMLElement | null>(null)
-  const [followingTools, setFollowingTools] = useState<HTMLElement | null>(null)
-  useLayoutEffect(() => {
-    // Compose the mode controls into either shelf without changing the directory component.
-    const tools = document.querySelector<HTMLElement>(".following-view .shelf__tools")
-    setFollowingTools(tools)
-    const refresh = tools?.querySelector<HTMLElement>('[data-focus-id$="-refresh"]')
-    if (refresh !== null && refresh !== undefined) {
-      refresh.setAttribute("data-focus-right", "following-live")
-      refresh.setAttribute("data-focus-up", "nav-following")
-    }
-  })
-  const screenTitle =
-    controller.screen.kind === "browse"
-      ? ROUTE_TITLES[controller.screen.route]
-      : controller.screen.kind === "player"
-        ? controller.screen.source.title
-        : controller.screen.kind === "category"
-          ? controller.screen.name
-          : "Past broadcasts"
+  useRemoteInput()
+  const status = useAppStatus()
+  const account = useAuth()
+  const { preferences, update: updatePreferences } = usePreferences()
+  const [tab, setTab] = useState<Tab>("home")
+  const [watching, setWatching] = useState<Watching>()
+  const shell = useRef<HTMLDivElement>(null)
+  const signedIn = account.auth?.kind === "authenticated"
+
+  // Text entry (letters, Space and Backspace go to the field) only makes sense on Search; never
+  // let it outlive the screen, even if the field is hidden without a blur event.
+  useEffect(() => {
+    if (tab !== "search" || watching !== undefined) void window.api.input.setTextEntry(false)
+  }, [tab, watching])
 
   useEffect(() => {
-    document.title = `${screenTitle} · VacuumStream`
-  }, [screenTitle])
-  useLayoutEffect(() => {
-    const focusId = screenEntryFocusId(controller.screen)
-    const scope = focusId === "following-all" ? followingTools : document
-    scope?.querySelector<HTMLElement>(`[data-focus-id="${focusId}"]`)?.focus()
-  }, [controller.screen, followingTools])
-  useLayoutEffect(() => {
-    // An upstream auth/settings change also supersedes an in-flight account request.
-    if (
-      accountContext.current.auth === controller.auth &&
-      accountContext.current.clientId === controller.settings.clientId
-    )
-      return
-    accountGeneration.current += 1
-    accountContext.current = {
-      auth: controller.auth,
-      clientId: controller.settings.clientId,
-    }
-    const previous = focusedControl.current
-    if (previous === null || previous.isConnected) return
-    if (document.activeElement !== null && document.activeElement !== document.body) return
-    // Account completion can remove controls on a different route (for example Home Refresh).
-    // Respect any focus recovery already performed by the current screen or its shelves.
-    const entryId = screenEntryFocusId(controller.screen)
-    const entry = document.querySelector<HTMLElement>(`[data-focus-id="${entryId}"]`)
-    const contentId = entry?.getAttribute("data-focus-right")
-    const content = document.querySelector<HTMLElement>(
-      `[data-focus-id="${contentId}"]:not(:disabled):not([aria-disabled="true"])`,
-    )
-    ;(content ?? entry)?.focus()
-  })
-  useLayoutEffect(
-    () => () => {
-      accountGeneration.current += 1
+    document.title =
+      watching === undefined ? "GoodTTV" : `${watching.channel.displayName} · GoodTTV`
+  }, [watching])
+
+  // Each tab is its own layer over the same shell, so each keeps its own focus memory.
+  useLayer(
+    {
+      id: `tab-${tab}`,
+      onBack: () => {
+        if (tab !== "home") setTab("home")
+      },
+      root: shell,
     },
-    [],
+    watching === undefined,
   )
 
-  if (controller.screen.kind === "player") {
-    return (
-      <PlayerView
-        key={
-          controller.screen.source.kind === "live"
-            ? controller.screen.source.channel
-            : controller.screen.source.videoId
-        }
-        onBack={controller.navigateHome}
-        onPastBroadcasts={(userId) => void controller.showPastBroadcasts(userId)}
-        onToggleFullscreen={() => void window.vacuumStream.system.toggleFullscreen()}
-        source={controller.screen.source}
-      />
-    )
-  }
+  const play = useCallback(
+    (channel: Channel, lineup: readonly Channel[]) => {
+      setWatching({ channel, lineup })
+      void window.api.recents.add(toRecent(channel)).catch(() => undefined)
+      // Opened by name: fill in title, viewers and the id chat needs, if the channel is live.
+      if (signedIn && channel.userId === undefined) {
+        void window.api.catalog
+          .streamsByLogin([channel.login])
+          .then(([stream]) => {
+            if (stream === undefined) return
+            const enriched = fromStream(stream)
+            setWatching((current) =>
+              current?.channel.login === channel.login
+                ? { ...current, channel: enriched }
+                : current,
+            )
+            void window.api.recents.add(toRecent(enriched)).catch(() => undefined)
+          })
+          .catch(() => undefined)
+      }
+    },
+    [signedIn],
+  )
 
-  if (controller.screen.kind === "videos") {
-    const { userId } = controller.screen
-    return (
-      <VideoShelf
-        error={controller.videoError}
-        loading={controller.busy}
-        onBack={() => controller.navigate("home")}
-        onRetry={() => void controller.showPastBroadcasts(userId)}
-        onSelect={controller.viewVideo}
-        videos={controller.videos}
-      />
-    )
-  }
-
-  const route = controller.screen.kind === "browse" ? controller.screen.route : undefined
-  const allChannels =
-    controller.screen.kind === "browse" && controller.screen.followingMode === "all"
-  const home =
-    route === "home"
-      ? homeFocus(
-          controller.auth.kind === "authenticated" ? "authenticated" : "guest",
-          controller.continueWatching,
-          favourites,
-        )
-      : undefined
+  const switchChannel = useCallback((channel: Channel) => {
+    setWatching((current) => (current === undefined ? current : { ...current, channel }))
+    void window.api.recents.add(toRecent(channel)).catch(() => undefined)
+  }, [])
 
   return (
-    <div
-      className="app-shell"
-      onFocusCapture={(event) => {
-        focusedControl.current = event.target
-      }}
-    >
-      <a className="skip-link" href="#main-content">
-        Skip to content
-      </a>
-      <p aria-live="polite" className="visually-hidden">
-        {screenTitle}
-      </p>
-      <Navigation
-        active={route ?? "home"}
-        entryFocusId={
-          home?.entryFocusId ??
-          (route === "settings"
-            ? settingsAccountFocusId(controller.auth)
-            : allChannels
-              ? "following-all"
-              : controller.auth.kind === "authenticated" &&
-                  (route === "home" || route === "following")
-                ? `${route}-refresh`
-                : undefined)
-        }
-        onNavigate={controller.navigate}
-      />
-      <div className="app-shell__content">
-        {controller.notice !== "" ? <div className="notice">{controller.notice}</div> : null}
-        {controller.screen.kind === "category" ? (
-          <CategoryView
-            cursor={controller.categoryCatalog.cursor}
-            error={controller.categoryCatalog.error}
-            name={controller.screen.name}
-            onBack={controller.navigateHome}
-            onLoadMore={() => void controller.loadMoreCategory()}
-            onSelect={controller.openStream}
-            status={controller.categoryCatalog.status}
-            streams={controller.categoryCatalog.items}
-          />
-        ) : null}
-        {home !== undefined ? (
-          <main className="browse-view" id="main-content" tabIndex={-1}>
-            <header className="home-heading">
-              <div>
-                <span>
-                  {controller.auth.kind === "authenticated"
-                    ? `Welcome, ${controller.auth.displayName}`
-                    : "Guest viewing"}
-                </span>
-                <h1>Live now</h1>
-                <p>Pick a signal and settle in.</p>
-              </div>
-              {controller.auth.kind !== "authenticated" ? (
-                <button
-                  className="primary-button"
-                  data-focus-down={home.signInDownFocusId}
-                  data-focus-id="home-sign-in"
-                  data-focus-left="nav-home"
-                  data-focusable="true"
-                  onClick={() => controller.navigate("settings")}
-                  type="button"
-                >
-                  <SignInIcon aria-hidden="true" />
-                  Connect Twitch
-                </button>
-              ) : (
-                <BroadcastIcon aria-hidden="true" className="broadcast-mark" weight="duotone" />
-              )}
-            </header>
-            <ContinueWatchingShelf
-              {...controller.continueWatching}
-              {...home.continueWatching}
-              onForget={(videoId) => void controller.continueWatching.forget(videoId)}
-              onRetry={() => void controller.continueWatching.retry()}
-              onSelect={(bookmark) =>
-                controller.viewVideo({
-                  id: bookmark.videoId,
-                  title: recordingTitle(bookmark),
-                  userId: bookmark.details?.userId ?? "0",
-                })
-              }
-            />
-            <FavouritesShelf
-              {...favourites}
-              {...home.favourites}
-              onOpen={(entry) =>
-                controller.openChannel({
-                  displayName: entry.login,
-                  id: entry.userId ?? `direct-${entry.login}`,
-                  login: entry.login,
-                })
-              }
-              onRemove={(login) => void favourites.remove(login)}
-              onRetry={() => void favourites.retry()}
-            />
-            <StreamShelf
-              {...(controller.auth.kind === "authenticated"
-                ? {
-                    cursor: controller.live.cursor,
-                    error: controller.live.error,
-                    focusPrefix: "home",
-                    onLoadMore: () => void controller.loadMoreShelf("home"),
-                    onRefresh: () => void controller.refreshShelf("home"),
-                    onRetry: () => void controller.retryShelf("home"),
-                    refreshing:
-                      controller.live.status === "loading" &&
-                      controller.live.operation === "refresh",
-                    state: controller.live.status,
-                  }
-                : {})}
-              emptyMessage="No live channels are available right now."
-              entryUpperFocusId={home.liveEntryUpperFocusId}
-              focusPrefix="home"
-              onSelect={controller.openStream}
-              streams={
-                controller.auth.kind === "authenticated" ? controller.live.items : PREVIEW_STREAMS
-              }
-              title={controller.auth.kind === "authenticated" ? "Recommended live" : "Quick watch"}
-              wrap
-            />
-            <CategoryShelf
-              categories={controller.categories}
-              onSelect={(category) => void controller.showCategory(category)}
-            />
-          </main>
-        ) : null}
-        {route === "following" ? (
-          <main className="browse-view following-view" id="main-content" tabIndex={-1}>
-            <header className="page-heading">
-              <span>Your channels</span>
-              <h1>Following</h1>
-              <p>Channels from the Twitch account connected to this device.</p>
-            </header>
-            {allChannels ? null : (
-              <StreamShelf
-                {...(controller.auth.kind === "authenticated"
-                  ? {
-                      cursor: controller.followed.cursor,
-                      error: controller.followed.error,
-                      focusPrefix: "following",
-                      onLoadMore: () => void controller.loadMoreShelf("following"),
-                      onRefresh: () => void controller.refreshShelf("following"),
-                      onRetry: () => void controller.retryShelf("following"),
-                      refreshing:
-                        controller.followed.status === "loading" &&
-                        controller.followed.operation === "refresh",
-                      state: controller.followed.status,
-                    }
-                  : {
-                      emptyActionFocusId: "following-connect",
-                      emptyActionLabel: "Connect Twitch",
-                      onEmptyAction: () => controller.navigate("settings"),
-                    })}
-                emptyMessage={
-                  controller.auth.kind === "authenticated"
-                    ? "No followed channels are live right now."
-                    : "Connect Twitch to see live channels you follow."
-                }
-                focusPrefix="following"
-                onSelect={controller.openStream}
-                streams={controller.followed.items}
-                title="Live from your follows"
-                wrap
+    <>
+      <div className="shell" hidden={watching !== undefined} ref={shell}>
+        <header className="topbar">
+          <span aria-hidden="true" className="topbar__logo" />
+          <nav aria-label="Secciones" className="tabs">
+            {TABS.map((item) => (
+              <button
+                aria-current={tab === item.id ? "page" : undefined}
+                className="tab"
+                data-nav
+                data-nav-group="tabs"
+                data-nav-id={`tab-${item.id}`}
+                data-nav-transient=""
+                key={item.id}
+                onClick={() => setTab(item.id)}
+                type="button"
+              >
+                {item.label}
+              </button>
+            ))}
+          </nav>
+          {account.auth?.kind === "authenticated" ? (
+            <span className="topbar__account">
+              {account.auth.displayName}
+              <Avatar
+                channel={{ displayName: account.auth.displayName, login: account.auth.login }}
+                size="sm"
               />
-            )}
-            {followingTools === null
-              ? null
-              : createPortal(
-                  <fieldset aria-label="Following view" className="following-modes">
-                    <button
-                      aria-pressed={!allChannels}
-                      data-focus-down={
-                        controller.auth.kind !== "authenticated"
-                          ? "following-connect"
-                          : allChannels
-                            ? "following-directory-refresh"
-                            : "following-refresh"
-                      }
-                      data-focus-id="following-live"
-                      data-focus-left={
-                        controller.auth.kind !== "authenticated"
-                          ? "nav-following"
-                          : allChannels
-                            ? "following-directory-refresh"
-                            : "following-refresh"
-                      }
-                      data-focus-right="following-all"
-                      data-focus-up="nav-following"
-                      data-focusable="true"
-                      onClick={() => controller.navigate("following")}
-                      type="button"
-                    >
-                      Live now
-                    </button>
-                    <button
-                      aria-pressed={allChannels}
-                      data-focus-down={
-                        controller.auth.kind !== "authenticated"
-                          ? "following-connect"
-                          : allChannels
-                            ? "following-directory-refresh"
-                            : "following-refresh"
-                      }
-                      data-focus-id="following-all"
-                      data-focus-left="following-live"
-                      data-focus-up="nav-following"
-                      data-focusable="true"
-                      onClick={controller.showAllChannels}
-                      type="button"
-                    >
-                      All channels
-                    </button>
-                  </fieldset>,
-                  followingTools,
-                )}
-            {allChannels ? (
-              <FollowedChannelsView
-                channels={controller.followedChannels.items}
-                cursor={controller.followedChannels.cursor}
-                error={controller.followedChannels.error}
-                onLoadMore={() => void controller.loadDirectory("more")}
-                onOpen={controller.openChannel}
-                onPastBroadcasts={(userId) => void controller.showPastBroadcasts(userId)}
-                onRefresh={() => void controller.loadDirectory("refresh")}
-                onRetry={() => void controller.loadDirectory("retry")}
-                refreshing={
-                  controller.followedChannels.status === "loading" &&
-                  controller.followedChannels.operation === "refresh"
-                }
-                status={controller.followedChannels.status}
-              />
-            ) : null}
-          </main>
-        ) : null}
-        {route === "search" ? (
-          <SearchView
-            authenticated={controller.auth.kind === "authenticated"}
-            busy={controller.busy}
-            favourites={favourites}
-            onOpen={controller.openChannel}
-            onRetryFavourites={() => void favourites.retry()}
-            onSave={(channel) =>
-              void favourites.add({
-                login: channel.login.toLowerCase(),
-                ...(channel.id.startsWith("direct-") || channel.id === "0"
-                  ? {}
-                  : { userId: channel.id }),
-              })
-            }
-            onSearch={(query) => void controller.search(query)}
-            results={controller.searchResults}
-          />
-        ) : null}
-        {route === "settings" ? (
-          <SettingsPanel
-            auth={controller.auth}
-            onAccountRequest={() => {
-              const generation = ++accountGeneration.current
-              return () => generation === accountGeneration.current
-            }}
-            onAuthChange={controller.setAuth}
-            onSettingsChange={controller.updateSettings}
-            settings={controller.settings}
-          />
-        ) : null}
+            </span>
+          ) : null}
+        </header>
+        <main className="content">
+          <section aria-label="Siguiendo" hidden={tab !== "home"}>
+            <HomeScreen
+              active={watching === undefined && tab === "home"}
+              key={signedIn ? "signed-in" : "guest"}
+              onLink={() => setTab("account")}
+              onSearch={() => setTab("search")}
+              onWatch={play}
+              signedIn={signedIn}
+            />
+          </section>
+          <section aria-label="Buscar" hidden={tab !== "search"}>
+            <SearchScreen onWatch={play} signedIn={signedIn} />
+          </section>
+          <section aria-label="Ajustes" hidden={tab !== "account"}>
+            <AccountScreen
+              auth={account.auth}
+              authBusy={account.busy}
+              onBegin={() => void account.begin()}
+              onLogout={() => void account.logout()}
+              onPreferences={updatePreferences}
+              preferences={preferences}
+              status={status}
+            />
+          </section>
+        </main>
       </div>
-    </div>
+      {watching === undefined ? null : (
+        <PlayerScreen
+          channel={watching.channel}
+          lineup={watching.lineup}
+          onBack={() => setWatching(undefined)}
+          onChannel={switchChannel}
+          onPreferences={updatePreferences}
+          preferences={preferences}
+          signedIn={signedIn}
+        />
+      )}
+    </>
   )
 }

@@ -1,54 +1,20 @@
-import { mkdtemp, readFile, rm } from "node:fs/promises"
-import { tmpdir } from "node:os"
-import { join } from "node:path"
-import { afterEach, describe, expect, it } from "vitest"
-import { SettingsStore } from "./settings-store"
+import { describe, expect, it } from "vitest"
+import { PROJECT_CLIENT_ID, resolveClientId, SettingsStore } from "./settings-store"
 
-describe("settings store", () => {
-  let directory = ""
+const VALID = "abcdefghijklmnopqrst0123456789"
 
-  afterEach(async () => {
-    if (directory !== "") {
-      await rm(directory, { recursive: true })
-    }
+describe("resolveClientId", () => {
+  it("prefers a valid run-time override", () => {
+    expect(resolveClientId(VALID, "zzzzzzzzzzzzzzzzzzzzzzzz")).toBe(VALID)
   })
 
-  it("uses the embedded Twitch Client ID when no settings were saved", async () => {
-    // Given an empty application data directory
-    directory = await mkdtemp(join(tmpdir(), "vacuumstream-settings-"))
-    const store = new SettingsStore(directory)
-
-    // When settings are loaded for the first time
-    const settings = await store.load()
-
-    // Then the project-owned public Client ID is available without setup
-    expect(settings.clientId).toBe("eakftex39l79dzb7irvxxvr3i0o7d0")
+  it("falls back to the compiled value and ignores invalid overrides", () => {
+    expect(resolveClientId("not valid!", VALID)).toBe(VALID)
+    expect(resolveClientId(undefined, VALID)).toBe(VALID)
   })
 
-  it("persists a valid public Twitch Client ID atomically", async () => {
-    // Given an empty application data directory
-    directory = await mkdtemp(join(tmpdir(), "vacuumstream-settings-"))
-    const store = new SettingsStore(directory)
-
-    // When a valid public Client ID is saved
-    const settings = await store.saveClientId("abcdefghijklmnopqrstuvwxyz1234")
-
-    // Then the normalized setting is returned and persisted without a secret
-    expect(settings.clientId).toBe("abcdefghijklmnopqrstuvwxyz1234")
-    expect(await readFile(join(directory, "settings.json"), "utf8")).toContain(
-      "abcdefghijklmnopqrstuvwxyz1234",
-    )
-  })
-
-  it("rejects an invalid Client ID before writing", async () => {
-    // Given an empty application data directory
-    directory = await mkdtemp(join(tmpdir(), "vacuumstream-settings-"))
-    const store = new SettingsStore(directory)
-
-    // When an invalid setting crosses the persistence boundary
-    const save = (): Promise<unknown> => store.saveClientId("not valid")
-
-    // Then no invalid setting is accepted
-    await expect(save()).rejects.toThrow()
+  it("falls back to the project's registered public Client ID", async () => {
+    expect(resolveClientId(undefined, undefined)).toBe(PROJECT_CLIENT_ID)
+    expect(await new SettingsStore(undefined, "").load()).toEqual({ clientId: PROJECT_CLIENT_ID })
   })
 })

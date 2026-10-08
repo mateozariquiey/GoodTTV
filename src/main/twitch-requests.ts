@@ -1,15 +1,10 @@
-export const TWITCH_SCOPES = "user:read:follows"
+// Followed channels for Home and reading chat through EventSub. Nothing that writes or moderates.
+export const TWITCH_SCOPES = "user:read:follows user:read:chat"
 
 type ParsedLiveInput = {
   readonly after?: string | undefined
   readonly first: number
-  readonly gameId?: string | undefined
-}
-
-type ParsedVideosInput = {
-  readonly after?: string | undefined
-  readonly first: number
-  readonly userId: string
+  readonly language?: string | undefined
 }
 
 export const createDeviceTokenBody = (clientId: string, deviceCode: string): URLSearchParams =>
@@ -25,16 +20,7 @@ export const createLiveSearchParams = (
 ): Readonly<Record<string, string | number>> => ({
   ...(input.after === undefined ? {} : { after: input.after }),
   first: input.first,
-  ...(input.gameId === undefined ? {} : { game_id: input.gameId }),
-})
-
-export const createVideoSearchParams = (
-  input: ParsedVideosInput,
-): Readonly<Record<string, string | number>> => ({
-  ...(input.after === undefined ? {} : { after: input.after }),
-  first: input.first,
-  type: "archive",
-  user_id: input.userId,
+  ...(input.language === undefined ? {} : { language: input.language }),
 })
 
 export const shouldRefreshResponse = (status: number): boolean => status === 401

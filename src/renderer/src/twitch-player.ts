@@ -1,29 +1,25 @@
-import type { PlayerSource } from "./components/PlayerView"
+// Wrapper around Twitch's documented interactive embed (https://dev.twitch.tv/docs/embed/video-and-clips/).
+// Only documented options, methods and events are used; nothing reaches inside the iframe.
 
 export type TwitchPlayerOptions = {
   readonly autoplay: boolean
-  readonly channel?: string
+  readonly channel: string
   readonly height: "100%"
   readonly muted: boolean
   readonly parent: readonly ["localhost"]
-  readonly time?: string
-  readonly video?: string
   readonly width: "100%"
 }
 
 export interface TwitchPlayerInstance {
   readonly addEventListener: (event: string, listener: () => void) => void
-  readonly disableCaptions: () => void
-  readonly enableCaptions: () => void
-  readonly getCurrentTime: () => number
-  readonly getDuration: () => number
   readonly getMuted: () => boolean
   readonly getQualities: () => unknown
   readonly getQuality: () => string
+  readonly getVolume: () => number
   readonly isPaused: () => boolean
   readonly pause: () => void
   readonly play: () => void
-  readonly seek: (seconds: number) => void
+  readonly setChannel: (channel: string) => void
   readonly setMuted: (muted: boolean) => void
   readonly setQuality: (qualityId: string) => void
 }
@@ -65,7 +61,6 @@ type TwitchPlayerConstructor = {
   readonly PLAYBACK_BLOCKED: string
   readonly PLAYING: string
   readonly READY: string
-  readonly SEEK: string
 }
 
 type TwitchPlayerApi = {
@@ -78,32 +73,20 @@ declare global {
   }
 }
 
-// Documented event name (Twitch.Player.ENDED).
-export const TWITCH_PLAYER_ENDED = "ended"
-
 let playerApiPromise: Promise<TwitchPlayerApi> | undefined
 
-export const createTwitchPlayerOptions = (
-  source: PlayerSource,
-  startingPosition?: number,
-): TwitchPlayerOptions => {
-  const base = {
-    autoplay: true,
-    height: "100%",
-    muted: true,
-    parent: ["localhost"],
-    width: "100%",
-  } as const
-  if (source.kind === "live") return { ...base, channel: source.channel }
-  const seconds = Math.floor(startingPosition ?? 0)
-  return {
-    ...base,
-    ...(seconds > 0
-      ? { time: `${Math.floor(seconds / 3600)}h${Math.floor(seconds / 60) % 60}m${seconds % 60}s` }
-      : {}),
-    video: source.videoId,
-  }
-}
+export const createTwitchPlayerOptions = (channel: string): TwitchPlayerOptions => ({
+  autoplay: true,
+  channel,
+  height: "100%",
+  // Requesting sound is allowed in Electron; Twitch still decides and reports it back.
+  muted: false,
+  parent: ["localhost"],
+  width: "100%",
+})
+
+// A download that never finishes must fail too, so that Retry starts a fresh one.
+export const SDK_TIMEOUT_MS = 15_000
 
 export const loadTwitchPlayerApi = (): Promise<TwitchPlayerApi> => {
   if (playerApiPromise !== undefined) return playerApiPromise
@@ -113,7 +96,9 @@ export const loadTwitchPlayerApi = (): Promise<TwitchPlayerApi> => {
     const script = document.createElement("script")
     script.async = true
     script.src = "https://player.twitch.tv/js/embed/v1.js"
+    const timeout = setTimeout(() => fail("Twitch Player API timed out"), SDK_TIMEOUT_MS)
     const cleanup = (): void => {
+      clearTimeout(timeout)
       script.removeEventListener("load", onLoad)
       script.removeEventListener("error", onError)
     }

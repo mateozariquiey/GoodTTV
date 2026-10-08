@@ -219,7 +219,7 @@ export class TwitchSession {
   async #requireClientId(): Promise<string> {
     const settings = await this.#settings.load()
     if (settings.clientId === "") {
-      throw new ConfigurationError("Add a public Twitch Client ID in Settings first")
+      throw new ConfigurationError("This build has no Twitch Client ID")
     }
     return settings.clientId
   }

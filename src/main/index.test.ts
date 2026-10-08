@@ -18,8 +18,6 @@ const deferred = <Value>() => {
 const setup = (ownsProfile = true) => {
   vi.resetModules()
   vi.stubEnv("ELECTRON_RENDERER_URL", undefined)
-  vi.stubEnv("SteamGamepadUI", "0")
-  vi.stubEnv("SteamOS", "0")
   const activated = deferred<void>()
   const calls: string[] = []
   const ready = deferred<void>()
@@ -35,6 +33,7 @@ const setup = (ownsProfile = true) => {
       exited.resolve()
     }),
     getAppPath: vi.fn(() => "/application"),
+    getName: vi.fn(() => "App"),
     getPath: vi.fn(() => "/profile"),
     isPackaged: false,
     quit: vi.fn(() => calls.push("quit")),
@@ -90,17 +89,25 @@ const setup = (ownsProfile = true) => {
     await serving.promise
     return server
   })
-  const FavouritesStore = vi.fn(
+  const LocalStore = vi.fn(
     class {
       public constructor() {
-        calls.push("favourites")
+        calls.push("local")
       }
     },
   )
-  const PlaybackProgressStore = vi.fn(
+  const EmoteCatalog = vi.fn(
     class {
       public constructor() {
-        calls.push("progress")
+        calls.push("emotes")
+      }
+    },
+  )
+  const EventSubChat = vi.fn(
+    class {
+      public readonly close = vi.fn()
+      public constructor() {
+        calls.push("chat")
       }
     },
   )
@@ -127,9 +134,13 @@ const setup = (ownsProfile = true) => {
       }
     },
   )
-  const createChatInput = vi.fn(() => {
-    calls.push("chat")
-    return { blur: vi.fn(), cancel: vi.fn() }
+  const createInputRouter = vi.fn(() => {
+    calls.push("input")
+    return {}
+  })
+  const createPlayerInteraction = vi.fn(() => {
+    calls.push("player")
+    return { windowBlurred: vi.fn() }
   })
   const registerIpc = vi.fn(() => calls.push("ipc"))
   const showErrorBox = vi.fn(() => calls.push("error"))
@@ -141,14 +152,18 @@ const setup = (ownsProfile = true) => {
     app,
     BrowserWindow,
     dialog: { showErrorBox },
+    Menu: { setApplicationMenu: vi.fn() },
+    powerSaveBlocker: { start: vi.fn(() => 1), stop: vi.fn() },
     safeStorage: {},
     session: { defaultSession },
   }))
-  vi.doMock("./chat-input", () => ({ createChatInput }))
-  vi.doMock("./favourites-store", () => ({ FavouritesStore }))
+  vi.doMock("./chat/emote-catalog", () => ({ EmoteCatalog }))
+  vi.doMock("./chat/eventsub-chat", () => ({ EventSubChat }))
   vi.doMock("./https-server", () => ({ startStaticHttpsServer }))
+  vi.doMock("./input-router", () => ({ createInputRouter }))
   vi.doMock("./ipc", () => ({ registerIpc }))
-  vi.doMock("./playback-progress-store", () => ({ PlaybackProgressStore }))
+  vi.doMock("./local-store", () => ({ LocalStore }))
+  vi.doMock("./player-interaction", () => ({ createPlayerInteraction }))
   vi.doMock("./settings-store", () => ({ SettingsStore }))
   vi.doMock("./token-vault", () => ({ TokenVault }))
   vi.doMock("./twitch-service", () => ({ TwitchService }))
@@ -159,14 +174,15 @@ const setup = (ownsProfile = true) => {
     calls,
     closed,
     closing,
-    createChatInput,
+    createInputRouter,
+    createPlayerInteraction,
     defaultSession,
+    EventSubChat,
     exited,
-    FavouritesStore,
+    LocalStore,
     loaded,
     loadURL,
     on,
-    PlaybackProgressStore,
     ready,
     registerIpc,
     server,
@@ -200,11 +216,11 @@ describe("profile ownership at the real main entry point", () => {
     if (fixture.app.whenReady.mock.calls.length > 0) await fixture.loaded.promise
 
     expect({
-      chatInputs: fixture.createChatInput.mock.calls.length,
+      chatInputs: fixture.createInputRouter.mock.calls.length,
       ipcRegistrations: fixture.registerIpc.mock.calls.length,
       persistenceOwners:
-        fixture.FavouritesStore.mock.calls.length +
-        fixture.PlaybackProgressStore.mock.calls.length +
+        fixture.LocalStore.mock.calls.length +
+        fixture.EventSubChat.mock.calls.length +
         fixture.SettingsStore.mock.calls.length +
         fixture.TokenVault.mock.calls.length,
       quitRequests: fixture.app.quit.mock.calls.length,
@@ -255,15 +271,19 @@ describe("profile ownership at the real main entry point", () => {
       "window",
       "server",
       "vault",
-      "chat",
-      "favourites",
-      "progress",
       "settings",
       "twitch",
+      "emotes",
+      "chat",
+      "input",
+      "player",
+      "local",
       "ipc",
       "permissions-check",
       "permissions-request",
       "load",
+      "show",
+      "focus",
       "show",
       "focus",
     ])
@@ -275,18 +295,17 @@ describe("profile ownership at the real main entry point", () => {
     expect(fixture.BrowserWindow).toHaveBeenCalledTimes(1)
     expect(fixture.startStaticHttpsServer).toHaveBeenCalledTimes(1)
     expect(fixture.TokenVault).toHaveBeenCalledExactlyOnceWith("/profile", expect.any(Object))
-    expect(fixture.FavouritesStore).toHaveBeenCalledExactlyOnceWith("/profile")
-    expect(fixture.PlaybackProgressStore).toHaveBeenCalledExactlyOnceWith("/profile")
-    expect(fixture.SettingsStore).toHaveBeenCalledExactlyOnceWith("/profile")
+    expect(fixture.LocalStore).toHaveBeenCalledExactlyOnceWith("/profile")
+    expect(fixture.SettingsStore).toHaveBeenCalledExactlyOnceWith()
     expect(fixture.TwitchService).toHaveBeenCalledTimes(1)
-    expect(fixture.createChatInput).toHaveBeenCalledExactlyOnceWith(fixture.window)
+    expect(fixture.createInputRouter).toHaveBeenCalledExactlyOnceWith(fixture.window.webContents)
     expect(fixture.registerIpc).toHaveBeenCalledExactlyOnceWith(
       expect.objectContaining({ mainWindow: fixture.window }),
     )
     expect(fixture.window.loadURL).toHaveBeenCalledExactlyOnceWith(fixture.server.origin)
     expect(fixture.window.restore).not.toHaveBeenCalled()
-    expect(fixture.window.show).toHaveBeenCalledTimes(4)
-    expect(fixture.window.focus).toHaveBeenCalledTimes(4)
+    expect(fixture.window.show).toHaveBeenCalledTimes(5)
+    expect(fixture.window.focus).toHaveBeenCalledTimes(5)
     expect(fixture.window.setFullScreen).not.toHaveBeenCalled()
     expect(fixture.app.quit).not.toHaveBeenCalled()
   }, 5000)
@@ -359,12 +378,10 @@ describe("profile ownership at the real main entry point", () => {
     }
   }, 5000)
 
-  it.each([false, true])(
-    "reactivates only the existing window, restoring only when minimized (Steam mode: %s)",
+  it.each([false])(
+    "reactivates only the existing window, restoring only when minimized (full screen: %s)",
     async (steamMode) => {
       const fixture = setup()
-      vi.stubEnv("SteamGamepadUI", steamMode ? "1" : "0")
-      vi.stubEnv("SteamOS", steamMode ? "1" : "0")
       await import("./index")
       fixture.ready.resolve()
       await fixture.serverStarted.promise
@@ -441,7 +458,8 @@ describe("profile ownership at the real main entry point", () => {
     await import("./index")
     fixture.ready.resolve()
     fixture.serving.resolve()
-    await fixture.loaded.promise
+    // The window takes system focus right after loading.
+    await fixture.activated.promise
     const initialized = [...fixture.calls]
     fixture.window.emit("closed")
     fixture.app.emit("second-instance", {}, ["vacuumstream"], "/")

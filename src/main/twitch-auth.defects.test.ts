@@ -41,7 +41,10 @@ describe("Twitch authorization defect regressions", () => {
 
   it.fails("D-cycle-22-1 keeps the newer authorization pending when an older begin reply arrives last", async () => {
     directory = await mkdtemp(join(tmpdir(), "vacuumstream-auth-"))
-    const auth = new TwitchAuth(new SettingsStore(directory), new TokenVault(directory, adapter))
+    const auth = new TwitchAuth(
+      new SettingsStore(undefined, "abcdefghijklmnopqrstuvwxyz1234"),
+      new TokenVault(directory, adapter),
+    )
     let resolveOlderResponse: (response: ReturnType<typeof deviceResponse>) => void = () =>
       undefined
     let markOlderRequestStarted: () => void = () => undefined

@@ -1,32 +1,25 @@
 {
-  "name": "vacuumstream",
-  "version": "0.2.1",
-  "description": "A controller-first Twitch client for Linux HTPCs",
+  "name": "goodttv",
+  "version": "0.1.0",
+  "description": "Cliente de Twitch para la tele, manejado con un mando: directos, seguidos y chat con emotes de 7TV, BTTV y FFZ",
   "author": {
-    "name": "Eliott Bouhana",
-    "url": "https://github.com/eliottness"
+    "name": "Mateo Zariquiey",
+    "url": "https://github.com/mateozariquiey"
   },
   "license": "MIT",
   "private": true,
-  "homepage": "https://github.com/eliottness/VacuumStream",
-  "repository": {
-    "type": "git",
-    "url": "https://github.com/eliottness/VacuumStream.git"
-  },
-  "bugs": {
-    "url": "https://github.com/eliottness/VacuumStream/issues"
-  },
   "packageManager": "bun@1.4.2",
   "engines": {
     "node": ">=24.20.0"
   },
-  "desktopName": "io.github.eliottness.VacuumStream.desktop",
+  "desktopName": "io.github.mateozariquiey.GoodTTV.desktop",
   "type": "module",
   "main": "./out/main/index.js",
   "scripts": {
     "postinstall": "install-electron",
     "dev": "electron-vite dev",
     "build": "electron-vite build",
+    "start": "electron .",
     "preview": "electron-vite preview",
     "typecheck": "tsc --noEmit",
     "lint": "biome check .",
@@ -35,14 +28,9 @@
     "verify": "bun run lint && bun run typecheck && bun run test && bun run build",
     "pack": "bun run build && electron-builder --dir --publish never",
     "package:appimage": "bun run build && electron-builder --linux AppImage --x64 --publish never",
-    "package:flatpak": "bash scripts/build-flatpak.sh",
-    "package:release": "bash scripts/build-release.sh",
-    "test:e2e": "playwright test",
-    "test:e2e:headed": "E2E_HEADED=1 playwright test",
-    "test:e2e:coverage": "node scripts/check-e2e-coverage.mjs"
+    "test:e2e": "playwright test"
   },
   "dependencies": {
-    "@fontsource-variable/archivo": "5.3.0",
     "@fontsource-variable/atkinson-hyperlegible-next": "5.3.0",
     "@phosphor-icons/react": "2.1.10",
     "ky": "2.1.0",
@@ -63,17 +51,15 @@
     "electron-builder": "26.15.3",
     "electron-vite": "5.0.0",
     "jsdom": "30.0.1",
-    "react-grab": "0.2.0",
-    "react-scan": "0.5.7",
     "typescript": "7.0.2",
     "vite": "8.2.2",
     "vitest": "5.0.0"
   },
   "build": {
     "afterPack": "./scripts/after-pack.cjs",
-    "appId": "io.github.eliottness.VacuumStream",
+    "appId": "io.github.mateozariquiey.GoodTTV",
     "artifactName": "${productName}-${version}-${arch}.${ext}",
-    "productName": "VacuumStream",
+    "productName": "GoodTTV",
     "asar": true,
     "directories": {
       "output": "dist"
@@ -100,18 +86,35 @@
       "category": "AudioVideo;Video",
       "icon": "build/icon.png",
       "syncDesktopName": true,
-      "synopsis": "Controller-first Twitch viewing for Linux TVs and handhelds",
+      "synopsis": "Twitch en la tele con un mando",
       "desktop": {
         "entry": {
-          "Name": "VacuumStream",
-          "Comment": "Browse and watch Twitch with a controller",
+          "Name": "GoodTTV",
+          "Comment": "Directos de Twitch y chat con un mando",
           "Categories": "AudioVideo;Video;",
-          "Keywords": "Twitch;streaming;HTPC;Steam Deck;"
+          "Keywords": "Twitch;directos;HTPC;TV;"
         }
-      }
+      },
+      "executableArgs": [
+        "--fullscreen"
+      ]
     },
     "appImage": {
       "compression": "zstd"
     }
+  },
+  "contributors": [
+    {
+      "name": "Eliott Bouhana (VacuumStream)",
+      "url": "https://github.com/eliottness"
+    }
+  ],
+  "homepage": "https://github.com/mateozariquiey/GoodTTV",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/mateozariquiey/GoodTTV.git"
+  },
+  "bugs": {
+    "url": "https://github.com/mateozariquiey/GoodTTV/issues"
   }
 }

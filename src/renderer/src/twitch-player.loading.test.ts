@@ -97,4 +97,23 @@ describe("Twitch SDK loading", () => {
     await expect(second).resolves.toBe(api)
     expect(requests).toHaveBeenCalledTimes(1)
   })
+
+  it("gives up on a download that never finishes so a retry starts a new one", async () => {
+    vi.useFakeTimers()
+    try {
+      const { loadTwitchPlayerApi, SDK_TIMEOUT_MS } = await import("./twitch-player")
+      const requests = vi.spyOn(document.head, "append")
+      const first = loadTwitchPlayerApi()
+      const rejected = expect(first).rejects.toThrow("timed out")
+      await vi.advanceTimersByTimeAsync(SDK_TIMEOUT_MS)
+      await rejected
+      expect(document.head.querySelector("script")).toBeNull()
+      const second = loadTwitchPlayerApi()
+      expect(second).not.toBe(first)
+      expect(requests).toHaveBeenCalledTimes(2)
+      second.catch(() => undefined)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
 })

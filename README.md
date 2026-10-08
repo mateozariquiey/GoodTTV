@@ -1,54 +1,109 @@
-# VacuumStream
+# GoodTTV
 
-[![CI](https://github.com/eliottness/VacuumStream/actions/workflows/ci.yml/badge.svg)](https://github.com/eliottness/VacuumStream/actions/workflows/ci.yml)
+**English** · [Español](README.es.md)
 
-A controller-first Twitch client for Linux TVs and handhelds. Browse from the sofa with
-four arrow keys, Enter, and Escape, or a gamepad. Playback uses Twitch's official player.
+A Twitch client for the TV, made to be used from the couch on a Linux mini PC with a small remote:
+arrows, OK, Back and Play/Pause. Watch the live channels you follow, search for channels, and read
+chat with **7TV, BTTV, FFZ** and Twitch emotes. Nothing else: no VODs, clips or categories.
 
-![VacuumStream homepage in guest mode, with controller navigation, Quick watch channels, and game categories](docs/images/homepage.png)
+![Home: followed channels that are live, with a preview of the focused one](docs/media/inicio.jpg)
 
-Guest-mode homepage captured during 4K interface testing. Channel previews depend on availability.
+![Playback: Twitch's official player, controls below, chat with emotes on the right](docs/media/reproduccion.jpg)
 
-**Early-stage software.** Linux x86_64 builds target HTPCs, Steam Deck, and Bazzite.
-Physical Steam Deck/Bazzite validation and authenticated playback testing remain ongoing;
-these are target platforms, not a hardware certification. Windows, macOS, and ARM builds
-are not currently provided.
+[Demo video (84 s, remote keys only)](docs/media/demo.mp4) ·
+[Search with the on-screen keyboard](docs/media/buscar.jpg) ·
+[Quality chooser](docs/media/calidad.jpg)
 
-## Get started
+The interface is in Spanish for now.
 
-Download an AppImage or Flatpak from [GitHub Releases](https://github.com/eliottness/VacuumStream/releases),
-then follow the [installation and first-run guide](docs/users/getting-started.md).
-If there is no published release yet, use the [source setup](docs/contributing/development.md).
+## Features
 
-- Watch quick-pick channels or search an exact channel name without signing in.
-- Connect your Twitch account to browse live streams, followed channels, categories, and VODs.
-- A public Twitch Client ID is built in. You do **not** need to register a developer application.
-- Device sign-in unlocks discovery; it does not sign the embedded player into your account.
-- Twitch controls ads, availability, and player errors. VacuumStream does not bypass them.
+- **Guide-style home.** On the left, the channels you follow that are live, with viewers,
+  category and uptime, then channels you watched recently and popular streams. On the right, a
+  large preview of the focused channel.
+- **Twitch's official player.** Nothing ever covers the video: controls and information sit
+  below it and chat to its right. ↑/↓ switch channel without leaving playback, and Play/Pause
+  always works.
+- **Read-only chat of its own**, through EventSub. It shows Twitch, 7TV, BTTV and FFZ emotes
+  (global and per channel), zero-width emotes, badges and mentions, in two text sizes.
+- **Search** with an on-screen keyboard driven by the remote; a physical keyboard works too.
+- **Back keeps your place.** Leaving playback returns focus to the channel you came from.
+- **"Controles de Twitch".** An explicit mode to operate the player's own interface with the
+  remote, for example to accept Twitch's "intended for certain audiences" notice.
+- **Account linking from your phone**, with a QR code or a Twitch code. It only asks for
+  read access: your follows and chat.
+- **Remote test** in Settings: shows which key each button sends.
 
-## Documentation
+## Status
 
-| I want to… | Start here |
+First release. [docs/verificacion.md](docs/verificacion.md) (in Spanish) separates what was
+checked in a lab from what remains to be tested on the target hardware. The lab was an Arch
+desktop with a virtual X11 display and real X11 key events.
+
+In short:
+- **Works with keys only:** open a channel → it plays → pause/resume → back → another channel,
+  with real video up to 1920×1080.
+- **Still to test:** HDMI audio, hardware video decoding, smoothness on the target mini PC, the
+  physical remote, and suspend/resume.
+
+Limits set by Twitch:
+- Linking your account powers the follows list and chat. **The embedded player does not
+  receive that session**, so Turbo and subscriber benefits do not apply.
+- Twitch controls ads, availability and content gates. GoodTTV does not bypass them.
+
+## Run it
+
+You need Linux x86_64, Node.js 24 or later and Bun 1.4.2.
+
+```bash
+bun install --frozen-lockfile
+bun run build && bun run start        # in a window, for testing
+bun run package:appimage              # dist/GoodTTV-0.1.0-x86_64.AppImage, full screen
+```
+
+Prebuilt AppImages are attached to the [releases](https://github.com/mateozariquiey/GoodTTV/releases).
+Development, tests, packaging and the Twitch Client ID are covered in
+[docs/desarrollo.md](docs/desarrollo.md).
+
+| Remote | Action |
 | --- | --- |
-| Install, sign in, or use a controller | [User guide](docs/users/getting-started.md) |
-| Troubleshoot playback, login, or startup | [Troubleshooting](docs/users/troubleshooting.md) |
-| Report a bug or contribute | [Contributing](CONTRIBUTING.md) |
-| Run or change the source | [Development](docs/contributing/development.md) |
-| Understand the security boundaries | [Architecture](docs/contributing/architecture.md) |
-| See what is being worked on and why | [Improvement ledger](docs/contributing/improvement-ledger.md) |
-| Change the interface | [Design contract](docs/contributing/design.md) |
-| Publish a version | [Maintainer release guide](docs/maintainers/releases.md) |
-| Report a vulnerability | [Security policy](SECURITY.md) |
+| Arrows | Move. In the player, ↑/↓ switch channel |
+| OK (Enter) | Select |
+| Back (Escape, Back, Backspace) | Go back |
+| Play/Pause (or Space) | Pause or resume, anywhere |
 
-## Project
+## Origin and changes
 
-Maintained by [Eliott Bouhana (@eliottness)](https://github.com/eliottness), with contributions
-credited in [Git history](https://github.com/eliottness/VacuumStream/graphs/contributors).
-The application ID is `io.github.eliottness.VacuumStream`.
+GoodTTV is a variant of [VacuumStream](https://github.com/eliottness/VacuumStream) 0.2.1 by
+Eliott Bouhana, MIT licensed. This repository keeps its full history.
 
-Inspired by VacuumTube's controller-first approach. Twitch has no equivalent supported
-Leanback interface, so VacuumStream provides its own interface using Helix, Device Code Flow,
-and the official Twitch player rather than extracting stream URLs.
+**Kept from VacuumStream:**
+- The main process and its security model: isolation, checked IPC, and a local HTTPS server
+  with a pinned certificate.
+- Device sign-in and the token store.
+- The Helix adapter and the Twitch SDK loader.
+- The packaging with electron-builder.
 
-[MIT licensed](LICENSE). Twitch is a trademark of Twitch Interactive, Inc.
-VacuumStream is not affiliated with or endorsed by Twitch.
+**Changed:**
+- A new, smaller interface built for a TV remote.
+- Its own chat with third-party emotes, instead of Twitch's chat iframe.
+- Every key goes through the main process, so focus inside Twitch's iframe can never take the
+  remote away.
+- Video start-up by script injection is gone; it is not needed.
+- Back keeps your place in the list.
+- Left out for now: VODs, resume, categories, favourites, captions, Steam Deck, Gamepad API
+  and Flatpak.
+
+The reasoning lives in [docs/decisiones.md](docs/decisiones.md) and the structure in
+[docs/arquitectura.md](docs/arquitectura.md), both in Spanish.
+
+## Contributing
+
+Issues and pull requests are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) and, for security
+reports, [SECURITY.md](SECURITY.md).
+
+## License
+
+[MIT](LICENSE), keeping VacuumStream's original attribution. Twitch is a trademark of Twitch
+Interactive, Inc. GoodTTV is not affiliated with or endorsed by Twitch. Third-party emotes are
+loaded from the public services of 7TV, BetterTTV and FrankerFaceZ.

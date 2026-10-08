@@ -1,149 +1,128 @@
-import { contextBridge, ipcRenderer } from "electron"
+import { contextBridge, type IpcRendererEvent, ipcRenderer } from "electron"
 import { z } from "zod"
 import { CHANNELS } from "../shared/channels"
+import { ChatBatchSchema, ChatOpenInputSchema } from "../shared/chat"
 import {
+  type AppApi,
+  AppStatusSchema,
   AuthSnapshotSchema,
-  CategoryCardSchema,
   ChannelCardSchema,
-  ChatInputFailureSchema,
-  ChatInputPressSchema,
-  ChatInputSessionSchema,
+  CursorInputSchema,
   DeviceChallengeSchema,
-  FavouritesAddInputSchema,
-  FavouritesListSchema,
-  FavouritesRemoveInputSchema,
-  FollowedChannelCardSchema,
+  InputActionSchema,
+  KeyProbeSchema,
+  LiveInputSchema,
+  LoginsInputSchema,
   PageSchema,
-  PlaybackBookmarkSchema,
-  PlaybackProgressGetInputSchema,
-  PlaybackProgressListSchema,
-  PlaybackProgressRemoveInputSchema,
-  PlaybackProgressSaveInputSchema,
-  SettingsSnapshotSchema,
+  PlayerInteractionEndSchema,
+  PreferencesPatchSchema,
+  PreferencesSchema,
+  RecentChannelSchema,
+  RecentsListSchema,
+  SearchInputSchema,
   StreamCardSchema,
-  type VacuumStreamApi,
-  VideoCardSchema,
 } from "../shared/contracts"
 
-const api = {
+// Every value is validated on the way in and again on the way out of main.
+const invoke = <Schema extends z.ZodType>(schema: Schema, channel: string, ...input: unknown[]) =>
+  ipcRenderer.invoke(channel, ...input).then((value): z.infer<Schema> => schema.parse(value))
+
+const subscribe = <Args extends unknown[]>(
+  channel: string,
+  parse: (...values: unknown[]) => Args,
+  listener: (...args: Args) => void,
+): (() => void) => {
+  const onMessage = (_event: IpcRendererEvent, ...values: unknown[]): void => {
+    const parsed = (() => {
+      try {
+        return parse(...values)
+      } catch {
+        return undefined
+      }
+    })()
+    if (parsed !== undefined) listener(...parsed)
+  }
+  ipcRenderer.on(channel, onMessage)
+  return () => {
+    ipcRenderer.removeListener(channel, onMessage)
+  }
+}
+
+const api: AppApi = {
+  app: {
+    status: () => invoke(AppStatusSchema, CHANNELS.appStatus),
+  },
   auth: {
-    begin: () =>
-      ipcRenderer.invoke(CHANNELS.authBegin).then((value) => DeviceChallengeSchema.parse(value)),
-    logout: () => ipcRenderer.invoke(CHANNELS.authLogout).then(() => undefined),
-    openActivation: (flowId) =>
-      ipcRenderer.invoke(CHANNELS.authOpenActivation, flowId).then(() => undefined),
-    snapshot: () =>
-      ipcRenderer.invoke(CHANNELS.authSnapshot).then((value) => AuthSnapshotSchema.parse(value)),
+    begin: () => invoke(DeviceChallengeSchema, CHANNELS.authBegin),
+    logout: () => invoke(z.undefined(), CHANNELS.authLogout),
+    snapshot: () => invoke(AuthSnapshotSchema, CHANNELS.authSnapshot),
   },
   catalog: {
     followed: (input) =>
-      ipcRenderer
-        .invoke(CHANNELS.catalogFollowed, input)
-        .then((value) => PageSchema(StreamCardSchema).parse(value)),
-    followedChannels: (input) =>
-      ipcRenderer
-        .invoke(CHANNELS.catalogFollowedChannels, input)
-        .then((value) => PageSchema(FollowedChannelCardSchema).parse(value)),
+      invoke(
+        PageSchema(StreamCardSchema),
+        CHANNELS.catalogFollowed,
+        CursorInputSchema.parse(input),
+      ),
     live: (input) =>
-      ipcRenderer
-        .invoke(CHANNELS.catalogLive, input)
-        .then((value) => PageSchema(StreamCardSchema).parse(value)),
+      invoke(PageSchema(StreamCardSchema), CHANNELS.catalogLive, LiveInputSchema.parse(input)),
     search: (input) =>
-      ipcRenderer
-        .invoke(CHANNELS.catalogSearch, input)
-        .then((value) => PageSchema(ChannelCardSchema).parse(value)),
-    topCategories: (input) =>
-      ipcRenderer
-        .invoke(CHANNELS.catalogTopCategories, input)
-        .then((value) => PageSchema(CategoryCardSchema).parse(value)),
-    videos: (input) =>
-      ipcRenderer
-        .invoke(CHANNELS.catalogVideos, input)
-        .then((value) => PageSchema(VideoCardSchema).parse(value)),
+      invoke(PageSchema(ChannelCardSchema), CHANNELS.catalogSearch, SearchInputSchema.parse(input)),
+    streamsByLogin: (logins) =>
+      invoke(
+        z.array(StreamCardSchema),
+        CHANNELS.catalogStreamsByLogin,
+        LoginsInputSchema.parse(logins),
+      ),
   },
-  chatInput: {
-    begin: (session) =>
-      ipcRenderer
-        .invoke(CHANNELS.chatInputBegin, ChatInputSessionSchema.parse(session))
-        .then(() => undefined),
-    end: (session) =>
-      ipcRenderer
-        .invoke(CHANNELS.chatInputEnd, ChatInputSessionSchema.parse(session))
-        .then(() => undefined),
-    onEscape: (listener) => {
-      const onEscape = (
-        _event: Electron.IpcRendererEvent,
-        session: unknown,
-        failure: unknown,
-      ): void => {
-        const id = ChatInputSessionSchema.parse(session)
-        if (failure === undefined) listener(id)
-        else listener(id, ChatInputFailureSchema.parse(failure))
-      }
-      ipcRenderer.on(CHANNELS.chatInputEscape, onEscape)
-      return () => {
-        ipcRenderer.removeListener(CHANNELS.chatInputEscape, onEscape)
-      }
-    },
-    press: (...input) =>
-      ipcRenderer
-        .invoke(CHANNELS.chatInputPress, ...ChatInputPressSchema.parse(input))
-        .then((value) => z.void().parse(value)),
+  chat: {
+    close: () => invoke(z.undefined(), CHANNELS.chatClose),
+    onBatch: (listener) =>
+      subscribe(CHANNELS.chatBatch, (batch) => [ChatBatchSchema.parse(batch)] as const, listener),
+    open: (input) =>
+      invoke(z.number().int().nonnegative(), CHANNELS.chatOpen, ChatOpenInputSchema.parse(input)),
   },
-  favourites: {
-    add: (entry) =>
-      ipcRenderer
-        .invoke(CHANNELS.favouritesAdd, FavouritesAddInputSchema.parse(entry))
-        .then((value) => FavouritesListSchema.parse(value)),
-    list: () =>
-      ipcRenderer
-        .invoke(CHANNELS.favouritesList)
-        .then((value) => FavouritesListSchema.parse(value)),
-    remove: (login) =>
-      ipcRenderer
-        .invoke(CHANNELS.favouritesRemove, FavouritesRemoveInputSchema.parse(login))
-        .then((value) => FavouritesListSchema.parse(value)),
+  input: {
+    onAction: (listener) =>
+      subscribe(
+        CHANNELS.inputAction,
+        (action) => [InputActionSchema.parse(action)] as const,
+        listener,
+      ),
+    onProbe: (listener) =>
+      subscribe(CHANNELS.inputProbe, (probe) => [KeyProbeSchema.parse(probe)] as const, listener),
+    setProbing: (active) =>
+      invoke(z.undefined(), CHANNELS.inputSetProbing, z.boolean().parse(active)),
+    setTextEntry: (active) =>
+      invoke(z.undefined(), CHANNELS.inputSetTextEntry, z.boolean().parse(active)),
   },
-  playbackProgress: {
-    get: (videoId) =>
-      ipcRenderer
-        .invoke(CHANNELS.playbackProgressGet, PlaybackProgressGetInputSchema.parse(videoId))
-        .then((value) => PlaybackBookmarkSchema.optional().parse(value)),
-    list: () =>
-      ipcRenderer
-        .invoke(CHANNELS.playbackProgressList)
-        .then((value) => PlaybackProgressListSchema.parse(value)),
-    remove: (videoId) =>
-      ipcRenderer
-        .invoke(CHANNELS.playbackProgressRemove, PlaybackProgressRemoveInputSchema.parse(videoId))
-        .then((value) => z.void().parse(value)),
-    save: (bookmark) =>
-      ipcRenderer
-        .invoke(CHANNELS.playbackProgressSave, PlaybackProgressSaveInputSchema.parse(bookmark))
-        .then((value) => z.void().parse(value)),
+  player: {
+    beginInteraction: () => invoke(z.number().int().positive(), CHANNELS.playerBeginInteraction),
+    endInteraction: (id) =>
+      invoke(z.undefined(), CHANNELS.playerEndInteraction, z.number().int().positive().parse(id)),
+    onInteractionEnded: (listener) =>
+      subscribe(
+        CHANNELS.playerInteractionEnded,
+        (id, reason) =>
+          [
+            z.number().int().positive().parse(id),
+            PlayerInteractionEndSchema.parse(reason),
+          ] as const,
+        listener,
+      ),
+    setWatching: (active) =>
+      invoke(z.undefined(), CHANNELS.playerSetWatching, z.boolean().parse(active)),
   },
-  settings: {
-    saveClientId: (clientId) =>
-      ipcRenderer
-        .invoke(CHANNELS.settingsSaveClientId, clientId)
-        .then((value) => SettingsSnapshotSchema.parse(value)),
-    snapshot: () =>
-      ipcRenderer
-        .invoke(CHANNELS.settingsSnapshot)
-        .then((value) => SettingsSnapshotSchema.parse(value)),
+  preferences: {
+    get: () => invoke(PreferencesSchema, CHANNELS.preferencesGet),
+    update: (patch) =>
+      invoke(PreferencesSchema, CHANNELS.preferencesUpdate, PreferencesPatchSchema.parse(patch)),
   },
-  system: {
-    activateEmbeddedPlayer: (audible) =>
-      ipcRenderer
-        .invoke(CHANNELS.systemActivateEmbeddedPlayer, audible)
-        .then((value) => Boolean(value)),
-    isSteamGameMode: () =>
-      ipcRenderer.invoke(CHANNELS.systemIsSteamGameMode).then((value) => Boolean(value)),
-    restoreShellFullscreen: () =>
-      ipcRenderer.invoke(CHANNELS.systemRestoreShellFullscreen).then((value) => Boolean(value)),
-    toggleFullscreen: () =>
-      ipcRenderer.invoke(CHANNELS.systemToggleFullscreen).then((value) => Boolean(value)),
+  recents: {
+    add: (channel) =>
+      invoke(RecentsListSchema, CHANNELS.recentsAdd, RecentChannelSchema.parse(channel)),
+    list: () => invoke(RecentsListSchema, CHANNELS.recentsList),
   },
-} satisfies VacuumStreamApi
+}
 
-contextBridge.exposeInMainWorld("vacuumStream", api)
+contextBridge.exposeInMainWorld("api", api)

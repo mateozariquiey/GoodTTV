@@ -1,8 +1,0 @@
-{
-  "rows": [
-    {
-      "id": "D-xc-docs-1",
-      "reason": "Documentation defect: docs/contributing/architecture.md omits an entry from the main-process authority list. Prose has no machine consumer here, so it is fixed by editing the document, not pinned by a test."
-    }
-  ]
-}

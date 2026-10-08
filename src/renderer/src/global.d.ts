@@ -1,7 +1,7 @@
-import type { VacuumStreamApi } from "../../shared/contracts"
+import type { AppApi } from "../../shared/contracts"
 
 declare global {
   interface Window {
-    readonly vacuumStream: VacuumStreamApi
+    readonly api: AppApi
   }
 }

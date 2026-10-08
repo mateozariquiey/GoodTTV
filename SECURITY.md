@@ -1,34 +1,24 @@
-# Security and privacy
+# Security
 
-## Report a vulnerability
+Please report vulnerabilities privately through
+[GitHub's private vulnerability reporting](https://github.com/mateozariquiey/GoodTTV/security/advisories/new),
+not in public issues. English or Spanish is fine.
 
-Use [GitHub private vulnerability reporting](https://github.com/eliottness/VacuumStream/security/advisories/new).
-Do not disclose a vulnerability, working exploit, or account token in a public issue.
-Include the affected version, reproduction steps, impact, and sanitized evidence.
+Useful details: the GoodTTV version, how you installed it, what an attacker could do, and the
+steps to reproduce it. This is a personal open-source project maintained in spare time, so
+there is no guaranteed response time, but reports are taken seriously.
 
-This is an early-stage, volunteer-maintained project. Security fixes target `main` and the
-latest release; older versions do not have a separate support branch. There is no guaranteed
-response time. If private reporting is unavailable, ask @eliottness for a private contact route
-without posting vulnerability details.
+## What GoodTTV protects
 
-## Data handling
+- **Twitch tokens** live only in the Electron main process. They are encrypted with the system
+  keyring when one is available, or stored owner-only (`0600`) otherwise. They never reach the
+  interface.
+- **The interface** runs sandboxed, with context isolation and no Node.js. It can only call a
+  small set of validated IPC methods, and only from the app's own top-level page.
+- **Twitch's player** runs in a cross-origin iframe. The app never scripts it. The only input it
+  forwards is Tab, Shift+Tab and Enter, in the explicit «Controles de Twitch» mode, and only to
+  the focused player frame.
+- **Third-party emote images** are accepted only from Twitch's, 7TV's, BetterTTV's and
+  FrankerFaceZ's CDNs.
 
-- Twitch OAuth requests `user:read:follows`. Tokens stay in Electron's main process.
-- Tokens persist encrypted when a secure Linux keyring is available. Otherwise VacuumStream logs
-  a warning and uses an unencrypted `oauth-token.json` file with mode `0600` inside its private
-  application-data directory. Settings, including a custom public Client ID, are local.
-- The official Twitch player and Twitch APIs contact Twitch and its infrastructure directly.
-  Their privacy policies apply. VacuumStream has no application analytics backend.
-- Device sign-in does not share browser cookies or authenticate the embedded player.
-- Flatpak grants network, audio, GPU, input-device, and keyring access, but not home-directory access.
-  Input-device permissions cover more than gamepads; see the [architecture](docs/contributing/architecture.md).
-
-## Intentional public values
-
-The embedded Twitch Client ID is not a secret. The certificate and matching key under
-`resources/certs/` are a localhost-only TLS fixture, distributed with the application. They
-must never identify a public service or be installed as a trusted system certificate authority.
-Certificate pinning is not a defense against a malicious local process that already controls
-the user's session. Do not send OAuth tokens or private data to the static localhost server.
-
-Release SHA-256 checksums detect corruption. They are not publisher signatures.
+Release AppImages come with SHA-256 checksums. They are not cryptographically signed.

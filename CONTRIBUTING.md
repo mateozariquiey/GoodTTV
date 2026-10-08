@@ -1,38 +1,43 @@
 # Contributing
 
-Thanks for helping make Twitch easier to use from a sofa. Bug reports, controller testing,
-documentation fixes, and code contributions are welcome.
+Thanks for helping make Twitch nicer to watch from the couch. Bug reports, testing on real
+hardware (mini PCs, TVs, remotes) and code are all welcome. Issues can be written in English or
+Spanish.
 
-## Start here
+## Before you start
 
-1. Read the [development guide](docs/contributing/development.md) to run the app and checks.
-2. Review the [architecture](docs/contributing/architecture.md) before changing process or OAuth boundaries.
-3. Follow the [design contract](docs/contributing/design.md) for interface changes.
-4. Open an issue before a substantial feature or architecture change so we can agree on scope.
+- Read [docs/arquitectura.md](docs/arquitectura.md) for how the app is put together and
+  [docs/decisiones.md](docs/decisiones.md) for why. Both are in Spanish for now; feel free to ask
+  in an issue.
+- For a substantial feature, open an issue first so we can agree on scope. GoodTTV stays small on
+  purpose: live channels, search, playback and chat.
 
-## Issues and pull requests
+## Ground rules
 
-Use the [issue templates](https://github.com/eliottness/VacuumStream/issues/new/choose) for bugs
-and feature requests. Include your version, distribution, installation method, and reproduction
-steps. Describe whether you used native gamepad input or Steam Input keyboard mapping.
+- **Remote first.** Every task must work with the arrows, OK, Back and Play/Pause. Focus must
+  always be visible, and Back must never lose your place.
+- **Nothing covers the player.** Twitch disables autoplay, and may revoke embedding, when the
+  video is obscured. Controls, notices and chat go beside or below it.
+- **Documented Twitch APIs only.** No scripts injected into Twitch's frames, no private
+  endpoints, and **no ad blocking or other circumvention** of Twitch's player.
+- **Tokens stay in the main process.** The renderer never sees them. New IPC goes through
+  `src/shared/contracts.ts` with Zod validation on both sides.
+- Never commit tokens, personal profiles or logs. The Client ID in `settings-store.ts` is public
+  on purpose; forks should register their own (see [docs/desarrollo.md](docs/desarrollo.md)).
 
-Fork the repository, branch from `main`, and keep each pull request focused. Explain the outcome
-and how you tested it. Run `bun run verify`; add regression coverage when changing important
-behavior. Update affected documentation and include screenshots for interface changes.
-If a hardware or authenticated test is unavailable, say so rather than claiming it passed.
+## Checks
 
-CI runs for pull requests and pushes to `main`. It verifies code, workflows, shell scripts,
-desktop metadata, and unpacked Electron packaging. Release builds run separately.
+```bash
+bun install --frozen-lockfile
+bun run verify          # Biome, strict TypeScript, unit tests, build
+bun run build && bun run test:e2e   # real app, real key events; needs Xvfb and xdotool
+```
 
-## Conventions
+Add or update tests when you change behaviour. If you could not test something (hardware, a
+signed-in account), say so in the pull request rather than implying it passed.
 
-- Use the existing TypeScript, React, Zod, and Biome patterns; keep privileged work in main.
-- Preserve the four-arrow, Enter, Escape navigation contract. Text entry is the only exception.
-- Keep Twitch's player unobscured and do not add private playback APIs or advertisement bypasses.
-- Never commit tokens, device codes, Client Secrets, personal profiles, or private logs.
-- The built-in public Client ID and localhost TLS fixture are intentional public data.
-- Contributions use the project's [MIT license](LICENSE). Credit comes from Git authorship;
-  there is no manually maintained contributor roster to keep in sync.
+## Pull requests
 
-Be respectful and specific in discussions. Maintainer: [@eliottness](https://github.com/eliottness).
-Report vulnerabilities privately using [SECURITY.md](SECURITY.md), not public issues.
+Keep each pull request focused, explain the outcome and how you checked it, and include a
+screenshot for interface changes. Contributions are licensed under the project's
+[MIT license](LICENSE).

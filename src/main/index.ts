@@ -1,11 +1,14 @@
 import { X509Certificate } from "node:crypto"
 import { join } from "node:path"
-import { app, BrowserWindow, dialog, safeStorage, session } from "electron"
-import { createChatInput } from "./chat-input"
-import { FavouritesStore } from "./favourites-store"
+import { app, BrowserWindow, dialog, Menu, powerSaveBlocker, safeStorage, session } from "electron"
+import { CHANNELS } from "../shared/channels"
+import { EmoteCatalog } from "./chat/emote-catalog"
+import { EventSubChat } from "./chat/eventsub-chat"
 import { type StaticHttpsServer, startStaticHttpsServer } from "./https-server"
+import { createInputRouter } from "./input-router"
 import { registerIpc } from "./ipc"
-import { PlaybackProgressStore } from "./playback-progress-store"
+import { LocalStore } from "./local-store"
+import { createPlayerInteraction } from "./player-interaction"
 import { SettingsStore } from "./settings-store"
 import { TokenVault } from "./token-vault"
 import { TwitchService } from "./twitch-service"
@@ -28,14 +31,19 @@ const activateWindow = (): void => {
 const isTwitchPlayerOrigin = (value: string): boolean =>
   URL.canParse(value) && new URL(value).origin === "https://player.twitch.tv"
 
+// On the TV the app runs full screen (`--fullscreen` in the launcher); windowed for development.
+const startsFullscreen = (): boolean => process.argv.includes("--fullscreen")
+
 const createWindow = async (): Promise<void> => {
-  const { SteamGamepadUI: steamGamepadUi, SteamOS: steamOs } = process.env
-  const runningInSteamGameMode = steamOs === "1" && steamGamepadUi === "1"
+  // No menu bar: it costs space on a TV and its accelerators (reload, zoom) are not wanted.
+  Menu.setApplicationMenu(null)
   const mainWindow = new BrowserWindow({
     width: 1280,
     height: 720,
-    backgroundColor: "#0e0e10",
-    fullscreen: runningInSteamGameMode,
+    backgroundColor: "#0b0b0d",
+    fullscreen: startsFullscreen(),
+    show: false,
+    title: app.getName(),
     webPreferences: {
       contextIsolation: true,
       nodeIntegration: false,
@@ -92,21 +100,52 @@ const createWindow = async (): Promise<void> => {
   if (!tokenVault.isSecure) {
     console.warn("Secure OAuth token storage unavailable; using mode-0600 file fallback")
   }
-  const chatInput = createChatInput(mainWindow)
-  mainWindow.on("blur", chatInput.blur)
-  mainWindow.on("closed", chatInput.cancel)
-  mainWindow.webContents.on("render-process-gone", chatInput.cancel)
-  mainWindow.webContents.on("did-start-navigation", (_event, _url, _inPlace, isMainFrame) => {
-    if (isMainFrame) chatInput.cancel()
+  const twitch = new TwitchService(new SettingsStore(), tokenVault)
+  const emotes = new EmoteCatalog()
+  const chat = new EventSubChat({
+    api: {
+      badges: (broadcasterId) => twitch.badges(broadcasterId),
+      emotes: (broadcasterId) => emotes.forChannel(broadcasterId),
+      subscribe: (type, broadcasterId, userId, sessionId) =>
+        twitch.createChatSubscription(type, broadcasterId, userId, sessionId),
+      unsubscribe: (subscriptionId) => twitch.deleteSubscription(subscriptionId),
+      viewer: () => twitch.viewer(),
+    },
+    emit: (batch) => {
+      if (!mainWindow.isDestroyed()) mainWindow.webContents.send(CHANNELS.chatBatch, batch)
+    },
+  })
+  const input = createInputRouter(mainWindow.webContents)
+  const player = createPlayerInteraction(mainWindow, input)
+  // Keep the TV awake while a stream plays; Twitch pauses an embed whose page gets hidden.
+  let displayBlocker: number | undefined
+  const setWatching = (active: boolean): void => {
+    if (active && displayBlocker === undefined) {
+      displayBlocker = powerSaveBlocker.start("prevent-display-sleep")
+    } else if (!active && displayBlocker !== undefined) {
+      powerSaveBlocker.stop(displayBlocker)
+      displayBlocker = undefined
+    }
+  }
+  const stopSessionWork = (): void => {
+    chat.close()
+    setWatching(false)
+  }
+  mainWindow.on("blur", player.windowBlurred)
+  mainWindow.on("closed", stopSessionWork)
+  mainWindow.webContents.on("render-process-gone", stopSessionWork)
+  mainWindow.webContents.on("did-start-navigation", (details) => {
+    if (details.isMainFrame) stopSessionWork()
   })
   registerIpc({
-    chatInput,
-    favourites: new FavouritesStore(app.getPath("userData")),
+    chat,
+    input,
+    local: new LocalStore(app.getPath("userData")),
     mainWindow,
-    playbackProgress: new PlaybackProgressStore(app.getPath("userData")),
+    player,
     rendererOrigin,
-    runningInSteamGameMode,
-    twitch: new TwitchService(new SettingsStore(app.getPath("userData")), tokenVault),
+    setWatching,
+    twitch,
   })
 
   session.defaultSession.setPermissionCheckHandler(
@@ -135,6 +174,9 @@ const createWindow = async (): Promise<void> => {
   })
 
   await mainWindow.loadURL(rendererUrl ?? rendererOrigin)
+  // Keys only reach this window while it has system focus; take it once at start.
+  mainWindow.show()
+  mainWindow.focus()
   if (activationRequested) activateWindow()
 }
 
@@ -149,7 +191,7 @@ if (!app.requestSingleInstanceLock()) {
     .then(createWindow)
     .catch(async (error: unknown) => {
       const message = error instanceof Error ? error.message : "Unknown startup failure"
-      dialog.showErrorBox("VacuumStream could not start", message)
+      dialog.showErrorBox(`${app.getName()} could not start`, message)
       await staticServer?.close()
       app.exit(1)
     })

@@ -17,6 +17,7 @@
       "!test-results",
       "!playwright-report",
       "!.omo",
+      "!.lab",
       "!!.flatpak-build",
       "!!.flatpak-builder",
       "!!.flatpak-repository"
@@ -41,6 +42,9 @@
       "suspicious": {
         "noExplicitAny": "error"
       },
+      "complexity": {
+        "useLiteralKeys": "off"
+      },
       "style": {
         "noDefaultExport": "error",
         "noNonNullAssertion": "error",
@@ -55,7 +59,7 @@
   },
   "overrides": [
     {
-      "includes": ["*.config.ts", "test/e2e/support/isolated-display.ts"],
+      "includes": ["*.config.ts", "test/e2e/support/display.ts"],
       "linter": {
         "rules": {
           "style": {

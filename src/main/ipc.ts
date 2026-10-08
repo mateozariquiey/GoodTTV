@@ -1,33 +1,40 @@
-import { type BrowserWindow, type IpcMainInvokeEvent, ipcMain, shell } from "electron"
+import { app, type BrowserWindow, type IpcMainInvokeEvent, ipcMain } from "electron"
 import { z } from "zod"
 import { CHANNELS } from "../shared/channels"
+import { ChatOpenInputSchema } from "../shared/chat"
 import {
-  ChatInputPressSchema,
-  ChatInputSessionSchema,
   CursorInputSchema,
-  FavouritesAddInputSchema,
-  FavouritesRemoveInputSchema,
   LiveInputSchema,
-  PlaybackProgressGetInputSchema,
-  PlaybackProgressRemoveInputSchema,
-  PlaybackProgressSaveInputSchema,
+  LoginsInputSchema,
+  PreferencesPatchSchema,
+  RecentChannelSchema,
   SearchInputSchema,
-  VideosInputSchema,
 } from "../shared/contracts"
-import type { ChatInput } from "./chat-input"
-import type { FavouritesStore } from "./favourites-store"
-import type { PlaybackProgressStore } from "./playback-progress-store"
+import type { EventSubChat } from "./chat/eventsub-chat"
+import type { InputRouter } from "./input-router"
+import type { LocalStore } from "./local-store"
+import type { PlayerInteraction } from "./player-interaction"
 import type { TwitchService } from "./twitch-service"
-import { activateEmbeddedPlayer, restoreShellFullscreen } from "./window-controls"
 
 type IpcOptions = {
-  readonly chatInput: Pick<ChatInput, "begin" | "end" | "press">
-  readonly favourites: Pick<FavouritesStore, "add" | "list" | "remove">
+  readonly chat: Pick<EventSubChat, "close" | "open">
+  readonly input: Pick<InputRouter, "setProbing" | "setTextEntry">
+  readonly local: Pick<LocalStore, "addRecent" | "preferences" | "recents" | "updatePreferences">
   readonly mainWindow: BrowserWindow
-  readonly playbackProgress: Pick<PlaybackProgressStore, "get" | "list" | "remove" | "save">
+  readonly player: Pick<PlayerInteraction, "begin" | "end">
   readonly rendererOrigin: string
-  readonly runningInSteamGameMode: boolean
-  readonly twitch: TwitchService
+  readonly setWatching: (active: boolean) => void
+  readonly twitch: Pick<
+    TwitchService,
+    | "authSnapshot"
+    | "beginAuthorization"
+    | "followed"
+    | "live"
+    | "logout"
+    | "search"
+    | "status"
+    | "streamsByLogin"
+  >
 }
 
 export class InvalidIpcSenderError extends Error {
@@ -38,6 +45,7 @@ export class InvalidIpcSenderError extends Error {
 }
 
 export const registerIpc = (options: IpcOptions): void => {
+  // Only the app's own top-level document may call in; never a Twitch frame.
   const authorize = (event: IpcMainInvokeEvent): void => {
     const senderFrame = event.senderFrame
     if (
@@ -50,121 +58,68 @@ export const registerIpc = (options: IpcOptions): void => {
       throw new InvalidIpcSenderError()
     }
   }
+  const handle = <Args extends unknown[], Result>(
+    channel: string,
+    schema: z.ZodType<Args>,
+    run: (...args: Args) => Result,
+  ): void => {
+    ipcMain.handle(channel, async (event, ...input: unknown[]) => {
+      authorize(event)
+      return run(...schema.parse(input))
+    })
+  }
+  const none = z.tuple([])
 
-  ipcMain.handle(CHANNELS.chatInputBegin, async (event, ...input: unknown[]) => {
-    authorize(event)
-    const [session] = z.tuple([ChatInputSessionSchema]).parse(input)
-    options.chatInput.begin(session)
+  handle(CHANNELS.appStatus, none, () => ({
+    ...options.twitch.status(),
+    version: app.getVersion(),
+    videoDecode: String(app.getGPUFeatureStatus().video_decode ?? "unknown"),
+  }))
+
+  handle(CHANNELS.authSnapshot, none, () => options.twitch.authSnapshot())
+  handle(CHANNELS.authBegin, none, () => options.twitch.beginAuthorization())
+  handle(CHANNELS.authLogout, none, () => {
+    options.chat.close()
+    return options.twitch.logout()
   })
-  ipcMain.handle(CHANNELS.chatInputEnd, async (event, ...input: unknown[]) => {
-    authorize(event)
-    const [session] = z.tuple([ChatInputSessionSchema]).parse(input)
-    options.chatInput.end(session)
-  })
-  ipcMain.handle(CHANNELS.chatInputPress, async (event, ...input: unknown[]) => {
-    authorize(event)
-    const [session, action] = ChatInputPressSchema.parse(input)
-    await options.chatInput.press(session, action)
-  })
-  ipcMain.handle(CHANNELS.settingsSnapshot, async (event) => {
-    authorize(event)
-    return options.twitch.settingsSnapshot()
-  })
-  ipcMain.handle(CHANNELS.settingsSaveClientId, async (event, input: unknown) => {
-    authorize(event)
-    return options.twitch.saveClientId(z.string().parse(input))
-  })
-  ipcMain.handle(CHANNELS.authSnapshot, async (event) => {
-    authorize(event)
-    return options.twitch.authSnapshot()
-  })
-  ipcMain.handle(CHANNELS.authBegin, async (event) => {
-    authorize(event)
-    return options.twitch.beginAuthorization()
-  })
-  ipcMain.handle(CHANNELS.authOpenActivation, async (event, input: unknown) => {
-    authorize(event)
-    await shell.openExternal(options.twitch.activationUrl(z.uuid().parse(input)))
-  })
-  ipcMain.handle(CHANNELS.authLogout, async (event) => {
-    authorize(event)
-    await options.twitch.logout()
-  })
-  ipcMain.handle(CHANNELS.catalogLive, async (event, input: unknown) => {
-    authorize(event)
-    return options.twitch.live(LiveInputSchema.parse(input))
-  })
-  ipcMain.handle(CHANNELS.catalogFollowed, async (event, input: unknown) => {
-    authorize(event)
-    return options.twitch.followed(CursorInputSchema.parse(input))
-  })
-  ipcMain.handle(CHANNELS.catalogFollowedChannels, async (event, input: unknown) => {
-    authorize(event)
-    return options.twitch.followedChannels(CursorInputSchema.parse(input))
-  })
-  ipcMain.handle(CHANNELS.catalogTopCategories, async (event, input: unknown) => {
-    authorize(event)
-    return options.twitch.topCategories(CursorInputSchema.parse(input))
-  })
-  ipcMain.handle(CHANNELS.catalogSearch, async (event, input: unknown) => {
-    authorize(event)
-    return options.twitch.search(SearchInputSchema.parse(input))
-  })
-  ipcMain.handle(CHANNELS.catalogVideos, async (event, input: unknown) => {
-    authorize(event)
-    return options.twitch.videos(VideosInputSchema.parse(input))
-  })
-  ipcMain.handle(CHANNELS.favouritesAdd, async (event, ...input: unknown[]) => {
-    authorize(event)
-    const [entry] = z.tuple([FavouritesAddInputSchema]).parse(input)
-    return options.favourites.add(entry)
-  })
-  ipcMain.handle(CHANNELS.favouritesList, async (event, ...input: unknown[]) => {
-    authorize(event)
-    z.tuple([]).parse(input)
-    return options.favourites.list()
-  })
-  ipcMain.handle(CHANNELS.favouritesRemove, async (event, ...input: unknown[]) => {
-    authorize(event)
-    const [login] = z.tuple([FavouritesRemoveInputSchema]).parse(input)
-    return options.favourites.remove(login)
-  })
-  ipcMain.handle(CHANNELS.playbackProgressGet, async (event, ...input: unknown[]) => {
-    authorize(event)
-    const [videoId] = z.tuple([PlaybackProgressGetInputSchema]).parse(input)
-    return options.playbackProgress.get(videoId)
-  })
-  ipcMain.handle(CHANNELS.playbackProgressList, async (event, ...input: unknown[]) => {
-    authorize(event)
-    z.tuple([]).parse(input)
-    return options.playbackProgress.list()
-  })
-  ipcMain.handle(CHANNELS.playbackProgressRemove, async (event, ...input: unknown[]) => {
-    authorize(event)
-    const [videoId] = z.tuple([PlaybackProgressRemoveInputSchema]).parse(input)
-    await options.playbackProgress.remove(videoId)
-  })
-  ipcMain.handle(CHANNELS.playbackProgressSave, async (event, ...input: unknown[]) => {
-    authorize(event)
-    const [bookmark] = z.tuple([PlaybackProgressSaveInputSchema]).parse(input)
-    await options.playbackProgress.save(bookmark)
-  })
-  ipcMain.handle(CHANNELS.systemActivateEmbeddedPlayer, async (event, input: unknown) => {
-    authorize(event)
-    return activateEmbeddedPlayer(options.mainWindow.webContents, z.boolean().parse(input))
-  })
-  ipcMain.handle(CHANNELS.systemIsSteamGameMode, (event) => {
-    authorize(event)
-    return options.runningInSteamGameMode
-  })
-  ipcMain.handle(CHANNELS.systemRestoreShellFullscreen, (event) => {
-    authorize(event)
-    return restoreShellFullscreen(options.mainWindow, options.runningInSteamGameMode)
-  })
-  ipcMain.handle(CHANNELS.systemToggleFullscreen, (event) => {
-    authorize(event)
-    const fullscreen = !options.mainWindow.isFullScreen()
-    options.mainWindow.setFullScreen(fullscreen)
-    return fullscreen
-  })
+
+  handle(CHANNELS.catalogFollowed, z.tuple([CursorInputSchema]), (input) =>
+    options.twitch.followed(input),
+  )
+  handle(CHANNELS.catalogLive, z.tuple([LiveInputSchema]), (input) => options.twitch.live(input))
+  handle(CHANNELS.catalogSearch, z.tuple([SearchInputSchema]), (input) =>
+    options.twitch.search(input),
+  )
+  handle(CHANNELS.catalogStreamsByLogin, z.tuple([LoginsInputSchema]), (logins) =>
+    options.twitch.streamsByLogin(logins),
+  )
+
+  handle(CHANNELS.chatOpen, z.tuple([ChatOpenInputSchema]), (input) =>
+    options.chat.open(input.broadcasterId),
+  )
+  handle(CHANNELS.chatClose, none, () => options.chat.close())
+
+  handle(CHANNELS.inputSetTextEntry, z.tuple([z.boolean()]), (active) =>
+    options.input.setTextEntry(active),
+  )
+  handle(CHANNELS.inputSetProbing, z.tuple([z.boolean()]), (active) =>
+    options.input.setProbing(active),
+  )
+
+  handle(CHANNELS.playerBeginInteraction, none, () => options.player.begin())
+  handle(CHANNELS.playerEndInteraction, z.tuple([z.number().int().positive()]), (id) =>
+    options.player.end(id),
+  )
+  handle(CHANNELS.playerSetWatching, z.tuple([z.boolean()]), (active) =>
+    options.setWatching(active),
+  )
+
+  handle(CHANNELS.preferencesGet, none, () => options.local.preferences())
+  handle(CHANNELS.preferencesUpdate, z.tuple([PreferencesPatchSchema]), (patch) =>
+    options.local.updatePreferences(patch),
+  )
+  handle(CHANNELS.recentsList, none, () => options.local.recents())
+  handle(CHANNELS.recentsAdd, z.tuple([RecentChannelSchema]), (entry) =>
+    options.local.addRecent(entry),
+  )
 }
