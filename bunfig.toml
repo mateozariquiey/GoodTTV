@@ -1,0 +1,4 @@
+[install]
+# Un solo node_modules en la raíz, como antes del monorepo: electron-builder y los scripts de
+# herramientas/laboratorio encuentran ahí las dependencias.
+linker = "hoisted"

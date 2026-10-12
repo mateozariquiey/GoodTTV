@@ -1,0 +1,9 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    // Sin tipos de Node: este paquete tiene que funcionar igual en Electron, en una extensión y en Android.
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "types": []
+  },
+  "include": ["src", "vitest.config.ts"]
+}

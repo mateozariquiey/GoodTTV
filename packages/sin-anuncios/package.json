@@ -1,0 +1,13 @@
+{
+  "name": "@goodttv/sin-anuncios",
+  "private": true,
+  "description": "Directo de Twitch sin anuncios: empalme de sesiones, relleno con el VOD y recortes. Sin dependencias de Node ni del navegador concreto.",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  }
+}

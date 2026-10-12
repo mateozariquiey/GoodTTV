@@ -1,0 +1,9 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    // Solo el navegador: la interfaz no ve Node ni Electron, solo window.api (src/global.d.ts).
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "types": []
+  },
+  "include": ["src", "vitest.config.ts"]
+}

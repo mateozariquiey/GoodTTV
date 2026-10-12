@@ -10,14 +10,18 @@
   "files": {
     "includes": [
       "**",
-      "!node_modules",
-      "!out",
-      "!dist",
-      "!coverage",
-      "!test-results",
-      "!playwright-report",
+      "!**/node_modules",
+      "!**/out",
+      "!**/dist",
+      "!**/coverage",
+      "!**/test-results",
+      "!**/playwright-report",
       "!.omo",
       "!.lab",
+      "!.ref",
+      "!.venv",
+      "!investigacion",
+      "!herramientas/laboratorio/fuentes",
       "!!.flatpak-build",
       "!!.flatpak-builder",
       "!!.flatpak-repository"
@@ -59,7 +63,7 @@
   },
   "overrides": [
     {
-      "includes": ["*.config.ts", "test/e2e/support/display.ts"],
+      "includes": ["**/*.config.ts", "apps/tele/test/e2e/support/display.ts"],
       "linter": {
         "rules": {
           "style": {

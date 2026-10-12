@@ -1,0 +1,1088 @@
+/* Sober TV theme. Designed on a 1920×1080 canvas where 1rem = 16px; the root size follows the
+ * window, so a 4K TV or a 1280×720 window keep the same composition.
+ * Colour is not the focus signal: the focused control turns white with dark text. */
+
+/* Digits (and the thousands separator) from Inter: Atkinson's slashed zero and its 6 and 9 read oddly in
+ * viewer counts and times. Letters stay in Atkinson, chosen to read well from the sofa. */
+@font-face {
+  font-family: "GoodTTV Digits";
+  font-style: normal;
+  font-display: swap;
+  font-weight: 100 900;
+  src: url("@fontsource-variable/inter/files/inter-latin-wght-normal.woff2")
+    format("woff2-variations");
+  unicode-range: U+0030-0039, U+002C, U+002E;
+}
+
+:root {
+  --bg: #0c0c0e;
+  --surface: #16161a;
+  --surface-2: #1f1f24;
+  --rule: #2a2a31;
+  --text: #ececef;
+  --text-muted: #a6a6b0;
+  --text-dim: #7d7d88;
+  --focus-bg: #f2f2f4;
+  --focus-text: #0c0c0e;
+  --live: #e5484d;
+  --live-on-focus: #c4161c;
+  --warning: #f0b45b;
+
+  --safe: 3rem;
+  --radius: 0.75rem;
+  --radius-sm: 0.5rem;
+  --ease: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --dur: 140ms;
+
+  --font: "GoodTTV Digits", "Atkinson Hyperlegible Next Variable", system-ui, sans-serif;
+
+  color-scheme: dark;
+  font-size: min(100vw / 120, 100vh / 67.5);
+  color: var(--text);
+  background: var(--bg);
+  font-family: var(--font);
+  font-variant-numeric: tabular-nums;
+  font-synthesis: none;
+  -webkit-font-smoothing: antialiased;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  margin: 0;
+  height: 100%;
+}
+
+body {
+  overflow: hidden;
+  background: var(--bg);
+  cursor: default;
+}
+
+[hidden] {
+  /* biome-ignore lint/complexity/noImportantStyles: the hidden attribute must win over layout display values. */
+  display: none !important;
+}
+
+h1,
+h2,
+p {
+  margin: 0;
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* ---------- Controls ---------- */
+
+button,
+input {
+  font: inherit;
+  color: inherit;
+}
+
+button {
+  cursor: pointer;
+}
+
+[data-nav] {
+  outline: none;
+  transition:
+    background-color var(--dur) var(--ease),
+    color var(--dur) var(--ease),
+    transform var(--dur) var(--ease);
+}
+
+.button {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.625rem;
+  min-height: 3.75rem;
+  padding: 0 1.5rem;
+  border: 0;
+  border-radius: var(--radius-sm);
+  font-size: 1.5rem;
+  font-weight: 600;
+  background: var(--surface-2);
+}
+
+.button svg {
+  width: 1.5rem;
+  height: 1.5rem;
+  flex: none;
+}
+
+.button--primary {
+  background: #34343c;
+}
+
+.button:disabled {
+  color: var(--text-dim);
+  background: var(--surface);
+}
+
+.button[aria-pressed="true"]:not(:focus) {
+  box-shadow: inset 0 -0.25rem 0 var(--text-muted);
+}
+
+kbd {
+  display: inline-grid;
+  place-items: center;
+  min-width: 2.25rem;
+  height: 2.25rem;
+  padding: 0 0.5rem;
+  border: 2px solid var(--text-muted);
+  border-radius: 0.4rem;
+  font: inherit;
+  font-size: 0.85em;
+  font-weight: 700;
+}
+
+/* ---------- Shared pieces ---------- */
+
+.avatar {
+  display: inline-grid;
+  flex: none;
+  place-items: center;
+  overflow: hidden;
+  width: 3.5rem;
+  height: 3.5rem;
+  border-radius: 50%;
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: var(--text);
+  background: #3a3a44;
+}
+
+.avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.avatar--sm {
+  width: 2.75rem;
+  height: 2.75rem;
+  font-size: 1rem;
+}
+
+.avatar--lg {
+  width: 9rem;
+  height: 9rem;
+  font-size: 3rem;
+}
+
+.live-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.85em;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: var(--text);
+}
+
+.live-badge::before {
+  content: "";
+  width: 0.7em;
+  height: 0.7em;
+  border-radius: 50%;
+  background: var(--live);
+}
+
+/* Cuánto va por detrás de un espectador normal de Twitch (reproductor propio), junto a «En directo». */
+.player__behind {
+  padding: 0.1em 0.6em;
+  border-radius: 999px;
+  background: rgb(255 255 255 / 0.14);
+  color: var(--text);
+  font-size: 0.85em;
+  font-weight: 600;
+}
+
+/* Viewer counts in red, as on Twitch. */
+.viewers {
+  display: inline-flex;
+  /* Baseline, so the count lines up with the text beside it; the icon is centred on its own. */
+  align-items: baseline;
+  gap: 0.4rem;
+  white-space: nowrap;
+  color: var(--live);
+}
+
+.viewers svg {
+  align-self: center;
+  width: 1em;
+  height: 1em;
+  fill: currentColor;
+  opacity: 0.8;
+}
+
+.state {
+  display: grid;
+  justify-items: start;
+  gap: 1rem;
+  padding: 2rem 0.5rem;
+}
+
+.state__title {
+  font-size: 1.75rem;
+  font-weight: 700;
+}
+
+.state__detail {
+  max-width: 34rem;
+  font-size: 1.25rem;
+  color: var(--text-muted);
+  overflow-wrap: anywhere;
+}
+
+.state--error .state__title::before {
+  content: "";
+  display: inline-block;
+  width: 0.6rem;
+  height: 1.5rem;
+  margin-right: 0.75rem;
+  vertical-align: -0.2rem;
+  border-radius: 0.2rem;
+  background: var(--warning);
+}
+
+.spinner {
+  width: 2.5rem;
+  height: 2.5rem;
+  border: 0.3rem solid var(--rule);
+  border-top-color: var(--text-muted);
+  border-radius: 50%;
+  animation: spin 900ms linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(1turn);
+  }
+}
+
+/* ---------- Shell ---------- */
+
+.shell {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: 2rem;
+  height: 100%;
+  padding: var(--safe) var(--safe) 0;
+}
+
+.topbar {
+  display: flex;
+  align-items: center;
+  gap: 2rem;
+}
+
+.topbar__logo {
+  width: 2.75rem;
+  height: 2.75rem;
+  border-radius: 0.6rem;
+  background:
+    linear-gradient(var(--bg), var(--bg)) 0.95rem 0.8rem / 0.3rem 0.85rem no-repeat,
+    linear-gradient(var(--bg), var(--bg)) 1.55rem 0.8rem / 0.3rem 0.85rem no-repeat,
+    var(--text-muted);
+}
+
+.tabs {
+  display: flex;
+  gap: 0.75rem;
+}
+
+.tab {
+  min-height: 3.75rem;
+  padding: 0 1.5rem;
+  border: 0;
+  border-radius: 999px;
+  font-size: 1.75rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  background: transparent;
+}
+
+.tab[aria-current="page"] {
+  color: var(--text);
+  background: var(--surface-2);
+}
+
+.topbar__account {
+  display: inline-flex;
+  align-items: center;
+  gap: 1rem;
+  margin-left: auto;
+  font-size: 1.375rem;
+  color: var(--text-muted);
+}
+
+.content,
+.content > section {
+  min-height: 0;
+  height: 100%;
+}
+
+/* ---------- Guide lists (Home and Search) ---------- */
+
+.home {
+  display: grid;
+  grid-template-columns: 38rem minmax(0, 1fr);
+  gap: 3rem;
+  height: 100%;
+}
+
+.guide,
+.search__results {
+  overflow-y: auto;
+  padding: 0.25rem 0.75rem var(--safe) 0.25rem;
+  scroll-padding-block: 4rem;
+  scrollbar-width: none;
+}
+
+.guide__intro {
+  display: grid;
+  gap: 1.25rem;
+  margin-bottom: 2rem;
+  font-size: 1.5rem;
+  color: var(--text-muted);
+}
+
+.guide__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+}
+
+.guide__section + .guide__section {
+  margin-top: 2rem;
+}
+
+.guide__heading {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin: 0 0 0.75rem 0.5rem;
+  font-size: 1.375rem;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.guide__empty {
+  padding: 0.75rem 0.5rem 1rem;
+  font-size: 1.375rem;
+  color: var(--text-dim);
+}
+
+.guide__list {
+  display: grid;
+  gap: 0.25rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: 1.25rem;
+  width: 100%;
+  min-height: 6rem;
+  padding: 0.75rem 1rem;
+  border: 0;
+  border-radius: var(--radius);
+  text-align: left;
+  background: transparent;
+}
+
+.row:focus {
+  transform: scale(1.015);
+}
+
+.row__main {
+  display: grid;
+  flex: 1;
+  gap: 0.15rem;
+  min-width: 0;
+}
+
+.row__line {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+  font-size: 1.375rem;
+}
+
+.row__line--meta {
+  color: var(--text-muted);
+}
+
+.row__name {
+  overflow: hidden;
+  font-size: 1.625rem;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.row__category {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.row__title {
+  overflow: hidden;
+  font-size: 1.25rem;
+  color: var(--text-muted);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.row--offline .avatar {
+  opacity: 0.6;
+}
+
+.row__offline {
+  font-size: 1.25rem;
+  color: var(--text-dim);
+}
+
+.row:focus .row__line--meta,
+.row:focus .row__title,
+.row:focus .row__offline {
+  color: #3d3d46;
+}
+
+.preview {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+  min-width: 0;
+  padding-bottom: var(--safe);
+}
+
+.preview--empty {
+  justify-content: center;
+  font-size: 1.75rem;
+  color: var(--text-muted);
+}
+
+.preview__media {
+  overflow: hidden;
+  aspect-ratio: 16 / 9;
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+
+.preview__media img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.preview__placeholder {
+  display: grid;
+  place-items: center;
+  height: 100%;
+}
+
+.preview__title {
+  display: -webkit-box;
+  overflow: hidden;
+  font-size: 2.5rem;
+  font-weight: 700;
+  line-height: 1.2;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.preview__meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem;
+  font-size: 1.5rem;
+  color: var(--text-muted);
+}
+
+.preview__meta strong {
+  color: var(--text);
+}
+
+.preview__offline {
+  font-weight: 700;
+  color: var(--text-dim);
+}
+
+.preview__hint {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  font-size: 1.5rem;
+  color: var(--text-muted);
+}
+
+/* ---------- Search ---------- */
+
+.search {
+  display: grid;
+  grid-template-columns: 50rem minmax(0, 1fr);
+  gap: 3rem;
+  height: 100%;
+}
+
+.search__input {
+  display: grid;
+  align-content: start;
+  gap: 1.5rem;
+}
+
+.search__field {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.search__label {
+  font-size: 1.375rem;
+  color: var(--text-muted);
+}
+
+.search__field input {
+  min-height: 4.5rem;
+  padding: 0 1.5rem;
+  border: 0;
+  border-radius: var(--radius-sm);
+  font-size: 2rem;
+  background: var(--surface-2);
+}
+
+.keyboard {
+  display: grid;
+  gap: 0.6rem;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.keyboard__row {
+  display: grid;
+  grid-template-columns: repeat(10, 1fr);
+  gap: 0.6rem;
+}
+
+.keyboard__row--actions {
+  grid-template-columns: repeat(3, 1fr);
+}
+
+.key {
+  min-height: 4rem;
+  border: 0;
+  border-radius: var(--radius-sm);
+  font-size: 1.75rem;
+  font-weight: 600;
+  background: var(--surface-2);
+}
+
+.key--wide {
+  font-size: 1.5rem;
+}
+
+/* ---------- Settings ---------- */
+
+.settings {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-content: start;
+  gap: 2.5rem 4rem;
+  overflow-y: auto;
+  height: 100%;
+  padding-bottom: var(--safe);
+}
+
+.settings__group {
+  display: grid;
+  align-content: start;
+  gap: 0.75rem;
+}
+
+.settings__group--account {
+  grid-row: span 3;
+}
+
+.settings__group h2 {
+  margin-bottom: 0.5rem;
+  font-size: 1.375rem;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.setting {
+  display: flex;
+  justify-content: space-between;
+  gap: 1.5rem;
+  min-height: 4.5rem;
+  padding: 0 1.5rem;
+  align-items: center;
+  border: 0;
+  border-radius: var(--radius-sm);
+  font-size: 1.5rem;
+  text-align: left;
+  background: var(--surface-2);
+}
+
+.setting strong {
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.setting:focus strong {
+  color: #3d3d46;
+}
+
+.settings__hint {
+  max-width: 60ch;
+  margin: 0.25rem 0 0;
+  font-size: 1.125rem;
+  color: var(--text-muted);
+}
+
+.settings__about p {
+  font-size: 1.25rem;
+  color: var(--text-muted);
+}
+
+.account {
+  display: grid;
+  justify-items: start;
+  gap: 1rem;
+  font-size: 1.5rem;
+}
+
+.account--code {
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 2rem;
+}
+
+.account__lead {
+  font-size: 1.75rem;
+  font-weight: 700;
+}
+
+.account__note {
+  font-size: 1.25rem;
+  color: var(--text-muted);
+}
+
+.account__warning {
+  padding-left: 1rem;
+  border-left: 0.3rem solid var(--warning);
+  font-size: 1.25rem;
+}
+
+.account__qr {
+  padding: 0.75rem;
+  border-radius: var(--radius);
+  background: #fff;
+  line-height: 0;
+}
+
+.account__qr svg {
+  width: 14rem;
+  height: 14rem;
+}
+
+.account__code {
+  margin: 0.5rem 0;
+  font-size: 3.5rem;
+  font-weight: 700;
+  letter-spacing: 0.2em;
+}
+
+.probe {
+  position: fixed;
+  inset: 8rem 20rem;
+  display: grid;
+  align-content: start;
+  gap: 1.25rem;
+  padding: 2.5rem;
+  border-radius: var(--radius);
+  font-size: 1.5rem;
+  background: var(--surface);
+  box-shadow: 0 2rem 6rem rgb(0 0 0 / 60%);
+}
+
+.probe__table {
+  border-collapse: collapse;
+  font-size: 1.375rem;
+}
+
+.probe__table th,
+.probe__table td {
+  padding: 0.5rem 1rem;
+  border-bottom: 1px solid var(--rule);
+  text-align: left;
+}
+
+.probe__table th {
+  color: var(--text-muted);
+}
+
+/* ---------- Player ---------- */
+
+.player {
+  --band: 10.5rem;
+  --chat: 27.5rem;
+  --gap: 1.5rem;
+  --pad: 2rem;
+
+  position: fixed;
+  inset: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  /* One row exactly as tall as the screen: a long chat must never push anything off it. */
+  grid-template-rows: minmax(0, 1fr);
+  gap: 2rem;
+  padding: var(--pad);
+}
+
+.player--chat {
+  grid-template-columns: minmax(0, 1fr) var(--chat);
+}
+
+.player__stage {
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) var(--band);
+  gap: var(--gap);
+  min-width: 0;
+}
+
+/* Twitch requires at least 400×300 and nothing on top: the box only ever shrinks to fit. */
+.player__video {
+  align-self: center;
+  justify-self: center;
+  width: min(100%, (100vh - 2 * var(--pad) - var(--band) - var(--gap)) * 16 / 9);
+  min-width: 400px;
+  aspect-ratio: 16 / 9;
+  min-height: 300px;
+  background: #000;
+}
+
+.player__video .player__media {
+  display: block;
+  width: 100%;
+  height: 100%;
+  background: #000;
+  object-fit: contain;
+}
+
+.player__video .twitch-player-host,
+.player__video iframe {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border: 0;
+}
+
+.player__band {
+  display: grid;
+  grid-template-rows: auto auto;
+  align-content: start;
+  gap: 1.25rem;
+  min-width: 0;
+}
+
+.player__info {
+  display: flex;
+  align-items: center;
+  gap: 1.25rem;
+  min-width: 0;
+}
+
+.player__text {
+  display: grid;
+  gap: 0.35rem;
+  min-width: 0;
+  flex: 1;
+}
+
+.player__line {
+  display: flex;
+  align-items: baseline;
+  gap: 1rem;
+  min-width: 0;
+  font-size: 1.375rem;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.player__name {
+  font-size: 1.75rem;
+  color: var(--text);
+}
+
+.player__stats {
+  margin-left: auto;
+}
+
+.player__title {
+  overflow: hidden;
+  color: var(--text);
+  text-overflow: ellipsis;
+}
+
+.player__zap {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin-left: auto;
+  font-size: 1.125rem;
+}
+
+.player__zap kbd {
+  min-width: 1.75rem;
+  height: 1.75rem;
+}
+
+.player__notice {
+  display: flex;
+  align-items: center;
+  gap: 1.25rem;
+  font-size: 1.375rem;
+  color: var(--text);
+  white-space: normal;
+}
+
+.player__notice--warning span::before {
+  content: "";
+  display: inline-block;
+  width: 0.5rem;
+  height: 1.25rem;
+  margin-right: 0.75rem;
+  vertical-align: -0.15rem;
+  border-radius: 0.2rem;
+  background: var(--warning);
+}
+
+.player__notice .button {
+  min-height: 3rem;
+  font-size: 1.25rem;
+}
+
+.player__controls,
+.player__qualities {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 0.75rem;
+}
+
+/* Cinema mode (own player, D11): the video takes the whole height and the band floats over its bottom edge,
+   hiding while nobody uses the remote. Never with Twitch's embed, which nothing may cover. */
+.player--cinema {
+  padding: 0;
+  gap: 0;
+}
+
+.player--cinema.player--chat {
+  grid-template-columns: minmax(0, 1fr) calc(var(--chat) + var(--gap) + var(--pad));
+}
+
+.player--cinema .player__stage {
+  position: relative;
+  grid-template-rows: minmax(0, 1fr);
+  background: #000;
+}
+
+.player--cinema .player__video {
+  width: min(100%, 100vh * 16 / 9);
+  min-width: 0;
+  min-height: 0;
+}
+
+.player--cinema .player__band {
+  position: absolute;
+  inset: auto 0 0;
+  padding: 5rem var(--pad) var(--pad);
+  background: linear-gradient(to top, rgb(0 0 0 / 0.9), rgb(0 0 0 / 0.65) 55%, transparent);
+  transition: opacity 0.3s ease;
+}
+
+.player--cinema .player__band--hidden {
+  opacity: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .player--cinema .player__band {
+    transition: none;
+  }
+}
+
+/* ---------- Chat ---------- */
+
+.chat {
+  --chat-font: 1.5rem;
+
+  /* A column, not a grid: the optional status line must not shift the list into another row. */
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  min-height: 0;
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+
+.chat--large {
+  --chat-font: 1.875rem;
+}
+
+.chat__header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  padding: 1.25rem 1.5rem;
+  border-bottom: 1px solid var(--rule);
+}
+
+.chat__header h2 {
+  font-size: 1.5rem;
+}
+
+.chat__providers,
+.chat__footer {
+  font-size: 1.125rem;
+  color: var(--text-dim);
+}
+
+.chat__status {
+  padding: 1rem 1.5rem;
+  font-size: 1.25rem;
+  color: var(--text-muted);
+}
+
+.chat__messages {
+  flex: 1;
+  min-height: 0;
+  contain: strict; /* its size comes from the column: new messages do not re-lay out the rest of the screen */
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  overflow: hidden;
+  margin: 0;
+  padding: 1rem 1.5rem;
+  list-style: none;
+  font-size: var(--chat-font);
+  line-height: 1.45;
+}
+
+.message {
+  overflow-wrap: anywhere;
+}
+
+.message__name {
+  font-weight: 700;
+}
+
+.message--action .message__text {
+  font-style: italic;
+}
+
+.message__reply {
+  display: block;
+  font-size: 0.75em;
+  color: var(--text-dim);
+}
+
+.badge {
+  width: 1.1em;
+  height: 1.1em;
+  margin-right: 0.3em;
+  vertical-align: -0.15em;
+}
+
+.mention {
+  padding: 0 0.2em;
+  border-radius: 0.25em;
+  font-weight: 700;
+  background: var(--surface-2);
+}
+
+.emote {
+  position: relative;
+  display: inline-grid;
+  place-items: center;
+  vertical-align: middle;
+  margin: -0.35em 0.05em;
+}
+
+.emote__image {
+  height: 1.75em;
+  width: auto;
+}
+
+.emote__overlay {
+  position: absolute;
+  inset: 0;
+  height: 100%;
+  width: auto;
+  margin: auto;
+}
+
+.chat__footer {
+  padding: 0.75rem 1.5rem;
+  border-top: 1px solid var(--rule);
+}
+
+/* Cinema mode keeps the chat panel off the screen edges (overscan). */
+.player--cinema .chat {
+  margin: var(--pad) var(--pad) var(--pad) var(--gap);
+}
+
+/* ---------- Focus: last, so it wins over every resting and "current" style ---------- */
+
+.button:focus,
+.tab:focus,
+.key:focus,
+.setting:focus,
+.row:focus,
+.search__field input:focus {
+  color: var(--focus-text);
+  background: var(--focus-bg);
+}
+
+/* On the light focus background the live red is too pale to read: a darker one. */
+.row:focus .viewers {
+  color: var(--live-on-focus);
+}
+
+.button:focus,
+.key:focus {
+  transform: scale(1.04);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-nav],
+  .spinner {
+    transition: none;
+    animation: none;
+  }
+
+  .button:focus,
+  .key:focus,
+  .row:focus {
+    transform: none;
+  }
+}

@@ -1,0 +1,33 @@
+{
+  "manifest_version": 3,
+  "name": "GoodTTV",
+  "version": "0.2.0",
+  "description": "Twitch con el reproductor de GoodTTV, sin anuncios. Uso personal.",
+  "minimum_chrome_version": "121",
+  "action": {
+    "default_title": "Abrir GoodTTV"
+  },
+  "background": {
+    "service_worker": "fondo.js",
+    "scripts": ["fondo.js"]
+  },
+  "permissions": ["contextMenus", "storage"],
+  "host_permissions": [
+    "https://*.twitch.tv/*",
+    "https://*.ttvnw.net/*",
+    "https://*.live-video.net/*",
+    "https://*.cloudfront.net/*",
+    "https://7tv.io/*",
+    "https://api.betterttv.net/*",
+    "https://api.frankerfacez.com/*"
+  ],
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "goodttv@mateozariquiey.github.io",
+      "strict_min_version": "140.0",
+      "data_collection_permissions": {
+        "required": ["none"]
+      }
+    }
+  }
+}

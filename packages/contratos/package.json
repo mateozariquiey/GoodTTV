@@ -1,0 +1,16 @@
+{
+  "name": "@goodttv/contratos",
+  "private": true,
+  "description": "Contratos comunes de GoodTTV: esquemas y tipos de la API de cada versión (window.api), del chat y de las teclas.",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "zod": "4.5.4"
+  }
+}

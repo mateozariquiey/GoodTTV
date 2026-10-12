@@ -17,3 +17,9 @@ flatpak/generated-sources.json
 
 # Local lab tooling and captures (not part of the app)
 .lab/
+
+# Capturas de la investigación de la extensión: solo se versionan las que cita algún documento.
+investigacion/navegador/datos/captura-*.png
+investigacion/navegador/datos/capturas/*
+!investigacion/navegador/datos/capturas/chromium-trymacs-01.png
+__pycache__/

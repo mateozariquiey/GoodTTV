@@ -1,8 +1,8 @@
 import { defineConfig } from "vitest/config"
 
+// Cada app y cada paquete tiene su propia configuración; `bun run test` las ejecuta todas.
 export default defineConfig({
   test: {
-    environment: "node",
-    include: ["src/**/*.test.ts", "src/**/*.test.tsx"],
+    projects: ["apps/*", "packages/*"],
   },
 })

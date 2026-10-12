@@ -1,0 +1,18 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <title>GoodTTV · prueba del reproductor</title>
+    <style>
+      body { margin: 0; background: #0e0e10; color: #efeff1; font: 14px/1.4 system-ui, sans-serif; }
+      video { display: block; width: 100%; max-height: 80vh; background: #000; }
+      form, pre { margin: 12px; }
+    </style>
+  </head>
+  <body>
+    <div id="video"></div>
+    <form id="canal"><input name="canal" placeholder="canal" /> <button type="submit">Ver</button></form>
+    <pre id="estado"></pre>
+    <script type="module" src="./reproductor.ts"></script>
+  </body>
+</html>

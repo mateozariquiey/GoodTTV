@@ -1,0 +1,9 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    // Sin tipos de Node: todo esto corre en el navegador (también vite.config.ts, que solo usa URL).
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "types": ["chrome", "vite/client"]
+  },
+  "include": ["src", "vite.config.ts", "vitest.config.ts"]
+}

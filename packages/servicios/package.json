@@ -1,0 +1,18 @@
+{
+  "name": "@goodttv/servicios",
+  "private": true,
+  "description": "Servicios comunes de GoodTTV: cuenta de Twitch (código de dispositivo), Helix, chat por EventSub con emotes y almacén local. Cada versión aporta dónde guarda la sesión, los datos y su configuración.",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@goodttv/contratos": "workspace:*",
+    "ky": "2.1.0",
+    "zod": "4.5.4"
+  }
+}
