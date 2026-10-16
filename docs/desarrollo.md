@@ -53,7 +53,7 @@ E2E_CHANNELS=canal1,canal2 bun run test:e2e -- critical-path.spec.ts
 | --- | --- | --- |
 | `navigation.spec.ts` | Foco inicial, pestañas, teclado en pantalla, probar el mando, preferencias | Nada |
 | `critical-path.spec.ts` | Abrir canal → reproduce → pausa/reanuda → volver con la misma fila → otro canal; nada tapa el reproductor de Twitch (el propio admite la franja encima, modo cine) | Red y canales en directo |
-| `recovery.spec.ts` | Fallo del reproductor propio → «Usar el reproductor de Twitch» enfocado → fallo de este → «Reintentar» enfocado → se recupera; Atrás mientras carga | Red |
+| `recovery.spec.ts` | Fallo del reproductor propio → «Usar el reproductor de Twitch» enfocado → fallo de este → «Reintentar» enfocado → se recupera; Atrás mientras carga. Sin poder comprobar la cuenta (IPC simulado): lo guardado y «Reintentar» al alcance del mando, nunca la bienvenida; con red, Inicio de la cuenta; sin ella, cerrar sesión desde Ajustes | Red |
 
 Variables: `E2E_XVFB`, `E2E_XDOTOOL` y `E2E_LD_LIBRARY_PATH` si los binarios no están en el
 `PATH`; `E2E_DISPLAY` (por defecto `:96`). El recorrido crítico prueba los canales de
@@ -68,7 +68,7 @@ X11. La tecla Atrás del navegador no se puede simular así y se envía Escape, 
 
 ```bash
 bun run package:appimage
-sha256sum apps/tele/dist/GoodTTV-0.2.2-x86_64.AppImage
+sha256sum apps/tele/dist/GoodTTV-0.2.3-x86_64.AppImage
 ```
 
 - El AppImage arranca a pantalla completa (`--fullscreen` va en su lanzador).
@@ -82,8 +82,8 @@ sha256sum apps/tele/dist/GoodTTV-0.2.2-x86_64.AppImage
 En el mini PC:
 
 ```bash
-chmod +x GoodTTV-0.2.2-x86_64.AppImage
-./GoodTTV-0.2.2-x86_64.AppImage                 # necesita libfuse2
+chmod +x GoodTTV-0.2.3-x86_64.AppImage
+./GoodTTV-0.2.3-x86_64.AppImage                 # necesita libfuse2
 APPIMAGE_EXTRACT_AND_RUN=1 ./GoodTTV-…AppImage   # alternativa sin FUSE
 bash diagnostico.sh > diagnostico.txt           # apps/tele/scripts: GPU, VA-API, pantallas, audio, mando
 ```
@@ -142,6 +142,8 @@ cuenta:
 - volver a Inicio con el canal en «Seguir viendo»;
 - pedir el código de la cuenta y cancelarlo;
 - un modo de retraso que se conserva al recargar;
+- Inicio sin poder comprobar la cuenta (`?sinred`): lo guardado con el aviso, sin la bienvenida, «Reintentar» con
+  red y «Cerrar sesión» sin ella;
 - una sola pestaña abierta.
 
 ```bash

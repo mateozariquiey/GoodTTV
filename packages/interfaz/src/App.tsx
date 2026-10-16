@@ -29,14 +29,16 @@ export const App = () => {
   // Al abrir, lo que se vio la última vez mientras se comprueba la cuenta y llega lo de ahora (useHome).
   const home = useHome(account.auth)
   const { auth, signedIn } = home
-  // El foco del mando entra cuando Inicio ya tiene algo: la lista (guardada o de ahora), un error o, sin cuenta, la
-  // bienvenida. Antes caería en las pestañas, y ahí se quedaría al llegar la lista. Una vez dentro, no se vuelve a
-  // esperar.
+  // El foco del mando entra cuando Inicio ya tiene algo: la lista (guardada o de ahora), un error, sin cuenta la
+  // bienvenida o, si no se pudo comprobar la cuenta, el aviso con «Reintentar». Antes caería en las pestañas, y ahí se
+  // quedaría al llegar la lista. Una vez dentro, no se vuelve a esperar.
   const [started, setStarted] = useState(false)
   if (
     !started &&
     !home.reading &&
-    (home.resource.kind !== "loading" || (home.known && !signedIn))
+    (home.resource.kind !== "loading" ||
+      (home.known && !signedIn) ||
+      home.unreachable !== undefined)
   ) {
     setStarted(true)
   }
@@ -139,6 +141,7 @@ export const App = () => {
               key={signedIn ? "signed-in" : "guest"}
               latencyMode={preferences.latencyMode}
               onLink={() => setTab("account")}
+              onRetryAccount={account.reload}
               onSearch={() => setTab("search")}
               onWatch={play}
             />
@@ -153,6 +156,7 @@ export const App = () => {
               onBegin={() => void account.begin()}
               onLogout={() => void account.logout()}
               onPreferences={updatePreferences}
+              onRetry={account.reload}
               preferences={preferences}
               status={status}
             />

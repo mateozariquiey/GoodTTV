@@ -6,6 +6,7 @@ import {
   type Resource,
 } from "@goodttv/interfaz"
 import { Avatar } from "./Avatar"
+import { RetryButton } from "./RetryButton"
 
 type Open = (channel: Channel) => void
 
@@ -98,19 +99,36 @@ export const HomeView = ({
   following,
   onOpen,
   onRetry,
+  onRetryAccount,
   popular,
   recents,
   resource,
   signedIn,
+  unreachable,
 }: {
   readonly following: readonly Channel[]
   readonly onOpen: Open
   readonly onRetry: () => void
+  readonly onRetryAccount: () => Promise<void>
   readonly popular: readonly Channel[]
   readonly recents: readonly Channel[]
   readonly resource: Resource<HomeData>
   readonly signedIn: boolean
+  readonly unreachable: string | undefined // no se pudo comprobar la cuenta: el motivo
 }) => {
+  // Sin poder comprobar la cuenta no se pide nada a Twitch: lo que se ve, si hay algo, es lo de la última vez.
+  const notice =
+    unreachable === undefined ? null : (
+      <div className="notice-block notice-block--warning" role="alert">
+        <p>
+          No se pudo comprobar tu cuenta ({unreachable}).{" "}
+          {resource.kind === "ready"
+            ? "Lo que ves es de la última vez."
+            : "La sesión no se ha cerrado."}
+        </p>
+        <RetryButton onRetry={onRetryAccount} />
+      </div>
+    )
   if (resource.kind === "error") {
     return (
       <div className="page">
@@ -125,14 +143,11 @@ export const HomeView = ({
   }
   // Sin cuenta, o sin saber aún si la hay: ni la bienvenida ni «Seguir viendo» hasta tener lo de verdad.
   if (resource.kind === "loading" && !signedIn) {
-    return (
-      <div className="page">
-        <p className="page__note">Cargando…</p>
-      </div>
-    )
+    return <div className="page">{notice ?? <p className="page__note">Cargando…</p>}</div>
   }
   return (
     <div className="page">
+      {notice}
       {signedIn ? (
         <>
           <h2 className="page__section">En directo de tus seguidos</h2>

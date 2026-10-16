@@ -238,11 +238,13 @@ describe("createDirecto", () => {
     const pending = directo.handle(url("/stream/uno/info"))
     await directo.handle(url("/stream/dos/live.m3u8"))
     expect(empalmes[0]?.stopped).toBe(true)
-    let timer = 0
+    // Si el bucle de info no cediera el hilo, este temporizador correría tarde. undefined: aún no ha corrido (con
+    // Date.now(), lo que tarda puede ser 0 ms).
+    let timer: number | undefined
     setTimeout(() => (timer = Date.now() - started), 0)
     expect((await pending).status).toBe(200)
     await new Promise((done) => setTimeout(done, 10))
-    expect(timer).toBeGreaterThan(0)
+    expect(timer).toBeDefined()
     expect(timer).toBeLessThan(1000)
   })
 

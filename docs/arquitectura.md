@@ -71,7 +71,7 @@ src/goodttv.tsx        monta las pantallas de escritorio; una sola pestaña a la
 │   ├── wake-lock.ts         que la pantalla no se apague mientras se ve un directo
 │   └── home-cache.ts        Inicio de la última vez (window.api.home), en localStorage
 ├── directo-fetch.ts   el directo sin anuncios, atendido en la página
-└── lab.ts             laboratorio por la dirección: ?pausa= (pausas simuladas), ?registro, ?chatsintetico= y ?chatreal
+└── lab.ts             laboratorio por la dirección: ?pausa= (pausas simuladas), ?registro, ?chatsintetico=, ?chatreal y ?sinred
 src/fondo.ts           abre o trae al frente la página; menú «Abrir en GoodTTV» en twitch.tv
 ```
 
@@ -105,6 +105,12 @@ src/fondo.ts           abre o trae al frente la página; menú «Abrir en GoodTT
   enseñaba la bienvenida sin cuenta y luego a todos los seguidos como desconectados. `useResource` vuelve a «cargando»
   al cambiar de función de carga, para que lo cargado sin cuenta no se enseñe como si fuera con ella. La extensión lo
   guarda en `localStorage` (`home-cache.ts`), que la plataforma lee sin esperar: sale en la primera imagen.
+- **Sin poder comprobar la cuenta** (sin red, Twitch caído), lo guardado sigue con un aviso y «Reintentar», nunca la
+  bienvenida (EXT-4). `useAuth` distingue los dos fallos:
+  - si `auth.snapshot()` lanza, no ha contestado: `unreachable`, y la sesión sigue guardada. No se pide nada a Twitch,
+    y se vuelve a comprobar sola con el evento `online` y cada 30 s. Ajustes ofrece también «Cerrar sesión»;
+  - si devuelve `error`, sí ha contestado: la sesión ha caducado y `TwitchAuth` ya la ha cerrado. Lo guardado se
+    olvida, como sin cuenta.
 - **Una sola GoodTTV a la vez** (`goodttv.tsx`). La pestaña abierta tiene un bloqueo del navegador
   (`navigator.locks`). Otra pestaña avisa y puede pedirlo:
   1. se pone a la cola y lo anuncia por un `BroadcastChannel`;
@@ -200,8 +206,10 @@ Twitch, la siguiente tecla vuelve a la interfaz. Las excepciones son dos:
   espacios (gana el primero que exista) o `none`.
 - Sin memoria, el foco empieza en el control marcado con `data-nav-entry`. Las pestañas
   (`data-nav-transient`) no se recuerdan, y al subir a ellas se entra por la pestaña actual.
-- Al abrir, el foco entra cuando Inicio ya tiene algo: la lista (guardada o de ahora), un error o, sin cuenta, la
-  bienvenida (`App.tsx`). Antes caería en las pestañas, y ahí se quedaría al llegar la lista.
+- Al abrir, el foco entra cuando Inicio ya tiene algo: la lista (guardada o de ahora), un error, sin cuenta la
+  bienvenida o, si no se pudo comprobar la cuenta, el aviso (`App.tsx`). Antes caería en las pestañas, y ahí se
+  quedaría al llegar la lista. Con el aviso, el foco va a la lista guardada, con «Reintentar» justo encima; sin lista,
+  a «Reintentar».
 - Si el foco se pierde (el elemento desaparece o estaba en el iframe), la primera tecla solo lo
   recupera y no mueve nada.
 

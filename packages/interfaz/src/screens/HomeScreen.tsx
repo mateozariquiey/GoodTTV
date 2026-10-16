@@ -4,7 +4,7 @@ import { type Channel, fromRecent, fromStream, previewAt } from "../channel"
 import type { Home } from "../data"
 import { navigation } from "../navigation"
 import { usePrewarm } from "../player/useHlsPlayer"
-import { Avatar, ChannelRow, LiveBadge, StateMessage, Uptime, Viewers } from "../ui"
+import { Avatar, ChannelRow, LiveBadge, RetryButton, StateMessage, Uptime, Viewers } from "../ui"
 
 type Section = {
   readonly channels: readonly Channel[]
@@ -17,6 +17,7 @@ type HomeScreenProps = {
   readonly home: Home
   readonly latencyMode: LatencyMode
   readonly onLink: () => void
+  readonly onRetryAccount: () => Promise<void>
   readonly onSearch: () => void
   readonly onWatch: (channel: Channel, lineup: readonly Channel[]) => void
 }
@@ -32,10 +33,11 @@ export const HomeScreen = ({
   home,
   latencyMode,
   onLink,
+  onRetryAccount,
   onSearch,
   onWatch,
 }: HomeScreenProps) => {
-  const { fromSaved, known, reading, refresh, resource, retry, signedIn } = home
+  const { fromSaved, known, reading, refresh, resource, retry, signedIn, unreachable } = home
   const [previewedId, setPreviewedId] = useState<string>() // la fila enfocada (rowId)
 
   // Refresh in place when coming back from playback and periodically while visible. Lo guardado de la última vez no
@@ -105,7 +107,21 @@ export const HomeScreen = ({
   return (
     <div className="home">
       <div className="guide">
-        {resource.kind === "loading" && !reading ? (
+        {/* Sin poder comprobar la cuenta, lo de la última vez si lo hay; el foco, en la lista si la hay. */}
+        {unreachable === undefined ? null : (
+          <div className="state state--error" role="alert">
+            <p className="state__title">No se pudo comprobar tu cuenta</p>
+            <p className="state__detail">
+              {`${fromSaved ? "Lo que ves es de la última vez" : "La sesión no se ha cerrado"} (${unreachable}).`}
+            </p>
+            <RetryButton
+              entry={firstChannel === undefined}
+              navId="home-account-retry"
+              onRetry={onRetryAccount}
+            />
+          </div>
+        )}
+        {resource.kind === "loading" && !reading && unreachable === undefined ? (
           <StateMessage kind="loading" title="Cargando canales…" />
         ) : null}
         {resource.kind === "error" ? (

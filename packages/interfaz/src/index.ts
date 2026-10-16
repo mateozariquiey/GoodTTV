@@ -13,6 +13,7 @@ export {
   toRecent,
 } from "./channel"
 export {
+  type AuthState,
   formatUptime,
   formatViewers,
   type Home,

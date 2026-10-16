@@ -14,7 +14,9 @@ import { parseRoute } from "./escritorio/routes"
 // GOODTTV_REGISTRO_EMPALME en la tele): ?pausa=cada,duración[,arranque] simula pausas globales para probar el relleno
 // con el VOD, y ?registro guarda los eventos del empalme en window.registroEmpalme para las pruebas. Con ?registro,
 // además, la prueba de rendimiento lee el hls.js del reproductor (window.hlsPrueba) y sus hitos de arranque
-// (window.marcasPrueba).
+// (window.marcasPrueba). ?sinred: comprobar la cuenta falla como sin red hasta que la prueba ponga
+// window.redPrueba = true, o hasta cerrar sesión (sin sesión no hace falta la red); desde entonces, lo que diga la
+// cuenta de verdad (EXT-4).
 
 // Campos del empalme que se pueden guardar (los mismos que registra la tele, más los de nueva-numeracion): los
 // errores y las URL pueden llevar el token de Twitch.
@@ -244,8 +246,27 @@ const ircSource: ChatSource = (login, emit) => {
   }
 }
 
-export const labApi = (api: AppApi, search: string): AppApi => {
+const withoutNetwork = (api: AppApi): AppApi => {
+  let signedOut = false
+  return {
+    ...api,
+    auth: {
+      ...api.auth,
+      logout: async () => {
+        await api.auth.logout()
+        signedOut = true
+      },
+      snapshot: () =>
+        signedOut || (globalThis as { redPrueba?: boolean }).redPrueba === true
+          ? api.auth.snapshot()
+          : Promise.reject(new TypeError("Failed to fetch")),
+    },
+  }
+}
+
+export const labApi = (base: AppApi, search: string): AppApi => {
   const params = new URLSearchParams(search)
+  const api = params.has("sinred") ? withoutNetwork(base) : base
   const perSecond = Number(params.get("chatsintetico") ?? 0)
   const source =
     perSecond > 0 ? syntheticSource(perSecond) : params.has("chatreal") ? ircSource : null

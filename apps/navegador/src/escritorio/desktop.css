@@ -511,6 +511,17 @@ kbd {
   color: var(--muted);
 }
 
+/* Encima de lo que se ve, que sigue debajo (sin poder comprobar la cuenta). */
+.notice-block--warning {
+  margin-bottom: 20px;
+  padding-left: 12px;
+  border-left: 3px solid var(--warning);
+}
+
+.notice-block p {
+  margin: 0;
+}
+
 .welcome {
   max-width: 62ch;
   padding: 8px 0 4px;
@@ -1168,6 +1179,12 @@ kbd {
   font-size: 30px;
   font-weight: 700;
   letter-spacing: 0.12em;
+}
+
+.setting__actions {
+  display: flex;
+  flex-shrink: 0;
+  gap: 8px;
 }
 
 .link-code__actions {

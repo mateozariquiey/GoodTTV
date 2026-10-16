@@ -1,7 +1,8 @@
 // Prueba de la interfaz de escritorio de la extensión, en Chrome for Testing y en Firefox (sin ventana ni sonido) y sin
 // cuenta: buscar con / y abrir con Enter, que reproduzca, pausar con Espacio y con un clic en el vídeo, modo teatro (T,
 // Esc), chat (C), silencio (M), volver a Inicio con el canal en «Seguir viendo», pedir y cancelar el código de la
-// cuenta, un modo de retraso que se conserva al recargar y una sola GoodTTV abierta.
+// cuenta, un modo de retraso que se conserva al recargar, Inicio sin poder comprobar la cuenta y cerrar sesión así
+// (?sinred, EXT-4) y una sola GoodTTV abierta.
 // En Chrome, teclas, texto y clics son de verdad (CDP); en Firefox se simulan en la página (BiDi no los admite en las
 // páginas de una extensión).
 // Uso, desde la raíz y con la extensión compilada (bun run build:navegador):
@@ -22,6 +23,29 @@ if (!options.canales) throw new Error("falta --canales canal1,canal2")
 const extension = resolve(import.meta.dirname, "../../dist")
 const out = (event) => console.log(JSON.stringify({ t: +(Date.now() / 1000).toFixed(1), ...event }))
 const sleep = (ms) => new Promise((done) => setTimeout(done, ms))
+
+// Inicio de la última vez con una cuenta ficticia (home-cache.ts), para abrir sin poder comprobarla.
+const stream = (login) => ({
+  category: "Just Chatting",
+  id: `s-${login}`,
+  startedAt: new Date().toISOString(),
+  tags: [],
+  thumbnailUrl: `https://static-cdn.jtvnw.net/previews-ttv/live_user_${login}-{width}x{height}.jpg`,
+  title: `Directo de ${login}`,
+  userId: "123",
+  userLogin: login,
+  userName: login,
+  viewerCount: 1000,
+})
+const SAVED_HOME = {
+  account: { displayName: "Prueba", kind: "authenticated", login: "prueba" },
+  following: [stream("guardado1")],
+  popular: [],
+  recentLive: [],
+  recents: [],
+  savedAt: Date.now() - 3_600_000,
+  version: 1,
+}
 
 const VIDEO = `(() => {
   const video = document.querySelector(".stage__surface video")
@@ -158,6 +182,60 @@ const run = async (name, launch) => {
       "el modo de retraso se conserva al recargar",
       await waitFor(
         `document.querySelector('input[name="latencia"][value="sin-paradas"]')?.checked === true`,
+      ),
+    )
+
+    // Sin red al comprobar la cuenta (?sinred, lab.ts): lo de la última vez con el aviso y «Reintentar», nunca la
+    // bienvenida. Con red, «Reintentar» pregunta de verdad: sin cuenta, la bienvenida, y lo guardado se olvida.
+    await browser.evaluate(
+      `(localStorage.setItem("inicio", JSON.stringify(${JSON.stringify(SAVED_HOME)})), 0)`,
+    )
+    await browser.open("goodttv.html?sinred")
+    const NOTICE = `document.querySelector(".notice-block--warning")?.textContent ?? ""`
+    step(
+      "sin red: el aviso, con lo de la última vez",
+      await waitFor(
+        `(${NOTICE}).includes("No se pudo comprobar tu cuenta") && (${NOTICE}).includes("de la última vez")`,
+      ),
+    )
+    step(
+      "y los seguidos guardados, en Inicio y en la columna",
+      await waitFor(
+        `document.querySelector(".thumb")?.textContent.includes("guardado1") && document.querySelector(".sidebar__channel")?.textContent.includes("guardado1")`,
+      ),
+    )
+    step(
+      "nunca la bienvenida",
+      !(await browser.evaluate(`document.body.innerText.includes("Twitch sin anuncios")`)),
+    )
+    await browser.evaluate(`(window.redPrueba = true, 0)`)
+    await browser.click(".notice-block--warning .button")
+    step(
+      "con red, «Reintentar» pregunta de verdad: sin cuenta, la bienvenida",
+      await waitFor(
+        `document.body.innerText.includes("Twitch sin anuncios") && document.querySelector(".notice-block--warning") === null`,
+      ),
+    )
+    step("y lo guardado se olvida", await waitFor(`localStorage.getItem("inicio") === null`))
+    // Sin red también se puede cerrar sesión, desde Ajustes.
+    await browser.evaluate(
+      `(localStorage.setItem("inicio", JSON.stringify(${JSON.stringify(SAVED_HOME)})), 0)`,
+    )
+    // Desde la misma dirección solo cambia el #: hay que recargar para volver a comprobar la cuenta, sin red.
+    await browser.open("goodttv.html?sinred#/ajustes")
+    await browser.evaluate(`(location.reload(), 0)`).catch(() => undefined)
+    await sleep(1500)
+    step(
+      "sin red, Ajustes lo dice y ofrece «Reintentar» y «Cerrar sesión»",
+      await waitFor(
+        `document.body.innerText.includes("No se pudo comprobar la cuenta") && document.querySelectorAll(".setting__actions .button").length === 2`,
+      ),
+    )
+    await browser.click(".setting__actions .button:last-child")
+    step(
+      "«Cerrar sesión» deja sin cuenta y olvida lo guardado",
+      await waitFor(
+        `document.body.innerText.includes("Vincula tu cuenta") && localStorage.getItem("inicio") === null`,
       ),
     )
 

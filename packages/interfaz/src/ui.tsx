@@ -65,6 +65,34 @@ export const StateMessage = ({ action, detail, kind, title }: StateMessageProps)
   </div>
 )
 
+type RetryButtonProps = {
+  readonly entry?: boolean
+  readonly navId: string
+  readonly onRetry: () => Promise<void>
+}
+
+// «Reintentar» que espera a la respuesta: mientras, dice «Comprobando…» y no repite. Sigue ahí, con el foco del mando.
+export const RetryButton = ({ entry = false, navId, onRetry }: RetryButtonProps) => {
+  const [retrying, setRetrying] = useState(false)
+  return (
+    <button
+      aria-busy={retrying}
+      className="button button--primary"
+      data-nav
+      data-nav-entry={entry ? "" : undefined}
+      data-nav-id={navId}
+      onClick={() => {
+        if (retrying) return
+        setRetrying(true)
+        void onRetry().finally(() => setRetrying(false))
+      }}
+      type="button"
+    >
+      {retrying ? "Comprobando…" : "Reintentar"}
+    </button>
+  )
+}
+
 type ChannelRowProps = {
   readonly channel: Channel
   readonly entry?: boolean

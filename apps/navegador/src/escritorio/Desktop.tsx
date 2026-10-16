@@ -30,7 +30,7 @@ export const Desktop = () => {
   const { preferences, update } = usePreferences()
   // Al abrir, lo que se vio la última vez mientras se comprueba la cuenta y llega lo de ahora (useHome).
   const home = useHome(account.auth)
-  const { auth, refresh, resource, signedIn } = home
+  const { auth, refresh, resource, signedIn, unreachable } = home
   useEffect(() => {
     const timer = setInterval(() => void refresh(), REFRESH_MS)
     return () => clearInterval(timer)
@@ -119,8 +119,8 @@ export const Desktop = () => {
         channels={following}
         collapsed={collapsed}
         current={channel?.login}
-        failed={resource.kind === "error"}
-        loading={resource.kind === "loading"}
+        failed={resource.kind === "error" || unreachable !== undefined}
+        loading={resource.kind === "loading" && unreachable === undefined}
         onCollapse={() => setCollapsed((value) => !value)}
         onOpen={open}
         signedIn={signedIn}
@@ -149,10 +149,12 @@ export const Desktop = () => {
             following={following}
             onOpen={open}
             onRetry={home.retry}
+            onRetryAccount={account.reload}
             popular={popular}
             recents={recents}
             resource={resource}
             signedIn={signedIn}
+            unreachable={unreachable}
           />
         )}
       </main>

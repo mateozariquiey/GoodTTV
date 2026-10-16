@@ -39,12 +39,12 @@ export const Sidebar = ({
     </div>
     {loading && channels.length === 0 ? (
       <p className="sidebar__note">Cargando…</p>
+    ) : failed && channels.length === 0 ? (
+      <p className="sidebar__note">No se pudo cargar.</p>
     ) : !signedIn ? (
       <p className="sidebar__note">
         <a href="#/ajustes">Vincula tu cuenta</a> para ver aquí a quién sigues.
       </p>
-    ) : failed && channels.length === 0 ? (
-      <p className="sidebar__note">No se pudo cargar.</p>
     ) : channels.length === 0 ? (
       <p className="sidebar__note">Ninguno de tus seguidos está en directo.</p>
     ) : (

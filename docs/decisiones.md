@@ -1,6 +1,6 @@
 # Auditoría de VacuumStream y decisiones de la variante
 
-> Estado: decisiones aplicadas hasta GoodTTV 0.2.2. Lo comprobado y lo pendiente están en
+> Estado: decisiones aplicadas hasta GoodTTV 0.2.3. Lo comprobado y lo pendiente están en
 > [verificacion.md](verificacion.md).
 
 Fecha: 8 de octubre de 2026. Base: VacuumStream 0.2.1 (`0427456`, MIT), con su historial
@@ -397,6 +397,7 @@ documentación distingue bien laboratorio y hardware. Se aceptaron y corrigieron
 Al ampliar la e2e apareció otro fallo: al cerrar el selector de calidad, el foco volvía a
 «Pausa»; ahora vuelve a «Calidad».
 
-## 6. Pendiente en hardware real
+## 6. Hardware real
 
-Lista de comprobaciones en [verificacion.md](verificacion.md#pendiente-en-el-mini-pc-la-tv-y-el-mando).
+Comprobado en el mini PC, la TV y el mando el 16 de octubre:
+[verificacion.md](verificacion.md#en-el-mini-pc-la-tv-y-el-mando).

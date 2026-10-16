@@ -687,6 +687,12 @@ kbd {
   color: var(--text-muted);
 }
 
+.account__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+}
+
 .account__warning {
   padding-left: 1rem;
   border-left: 0.3rem solid var(--warning);

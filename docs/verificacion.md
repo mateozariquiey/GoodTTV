@@ -6,8 +6,8 @@ Fecha: 8 de octubre de 2026. Entorno de laboratorio:
 - **Teclas:** reales de X11, enviadas con `xdotool`, como las de un mando USB.
 - **Audio:** silenciado por Chromium (`--mute-audio`).
 
-Nada de esto certifica el mini PC (GMKtec M6 Ultra), la TV Samsung UE65TU7095 ni el mando
-físico.
+Lo comprobado en el mini PC (GMKtec M6 Ultra), la TV Samsung UE65TU7095 y el mando físico está en
+[En el mini PC, la TV y el mando](#en-el-mini-pc-la-tv-y-el-mando).
 
 ## Comprobado automáticamente
 
@@ -59,29 +59,27 @@ Fallos encontrados y corregidos en estas pruebas:
 - «Cerrar sesión» podía recibir el foco por defecto y cerrar la sesión con un OK suelto.
 - Los fallos de la revisión final; véase `docs/decisiones.md`, sección 5.
 
-## Pendiente en el mini PC, la TV y el mando
+## En el mini PC, la TV y el mando
 
-Para cada punto, la manera de comprobarlo:
+16 de octubre, con la 0.2.2 (Electron 44.2.0) instalada desde el AppImage de la release:
+- **Equipo:** el mini PC (Ryzen 5 7640HS, Radeon 760M) con Kubuntu 26.04 y Plasma en Wayland, a 3840×2160 a 60 Hz,
+  escala 100 % y sin HDR, conectado a la TV.
+- **Uso:** la app se abre a pantalla completa desde el centro multimedia (Kodi), y el usuario la maneja con el mando
+  (G20S Pro).
+- **Rendimiento:** medido en [Rendimiento en el mini PC](#rendimiento-en-el-mini-pc-hw-2).
 
-1. **Audio por HDMI.** Abre un directo y comprueba que suena por la TV. Ejecuta
-   `bash scripts/diagnostico.sh`: muestra la salida de audio activa.
-2. **Aceleración de vídeo y fluidez.** En Ajustes → Acerca de, «Aceleración de vídeo
-   disponible» debe decir «sí». Eso indica capacidad, no que se use. Durante un directo a
-   1080p60, entra en «Controles de Twitch» → engranaje → Avanzado → *Video Stats* para ver los
-   fotogramas perdidos. Vigila con `top` el uso de CPU: si un proceso `goodttv` consume uno o
-   más núcleos completos, probablemente decodifica por software.
-3. **Mando físico.** En Ajustes → Probar el mando, comprueba que flechas, OK, Atrás y Play/Pausa
-   aparecen con su acción. Si Atrás envía otra tecla, se añade en `actionForKey`.
-4. **Foco del sistema.** La app solo recibe teclas mientras su ventana tiene el foco. Conviene
-   arrancarla en una sesión de quiosco o como única ventana, y comprobar qué pasa tras una
-   notificación del escritorio.
-5. **Suspensión y reanudación.** Con un directo abierto, suspende y reanuda el equipo. Debe
-   reanudar solo, salvo que lo hubieras pausado tú. Mientras se reproduce, la app impide que la
-   pantalla se apague (`powerSaveBlocker`).
-6. **Legibilidad a 3 m** en la Samsung de 65″. La TV es 4K: si el escritorio va a 4K al 100 %,
-   la app escala sola, porque su tamaño depende del ancho de la ventana.
-7. **Tu cuenta en el reproductor.** El reproductor no comparte la sesión de la app: anuncios,
-   Turbo y suscripciones se comportan como para un invitado.
+| Punto | Cómo | Resultado |
+| --- | --- | --- |
+| Audio por HDMI | Un directo y `apps/tele/scripts/diagnostico.sh` | Suena por la TV; la salida activa es la HDMI de la Radeon |
+| Aceleración de vídeo | El decodificador que elige Chromium (dominio `Media` de CDP) y la carga del motor de vídeo de la GPU | Decodifica la GPU: `VaapiVideoDecoder` en los 14 reproductores de la sesión (H.264 High, 1080p60), con el motor de vídeo al 8 % y la CPU a menos de un tercio de un núcleo |
+| Mando | Ajustes → Probar el mando | Flechas, OK, Atrás y Play/Pausa salen con su acción |
+| Foco | Abrirla desde Kodi y mandar una notificación del escritorio con ella abierta | Recibe el mando al abrirse. La notificación no se ve encima de la app a pantalla completa, y el mando sigue en ella |
+| Suspensión y reanudación | — | No aplica a este mini PC: no se suspende, porque aloja otros servicios. Al apagar la TV se cierran las apps. Sin comprobar en un equipo que se suspenda |
+| Legibilidad a 3 m | Desde el sofá, en la TV de 65″ | Se lee bien: la lista, los títulos y el chat |
+| Inicio al abrir | Abrirla dos veces | La primera, «Cargando canales…» (no había nada guardado); la segunda, la lista nada más abrir ([Inicio al abrir en la tele](#inicio-al-abrir-en-la-tele)) |
+
+Por diseño (D11), el reproductor no usa la cuenta: pide el vídeo con sesiones de invitado, así que Turbo y las
+suscripciones no cuentan. La cuenta sirve para los seguidos y el chat.
 
 ## Extensión de navegador
 
@@ -346,8 +344,9 @@ frente a `7df4a65`, la de antes de D16. Misma prueba, con otros 6 canales:
   pública, y cada conexión nueva de Electron perdía ~310 ms esperando a IPv6 antes de pasar a IPv4. Con Happy Eyeballs
   (`app.configureHostResolver({ enableHappyEyeballs: true })`) tarda 7-19 ms. El primer fotograma apenas cambia
   (~1010 ms), pero sí todas las demás conexiones nuevas: API, chat, emotes y miniaturas.
-- **Lo que queda:** la tele (Electron 44, Chromium 152) descarga el primer fragmento más despacio que Chrome 155, con el
-  mismo código y la misma configuración. Queda por investigar.
+- **Lo que quedaba:** la tele (Electron 44, Chromium 152) descargaba el primer fragmento más despacio que Chrome 155,
+  con el mismo código y la misma configuración. El 16 de octubre, en una red sin IPv6 no hubo diferencia: lo más
+  probable es la red, no Electron ([El primer fragmento, más lento en la tele](#el-primer-fragmento-más-lento-en-la-tele-ren-4)).
 - **Paridad de la interfaz:** la tele usa ya el mismo chat que baja al final al cambiar de altura o cargar un emote
   (`useChatAtBottom`) y muestra «x s por detrás» junto a «En directo» (`useBehind`), como la extensión.
 - **Pruebas:** las 7 e2e de la tele pasan en Weston, y `test:interfaz`, en Chrome y Firefox.
@@ -510,5 +509,156 @@ antes del 15 de octubre ([Icono y arranque](#icono-y-arranque)).
   canal, tampoco en populares.
 - **Pruebas:** `bun run verify`, con pruebas nuevas del hook (React, `inicio.test.ts`), del archivo de la tele y del
   IPC; los 7 e2e de la tele y los 25 pasos de la interfaz en Chrome y Firefox.
-- **Sin comprobar:** con la cuenta real, en la tele (sale en la 0.2.2). La primera vez tras actualizar no hay nada
-  guardado: hasta la lista se verá «Cargando canales…», ya sin la bienvenida.
+- **En la tele de verdad** (16 oct, 0.2.2, con la cuenta del usuario y el mando): la primera vez tras actualizar,
+  «Cargando canales…» (aún no había nada guardado) y luego la lista; desde la segunda, la lista nada más abrir.
+
+## Cuenta sin red al abrir (EXT-4)
+
+16 de octubre. Si comprobar la cuenta fallaba por la red al abrir, Inicio salía como sin cuenta, en la tele y en la
+extensión: la bienvenida y «Vincula tu cuenta», aunque la sesión siguiera guardada. Ajustes ofrecía vincularla otra
+vez. Pasaba desde antes de guardar Inicio; lo encontró la revisión de Codex del 15 de octubre.
+- **La causa:** `useAuth` convertía cualquier fallo de `auth.snapshot()` en `error`, y `error` es también lo que
+  devuelve `TwitchAuth` cuando la sesión ha caducado, después de cerrarla.
+- **El arreglo** ([arquitectura.md](arquitectura.md#la-extensión-appsnavegador)):
+  - `useAuth` separa «no contesta» (`snapshot()` lanza: `unreachable`) de «contesta con error». No hace falta tocar el
+    contrato: `TwitchSession` ya relanza los fallos de red y de Twitch caído, y solo da `ConfigurationError` (que
+    acaba en `error`) con una respuesta que deja la sesión sin valor.
+  - Con `unreachable` no se sabe la cuenta: Inicio sigue con lo de la última vez, sin pedir nada a Twitch ni borrar
+    nada, y avisa con «Reintentar». Lo guardado es de la última cuenta: se olvida al cerrar sesión y se sustituye al
+    entrar con otra.
+  - Ajustes dice que la sesión no se ha cerrado y ofrece «Reintentar» y «Cerrar sesión». En la tele, el foco entra en
+    «Reintentar», nunca en «Cerrar sesión». Sin red, cerrar sesión la borra aquí, pero no la revoca en Twitch.
+  - Se vuelve a comprobar sola con el evento `online` y cada 30 s. Vale la última comprobación: una anterior que falla
+    tarde no deshace una que acertó.
+  - Con `error` (sesión caducada), lo guardado ahora se olvida, como sin cuenta.
+  - En la tele, el foco entra en el primer canal guardado, con «Reintentar» justo encima (↑). Sin nada guardado, en
+    «Reintentar».
+- **Por el camino real**, con una sesión ficticia guardada (un token que Twitch rechaza) y scripts en `.lab/ext-4/`
+  (no se suben):
+  - **Extensión** (Chrome for Testing, red cortada con CDP): lo guardado con el aviso, sin la bienvenida. Al volver la
+    red, el evento `online` comprobó la cuenta solo, en 0,5 s. Twitch rechazó el token: salió la bienvenida, y se
+    borraron lo guardado y la sesión.
+  - **Tele** (la app real, con el `fetch` del proceso principal cortado para twitch.tv): el error cruza el IPC. Salió
+    lo guardado con el aviso y el foco en su primer canal, y la sesión siguió guardada. Con red, «Reintentar»: la
+    bienvenida con el foco en «Vincular cuenta», y lo guardado y la sesión borrados.
+  - **«Cerrar sesión» con la red cortada**, en las dos: se borran la sesión y lo guardado, y sale la bienvenida.
+  - El aviso da el motivo: «Request failed due to a network error: GET https://id.twitch.tv/oauth2/validate». No lleva
+    el token: va en una cabecera.
+- **Pruebas:**
+  - `bun run verify`: 303 pruebas, más 4 fallos esperados. En `inicio.test.ts` hay 11 nuevas: Inicio sin poder
+    comprobar la cuenta, con y sin nada guardado, al volver la red, con la sesión caducada y después de cerrar sesión;
+    y en `useAuth`, el fallo que pasa a `unreachable`, «Reintentar», el reintento con `online` y cada 30 s, y que vale
+    la última comprobación.
+  - Las e2e de la tele: 3 nuevas en `recovery.spec.ts`, que sustituyen los manejadores IPC de la cuenta; una cierra
+    sesión con el mando. Las 10 pasan con Xvfb y xdotool.
+  - `test:interfaz`: 7 pasos nuevos con `?sinred` (`lab.ts`), también cerrar sesión. Pasan los 32 en Chrome y en
+    Firefox.
+- **Revisión de Codex** (`gpt-6.1-sol`), con un arreglo: al cerrar sesión, lo guardado se borraba del disco pero
+  seguía en memoria. Si después no se podía comprobar la cuenta (un fallo de red al vincular otra), volvían los canales
+  y el nombre de la cuenta cerrada. Ahora la copia en memoria sigue a la del disco. Lo que no se cambió:
+  - sin nada guardado, si se pulsa una tecla en el segundo que tarda la lista tras «Reintentar», el foco se queda en la
+    pestaña «Siguiendo», a la vista; ↓ entra en la lista. Pasa igual con el «Reintentar» de la lista de Twitch;
+  - un `error` con la sesión aún guardada, o una excepción con la sesión ya borrada: necesitan empezar a vincular con
+    la sesión abierta (la interfaz no lo permite) o que falle leer el Client ID. Se corrigen en la siguiente
+    comprobación.
+- **Sin comprobar:** en la tele de verdad y con una cuenta real, y el evento `online` en la tele, cuando vuelve la red
+  del mini PC. En la tele solo se ha probado «Reintentar»; los 30 s, solo en las pruebas del hook.
+
+## Rendimiento en el mini PC (HW-2)
+
+16 de octubre, con la 0.2.2 (Electron 44.2.0) en la TV ([En el mini PC](#en-el-mini-pc-la-tv-y-el-mando)). El usuario
+vio unos 8 minutos de directos con el mando y cambió de canal varias veces. Tenía su configuración: *Sin paradas*, con
+el chat a la vista.
+- **Cómo se midió,** desde otro equipo y sin tocar la interfaz (scripts en `.lab/hw-tele/`, no se suben):
+  - la app, abierta con `--remote-debugging-port` (solo en `127.0.0.1`), se leyó por CDP a través de un túnel SSH:
+    - los hitos de cada apertura, desde que aparece el reproductor (lo mismo que `arranque.mjs`);
+    - cada segundo, `getVideoPlaybackQuality()`;
+    - el decodificador, por el dominio `Media`;
+    - los tiempos de red de la página (Resource Timing);
+  - la CPU de los procesos de la app, de `/proc`;
+  - la carga de cada motor de la GPU, de los contadores `drm-engine-*` de `fdinfo` de amdgpu, cada 2 s. En esta GPU
+    (VCN 4) la decodificación cuenta como `enc`.
+
+| Medida | Resultado |
+| --- | --- |
+| Decodificador | `VaapiVideoDecoder` (por hardware) en los 14 reproductores, H.264 High 1080p60. Chromium da `video_decode: enabled`, aunque `SystemInfo` no lista perfiles |
+| Primer fotograma | 990 ms de mediana (868-1105, 8 aperturas); avanza a los ~1,2 s. Dos aperturas más tardaron 6,4 y 6,9 s (abajo) |
+| Primer fragmento del CDN | 380 ms de mediana (307-531, 10 aperturas); probablemente, la espera de IPv6 de [REN-4](#el-primer-fragmento-más-lento-en-la-tele-ren-4) |
+| Fotogramas perdidos | 1,5 % (321 de 21 842, sin los 5 primeros segundos de cada canal), a rachas (abajo) |
+| CPU, suma de los procesos | 29 % de un núcleo de media (p95 39 %): renderer 12 %, GPU 10 %, principal 4 %, red 3 %. Unos 2,4 % de los 12 hilos |
+| GPU | Motor de vídeo (VCN) al 8 %, gráficos al 7 % |
+
+Dos cosas que no se explican todavía:
+- **Fotogramas perdidos a rachas.** En `ohnePixel` se perdieron 258 en 140 s (3,1 %). En el último minuto hubo rachas
+  de 11 a 15 fotogramas cada ~4,5 s. En otra visita al mismo canal no se perdió ninguno en 92 s; en `TenZ`, 49 en
+  125 s (0,7 %). Las muestras de CPU y GPU, cada 2 s, no tienen picos que coincidan, aunque uno breve no se vería. El
+  usuario no notó tirones. No es comparable con el 0,06 % del laboratorio: era la extensión, con otra GPU, a 1080p y
+  sin el chat.
+- **Dos arranques de ~6 s, al cambiar de canal con ↑/↓.** En `Jynxzi` y `summit1g`, el empalme tardó 5,8 s en
+  publicar su primer fragmento (`info`): no fue la red de la página ni el decodificador. El usuario notó que con las
+  flechas a veces tardaba más que desde la lista. Unos 20 minutos después, en el laboratorio y desde la lista, los mismos
+  canales tardaron 0,6-0,75 s en `info` (0,8-1 s al primer fotograma): no es algo fijo del canal, aunque pudo ser
+  algo de ese momento. Una explicación posible es un anuncio de entrada en todas las sesiones de invitado, que hace
+  arrancar desde el VOD: con uno simulado (`GOODTTV_PAUSA_SIMULADA=0,20,1`), `info` tarda 2-3,3 s en el laboratorio,
+  no 5,8. No está demostrado: falta el registro del empalme en la tele.
+
+## El primer fragmento, más lento en la tele (REN-4)
+
+16 de octubre. Con el mismo código, la tele descargaba el primer fragmento ~200 ms más despacio que la extensión
+([La tele frente a la extensión](#rendimiento-del-reproductor-propio)). Lo más probable es que no sea Electron, sino la
+red: en una red sin IPv6 no hay diferencia, y en la de casa cada conexión nueva al CDN prueba antes IPv6, que no sale.
+Falta comprobarlo en la app, antes y después de arreglar la red.
+- **En una red sin IPv6 no hay diferencia.** Las tres versiones, a la vez, en tres Weston sin pantalla de una VM sin
+  ruta IPv6, con 6 canales × 2 rondas, en modo adaptativo:
+
+  | Versión | Descarga del primer fragmento | Primer fotograma |
+  | --- | --- | --- |
+  | Tele, Electron 44.2.0 | 76 ms (37-481) | 842 ms |
+  | Tele, Electron 44.8.0 | 70 ms (38-577) | 912 ms |
+  | Extensión, Chrome for Testing 155 | 85 ms (48-427) | 832 ms |
+
+  Medianas. La espera de las sesiones (`info`) es de ~594 ms en las tres. El vídeo se decodifica por software en la
+  VM, así que el primer fotograma es aproximado. La tele mide la descarga con Resource Timing
+  (`.lab/ren4/arranque-red.mjs`, copia de `arranque.mjs`) y la extensión, entre los eventos de hls.js.
+- **En la red de casa, IPv6 a medias.** El router anuncia una ruta IPv6 por defecto, pero no da direcciones. El mini PC
+  solo tiene la dirección de Tailscale (una ULA, de ámbito global para Linux), así que cree tener IPv6. Los
+  fragmentos vienen de CloudFront, que tiene IPv6: cada conexión nueva prueba IPv6 y, como no sale, solo conecta
+  cuando lanza el intento por IPv4. Desde el mini PC, con `curl` al host de los fragmentos (3 veces cada uno):
+
+  | `curl` desde el mini PC | Tiempo de conexión |
+  | --- | --- |
+  | Por defecto (IPv6 primero) | 205 ms |
+  | Solo IPv4 | 4-5 ms |
+
+  `curl` lanza el intento por IPv4 a los 200 ms; Chromium, a los 300 ms, salvo que la tele lo cambie: activa *Happy
+  Eyeballs* (`configureHostResolver`), y no se ha medido cuánto espera con él. El host de los fragmentos cambia con
+  cada emisión, así que cada canal abre una conexión nueva: en la tele, el primer fragmento tardó 307-531 ms, frente
+  a 37-577 ms (mediana 70) en la VM.
+- **El sobremesa** está en la misma red y ya mostró esa espera de ~300 ms con IPv6
+  ([La tele frente a la extensión](#rendimiento-del-reproductor-propio)). Es lo más probable que la diferencia que
+  quedaba allí sea esta misma, pero no se ha medido.
+- **El arreglo sería de la red,** no de GoodTTV: que el mini PC no acepte la ruta IPv6 por defecto que anuncia el
+  router, o que el router no la anuncie. No está hecho, y con él se comprobaría la causa: el primer fragmento en la app
+  antes y después, con conexiones nuevas.
+
+## Electron 44.8.0 (MAN-1)
+
+16 de octubre. La tele pasa de Electron 44.2.0 a 44.8.0, el último de la 44, con los parches de seguridad de Chromium
+152 (152.0.7977.167) y Node 24.22. Electron 45 (Chromium 156) aún está en beta.
+- **Pruebas:**
+  - `bun run verify`: 303 pruebas, más 4 fallos esperados;
+  - las 10 e2e de la tele, dos veces en un Weston sin pantalla (`E2E_WAYLAND`);
+  - en la comparación de [REN-4](#el-primer-fragmento-más-lento-en-la-tele-ren-4), el arranque igual que con la 44.2.0;
+  - el AppImage arranca y reproduce un minuto en un Weston sin pantalla, se cierra sin errores y conserva los *fuses*
+    de `after-pack.cjs`. Si se matan a la vez todos sus procesos (también el de la GPU), acaba con «GPU process isn't
+    usable»: es por cómo se cierra, no por la versión.
+- **Con Xvfb y xdotool,** antes de las e2e nuevas de EXT-4, el recorrido crítico falló 2 de 7 veces con la 44.8.0: una
+  vez Escape no cerró el reproductor, otra se pasó un plazo de 10 s. Con la 44.2.0 pasó las 7. Alternando las dos
+  versiones, pasaron las 8 ejecuciones. No se sabe la causa: puede ser intermitente, pero no está descartado que sea
+  de Electron. Weston no lo descarta, porque allí las teclas se inyectan con `sendInputEvent`, sin pasar por la
+  entrada del sistema. Lo que cuenta es el mando en la tele, que llega por Wayland.
+- **Revisión de Codex** (`gpt-6.1-sol`) de la 0.2.3, antes de publicar:
+  - corrigió dos cifras: el primer fragmento, que se agrupaba mal por apertura, y los porcentajes de fotogramas
+    perdidos;
+  - rebajó REN-4 y REP-7 de causa a hipótesis;
+  - aclaró que lo probado en el mini PC es la 0.2.2.

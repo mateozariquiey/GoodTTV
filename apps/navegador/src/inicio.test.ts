@@ -1,9 +1,18 @@
 // @vitest-environment jsdom
 
 // useHome (@goodttv/interfaz), el Inicio de la tele y de la extensión: lo guardado sale mientras se comprueba la cuenta,
-// se sustituye por lo de ahora y deja de valer con otra cuenta. Va aquí porque este paquete trae react-dom y jsdom.
-import type { AuthSnapshot, SavedHome, StreamCard } from "@goodttv/contratos"
-import { type Home, type Platform, PlatformContext, useHome } from "@goodttv/interfaz"
+// se sustituye por lo de ahora y deja de valer con otra cuenta. Sin poder comprobarla (sin red, EXT-4), sigue lo
+// guardado y no sale la bienvenida; useAuth lo distingue de la sesión caducada y vuelve a comprobar. Va aquí porque
+// este paquete trae react-dom y jsdom.
+import type { SavedHome, StreamCard } from "@goodttv/contratos"
+import {
+  type AuthState,
+  type Home,
+  type Platform,
+  PlatformContext,
+  useAuth,
+  useHome,
+} from "@goodttv/interfaz"
 import { act, createElement } from "react"
 import { createRoot, type Root } from "react-dom/client"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
@@ -24,6 +33,8 @@ const stream = (login: string): StreamCard => ({
 })
 
 const MATEO = { displayName: "Mateo", kind: "authenticated", login: "mateo" } as const
+const OFFLINE = { kind: "unreachable", message: "fetch failed" } as const
+const EXPIRED = { kind: "error", message: "Your Twitch session expired. Sign in again" } as const
 const SAVED: SavedHome = {
   account: MATEO,
   following: [stream("illojuan")],
@@ -34,14 +45,14 @@ const SAVED: SavedHome = {
 }
 
 let home: Home | undefined
-const Probe = ({ auth }: { readonly auth: AuthSnapshot | undefined }) => {
+const Probe = ({ auth }: { readonly auth: AuthState | undefined }) => {
   home = useHome(auth)
   return null
 }
 
 let root: Root | undefined
 let platform: Platform = { hls: {} }
-const show = async (auth: AuthSnapshot | undefined): Promise<void> => {
+const show = async (auth: AuthState | undefined): Promise<void> => {
   await act(async () =>
     root?.render(
       createElement(PlatformContext, { value: platform }, createElement(Probe, { auth })),
@@ -52,6 +63,7 @@ const following = (): readonly string[] =>
   home?.resource.kind === "ready" ? home.resource.value.following.map((each) => each.userLogin) : []
 
 const api = {
+  auth: { snapshot: vi.fn(async (): Promise<AuthState> => MATEO) },
   catalog: {
     followed: vi.fn(async () => ({ cursor: undefined, items: [stream("carola")] })),
     live: vi.fn(async () => ({ cursor: undefined, items: [] })),
@@ -67,6 +79,7 @@ const api = {
 
 beforeEach(() => {
   vi.clearAllMocks()
+  api.auth.snapshot.mockReset().mockImplementation(async () => MATEO)
   api.home.saved.mockImplementation(async () => SAVED)
   vi.stubGlobal("api", api)
   platform = { hls: {} }
@@ -116,10 +129,64 @@ describe("Inicio al abrir", () => {
     expect(api.home.forget).toHaveBeenCalled()
   })
 
-  it("un fallo de red al comprobar la cuenta no lo olvida", async () => {
+  it("sin poder comprobar la cuenta, sigue lo guardado: ni lo olvida ni pide nada a Twitch", async () => {
     await show(undefined)
-    await show({ kind: "error", message: "sin red" })
+    await show(OFFLINE)
+    expect(home).toMatchObject({
+      fromSaved: true,
+      known: false,
+      signedIn: true,
+      unreachable: "fetch failed",
+    })
+    expect(home?.auth).toEqual(MATEO)
+    expect(following()).toEqual(["illojuan"])
     expect(api.home.forget).not.toHaveBeenCalled()
+    expect(api.catalog.followed).not.toHaveBeenCalled()
+  })
+
+  it("sin poder comprobarla y sin nada guardado, no se sabe si hay cuenta: nada de bienvenida", async () => {
+    api.home.saved.mockImplementation(async () => null)
+    await show(OFFLINE)
+    expect(home).toMatchObject({
+      known: false,
+      reading: false,
+      signedIn: false,
+      unreachable: "fetch failed",
+    })
+    expect(home?.resource.kind).toBe("loading")
+    expect(api.recents.list).not.toHaveBeenCalled()
+  })
+
+  it("al volver la red, lo de ahora sustituye a lo guardado", async () => {
+    await show(OFFLINE)
+    await show(MATEO)
+    expect(home).toMatchObject({ fromSaved: false, known: true, unreachable: undefined })
+    expect(following()).toEqual(["carola"])
+  })
+
+  it("lo olvidado no vuelve si luego no se puede comprobar la cuenta (al vincular otra)", async () => {
+    await show(MATEO)
+    await show({ kind: "guest" })
+    expect(api.home.forget).toHaveBeenCalled()
+    await show(OFFLINE)
+    expect(home).toMatchObject({ fromSaved: false, signedIn: false, unreachable: "fetch failed" })
+    expect(home?.auth).toEqual(OFFLINE)
+    expect(following()).toEqual([])
+  })
+
+  it("sin poder comprobarla más tarde, vale lo último de esta sesión", async () => {
+    await show(MATEO)
+    await show(OFFLINE)
+    expect(home).toMatchObject({ fromSaved: true, signedIn: true })
+    expect(following()).toEqual(["carola"])
+  })
+
+  it("si la sesión ha caducado (error, ya cerrada), lo guardado no vale y se olvida", async () => {
+    await show(undefined)
+    await show(EXPIRED)
+    expect(home).toMatchObject({ fromSaved: false, known: true, signedIn: false })
+    expect(home?.unreachable).toBeUndefined()
+    expect(api.home.forget).toHaveBeenCalled()
   })
 
   it("si la cuenta llega antes que lo guardado y es otra, lo guardado no llega a verse", async () => {
@@ -167,5 +234,78 @@ describe("Inicio al abrir", () => {
     )
     expect(first).toMatchObject({ fromSaved: true, reading: false })
     expect(api.home.saved).not.toHaveBeenCalled()
+  })
+})
+
+describe("La cuenta sin red (useAuth)", () => {
+  let account: ReturnType<typeof useAuth> | undefined
+  const Account = () => {
+    account = useAuth()
+    return null
+  }
+  const mount = async (): Promise<void> => {
+    await act(async () => root?.render(createElement(Account)))
+  }
+  afterEach(() => {
+    vi.useRealTimers()
+    account = undefined
+  })
+
+  it("si window.api.auth.snapshot() no contesta, es «unreachable», no «error»", async () => {
+    // Como llega en la tele: el error del proceso principal, con el prefijo de Electron.
+    api.auth.snapshot.mockRejectedValue(
+      new Error("Error invoking remote method 'auth:snapshot': TypeError: fetch failed"),
+    )
+    await mount()
+    expect(account?.auth).toEqual(OFFLINE)
+  })
+
+  it("una respuesta de error (la sesión caducada) sigue siendo «error»", async () => {
+    api.auth.snapshot.mockResolvedValue(EXPIRED)
+    await mount()
+    expect(account?.auth).toEqual(EXPIRED)
+  })
+
+  it("«Reintentar» (reload) vuelve a comprobarla", async () => {
+    api.auth.snapshot.mockRejectedValueOnce(new TypeError("fetch failed"))
+    await mount()
+    expect(account?.auth?.kind).toBe("unreachable")
+    await act(async () => account?.reload())
+    expect(account?.auth).toEqual(MATEO)
+  })
+
+  it("vuelve a comprobarla sola al volver la red", async () => {
+    api.auth.snapshot.mockRejectedValueOnce(new TypeError("fetch failed"))
+    await mount()
+    expect(account?.auth?.kind).toBe("unreachable")
+    await act(async () => {
+      dispatchEvent(new Event("online"))
+    })
+    expect(account?.auth).toEqual(MATEO)
+  })
+
+  it("y cada 30 s, por si la red no avisa (Twitch caído)", async () => {
+    vi.useFakeTimers()
+    api.auth.snapshot.mockRejectedValue(new TypeError("fetch failed"))
+    await mount()
+    await act(async () => vi.advanceTimersByTimeAsync(30_000))
+    expect(api.auth.snapshot).toHaveBeenCalledTimes(2)
+    expect(account?.auth?.kind).toBe("unreachable")
+    api.auth.snapshot.mockResolvedValue(MATEO)
+    await act(async () => vi.advanceTimersByTimeAsync(30_000))
+    expect(account?.auth).toEqual(MATEO)
+    // Ya comprobada, no sigue preguntando.
+    await act(async () => vi.advanceTimersByTimeAsync(60_000))
+    expect(api.auth.snapshot).toHaveBeenCalledTimes(3)
+  })
+
+  it("vale la última comprobación: una anterior que falla tarde no la pisa", async () => {
+    let fail: (error: Error) => void = () => undefined
+    api.auth.snapshot.mockImplementationOnce(() => new Promise((_, reject) => (fail = reject)))
+    await mount()
+    await act(async () => account?.reload())
+    expect(account?.auth).toEqual(MATEO)
+    await act(async () => fail(new TypeError("fetch failed")))
+    expect(account?.auth).toEqual(MATEO)
   })
 })

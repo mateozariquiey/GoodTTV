@@ -1,14 +1,16 @@
-import type { AppStatus, AuthSnapshot, Preferences, PreferencesPatch } from "@goodttv/contratos"
-import { LATENCY_MODES, LATENCY_ORDER } from "@goodttv/interfaz"
+import type { AppStatus, Preferences, PreferencesPatch } from "@goodttv/contratos"
+import { type AuthState, LATENCY_MODES, LATENCY_ORDER } from "@goodttv/interfaz"
 import { QRCodeSVG } from "qrcode.react"
 import type { ReactNode } from "react"
 import { Avatar } from "./Avatar"
+import { RetryButton } from "./RetryButton"
 
 type Account = {
-  readonly auth: AuthSnapshot | undefined
+  readonly auth: AuthState | undefined
   readonly begin: () => Promise<void>
   readonly busy: boolean
   readonly logout: () => Promise<void>
+  readonly reload: () => Promise<void>
 }
 
 // Un grupo de opciones con su nombre, en vez de los botones grandes de la tele: radios con aspecto de segmentos
@@ -62,6 +64,29 @@ const AccountGroup = ({
 }) => {
   const { auth } = account
   if (auth === undefined) return <p className="page__note">Comprobando la cuenta…</p>
+  if (auth.kind === "unreachable") {
+    return (
+      <>
+        <p className="setting__warning" role="alert">
+          No se pudo comprobar la cuenta ({auth.message}).
+        </p>
+        <Row label="La sesión no se ha cerrado: se vuelve a comprobar sola al volver la conexión.">
+          {/* Sin red también se puede cerrar: se borra aquí, aunque Twitch no se entere. */}
+          <span className="setting__actions">
+            <RetryButton onRetry={account.reload} />
+            <button
+              className="button"
+              disabled={account.busy}
+              onClick={() => void account.logout()}
+              type="button"
+            >
+              Cerrar sesión
+            </button>
+          </span>
+        </Row>
+      </>
+    )
+  }
   if (auth.kind === "authenticated") {
     return (
       <>

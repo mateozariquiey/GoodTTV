@@ -11,8 +11,8 @@ version is in development.
 
 | Version | For | Status |
 | --- | --- | --- |
-| [TV](#tv) (`apps/tele`) | A Linux mini PC connected to the TV, with a remote | 0.2.2; first tests on the mini PC |
-| [Browser](#browser) (`apps/navegador`) | Chrome, Chromium, Firefox and Zen, with mouse and keyboard | 0.2.2 |
+| [TV](#tv) (`apps/tele`) | A Linux mini PC connected to the TV, with a remote | 0.2.3 (0.2.2 tested on the mini PC) |
+| [Browser](#browser) (`apps/navegador`) | Chrome, Chromium, Firefox and Zen, with mouse and keyboard | 0.2.3 |
 | [Android](#android) | Phones | In development |
 
 The interfaces are in Spanish for now.
@@ -75,12 +75,12 @@ x86_64) and run it; it starts full screen and needs `libfuse2`. To build it:
 ```bash
 bun install --frozen-lockfile
 bun run build && bun run start   # in a window, for testing
-bun run package:appimage         # apps/tele/dist/GoodTTV-0.2.2-x86_64.AppImage
+bun run package:appimage         # apps/tele/dist/GoodTTV-0.2.3-x86_64.AppImage
 ```
 
-**Status:** [docs/verificacion.md](docs/verificacion.md) (in Spanish) separates what was checked in a lab from what
-remains to be tested on the mini PC, the TV and the physical remote. HDMI audio, hardware video decoding, smoothness on
-the GMKtec M6 Ultra, the physical remote and suspend/resume are still to be tested.
+**Status:** 0.2.2 is tested on the mini PC (GMKtec M6 Ultra) with its remote: HDMI audio, hardware video decoding
+(VA-API), the remote and readability at 3 m. Suspend/resume is not, because that machine never sleeps. Details,
+and what is left, are in [docs/verificacion.md](docs/verificacion.md) (in Spanish).
 
 ## Browser
 
@@ -97,7 +97,7 @@ works in Chrome and Firefox.
 - **Account linking** with a code, as on the TV.
 - **Keeps pace in a hidden tab**, even though the browser slows its timers down.
 
-**Install:** it is not in the stores. Download `goodttv-0.2.2.xpi` from the
+**Install:** it is not in the stores. Download `goodttv-0.2.3.xpi` from the
 [releases](https://github.com/mateozariquiey/GoodTTV/releases):
 - **Zen** (and Firefox Developer Edition or Nightly): in `about:config`, set `xpinstall.signatures.required` to
   `false`. Then, in `about:addons`, gear menu → "Install Add-on From File…".

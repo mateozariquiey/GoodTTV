@@ -1,6 +1,5 @@
 import type {
   AppStatus,
-  AuthSnapshot,
   KeyProbe,
   LatencyMode,
   Preferences,
@@ -8,14 +7,17 @@ import type {
 } from "@goodttv/contratos"
 import { QRCodeSVG } from "qrcode.react"
 import { useEffect, useRef, useState } from "react"
+import type { AuthState } from "../data"
 import { useLayer } from "../navigation"
+import { RetryButton } from "../ui"
 
 type AccountScreenProps = {
-  readonly auth: AuthSnapshot | undefined
+  readonly auth: AuthState | undefined
   readonly authBusy: boolean
   readonly onBegin: () => void
   readonly onLogout: () => void
   readonly onPreferences: (patch: PreferencesPatch) => void
+  readonly onRetry: () => Promise<void>
   readonly preferences: Preferences
   readonly status: AppStatus | undefined
 }
@@ -23,8 +25,8 @@ type AccountScreenProps = {
 const minutesLeft = (expiresAt: string): number =>
   Math.max(0, Math.ceil((Date.parse(expiresAt) - Date.now()) / 60_000))
 
-// ← from any setting reaches whichever account action is shown (link, cancel or sign out).
-const TO_ACCOUNT = "account-link account-cancel account-logout"
+// ← from any setting reaches whichever account action is shown (link, cancel, retry or sign out).
+const TO_ACCOUNT = "account-link account-cancel account-retry account-logout"
 
 // Retraso del directo (reproductor propio). El chat se retrasa lo mismo para ir sincronizado con la imagen.
 export const LATENCY_MODES: Record<LatencyMode, { readonly hint: string; readonly label: string }> =
@@ -52,6 +54,7 @@ export const AccountScreen = ({
   onBegin,
   onLogout,
   onPreferences,
+  onRetry,
   preferences,
   status,
 }: AccountScreenProps) => {
@@ -68,6 +71,7 @@ export const AccountScreen = ({
           busy={authBusy}
           onBegin={onBegin}
           onLogout={onLogout}
+          onRetry={onRetry}
           status={status}
         />
       </section>
@@ -154,14 +158,15 @@ export const AccountScreen = ({
 }
 
 type AccountPanelProps = {
-  readonly auth: AuthSnapshot | undefined
+  readonly auth: AuthState | undefined
   readonly busy: boolean
   readonly onBegin: () => void
   readonly onLogout: () => void
+  readonly onRetry: () => Promise<void>
   readonly status: AppStatus | undefined
 }
 
-const AccountPanel = ({ auth, busy, onBegin, onLogout, status }: AccountPanelProps) => {
+const AccountPanel = ({ auth, busy, onBegin, onLogout, onRetry, status }: AccountPanelProps) => {
   const [, tick] = useState(0)
   useEffect(() => {
     if (auth?.kind !== "authorizing") return undefined
@@ -170,6 +175,32 @@ const AccountPanel = ({ auth, busy, onBegin, onLogout, status }: AccountPanelPro
   }, [auth])
 
   if (auth === undefined) return <p className="account">Comprobando la cuenta…</p>
+  if (auth.kind === "unreachable") {
+    return (
+      <div className="account">
+        <p className="account__warning" role="alert">
+          No se pudo comprobar la cuenta ({auth.message}).
+        </p>
+        <p className="account__note">
+          La sesión no se ha cerrado: se vuelve a comprobar sola al volver la conexión.
+        </p>
+        <div className="account__actions">
+          <RetryButton entry navId="account-retry" onRetry={onRetry} />
+          {/* Sin red también se puede cerrar: se borra aquí, aunque Twitch no se entere. Never the default focus. */}
+          <button
+            className="button"
+            data-nav
+            data-nav-id="account-logout"
+            disabled={busy}
+            onClick={onLogout}
+            type="button"
+          >
+            Cerrar sesión
+          </button>
+        </div>
+      </div>
+    )
+  }
   if (auth.kind === "authenticated") {
     return (
       <div className="account">

@@ -11,8 +11,8 @@ en desarrollo.
 
 | Versión | Para qué | Estado |
 | --- | --- | --- |
-| [Tele](#tele) (`apps/tele`) | Un mini PC Linux conectado a la tele, con un mando | 0.2.2; primeras pruebas en el mini PC |
-| [Navegador](#navegador) (`apps/navegador`) | Chrome, Chromium, Firefox y Zen, con ratón y teclado | 0.2.2 |
+| [Tele](#tele) (`apps/tele`) | Un mini PC Linux conectado a la tele, con un mando | 0.2.3 (la 0.2.2, probada en el mini PC) |
+| [Navegador](#navegador) (`apps/navegador`) | Chrome, Chromium, Firefox y Zen, con ratón y teclado | 0.2.3 |
 | [Android](#android) | El teléfono | En desarrollo |
 
 ![Extensión: el vídeo con los controles encima, la ficha del canal y el chat; a la izquierda, los seguidos en directo](docs/media/escritorio-canal.jpg)
@@ -74,12 +74,11 @@ x86_64) y ejecútalo; arranca a pantalla completa y necesita `libfuse2`. Para co
 ```bash
 bun install --frozen-lockfile
 bun run build && bun run start   # en una ventana, para probar
-bun run package:appimage         # apps/tele/dist/GoodTTV-0.2.2-x86_64.AppImage
+bun run package:appimage         # apps/tele/dist/GoodTTV-0.2.3-x86_64.AppImage
 ```
 
-**Estado:** lo comprobado en el laboratorio y lo que falta por probar en el mini PC, la TV y el mando físico está en
-[docs/verificacion.md](docs/verificacion.md). Quedan por probar el audio HDMI, la aceleración de vídeo y la fluidez en
-el GMKtec M6 Ultra, el mando físico y la suspensión.
+**Estado:** la 0.2.2 está probada en el mini PC (GMKtec M6 Ultra) con su mando: el audio HDMI, la decodificación de
+vídeo por hardware (VA-API), el mando y la legibilidad a 3 m. La suspensión no, porque ese equipo no se suspende. El detalle, con lo que queda, está en [docs/verificacion.md](docs/verificacion.md).
 
 ## Navegador
 
@@ -96,7 +95,7 @@ código sirve para Chrome y para Firefox.
 - **Vincular la cuenta** con un código, como en la tele.
 - **Sigue a su ritmo con la pestaña oculta**, aunque el navegador frene sus temporizadores.
 
-**Instalarla:** no está en las tiendas. Descarga `goodttv-0.2.2.xpi` de las
+**Instalarla:** no está en las tiendas. Descarga `goodttv-0.2.3.xpi` de las
 [releases](https://github.com/mateozariquiey/GoodTTV/releases):
 - **Zen** (y Firefox Developer Edition o Nightly): en `about:config`, pon `xpinstall.signatures.required` a
   `false`. Después, en `about:addons`, menú del engranaje → «Instalar complemento desde archivo…».
