@@ -25,6 +25,11 @@ const webContents = { id: 1, mainFrame }
 const event = { sender: webContents, senderFrame: mainFrame } as unknown as IpcMainInvokeEvent
 
 const chat = { close: vi.fn(), open: vi.fn(() => 3) }
+const home = {
+  forget: vi.fn(async () => undefined),
+  save: vi.fn(async () => undefined),
+  saved: vi.fn(async () => null),
+}
 const input = { setProbing: vi.fn(), setTextEntry: vi.fn() }
 const local = {
   addRecent: vi.fn(async () => []),
@@ -65,6 +70,7 @@ beforeEach(() => {
   vi.clearAllMocks()
   registerIpc({
     chat,
+    home,
     input,
     local,
     mainWindow: { webContents } as unknown as BrowserWindow,
@@ -113,6 +119,7 @@ describe("registerIpc", () => {
     } as unknown as IpcMainInvokeEvent
     registerIpc({
       chat,
+      home,
       input,
       local,
       mainWindow: { webContents: { id: 1, mainFrame: foreignFrame } } as unknown as BrowserWindow,
@@ -129,10 +136,12 @@ describe("registerIpc", () => {
     await expect(call(CHANNELS.catalogSearch, event, { query: "" })).rejects.toThrow()
     await expect(call(CHANNELS.recentsAdd, event, { login: "a b" })).rejects.toThrow()
     await expect(call(CHANNELS.playerSetWatching, event, "yes")).rejects.toThrow()
+    await expect(call(CHANNELS.homeSave, event, { account: { kind: "guest" } })).rejects.toThrow()
     await expect(call(CHANNELS.authSnapshot, event, "unexpected")).rejects.toThrow()
     expect(chat.open).not.toHaveBeenCalled()
     expect(twitch.search).not.toHaveBeenCalled()
     expect(local.addRecent).not.toHaveBeenCalled()
+    expect(home.save).not.toHaveBeenCalled()
   })
 
   it("passes parsed arguments through", async () => {
@@ -171,6 +180,7 @@ describe("preload bridge", () => {
       "auth",
       "catalog",
       "chat",
+      "home",
       "input",
       "player",
       "preferences",

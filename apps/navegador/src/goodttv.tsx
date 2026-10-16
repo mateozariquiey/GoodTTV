@@ -7,6 +7,7 @@ import { createRoot } from "react-dom/client"
 import { createExtensionApi } from "./api"
 import { installDirectoFetch } from "./directo-fetch"
 import { Desktop } from "./escritorio/Desktop"
+import { pageStorage, readSavedHome } from "./home-cache"
 import { labApi, labOptions } from "./lab"
 import "./escritorio/desktop.css"
 
@@ -14,8 +15,11 @@ import "./escritorio/desktop.css"
 // directo sin anuncios atendido en la propia página (directo-fetch.ts).
 
 // El reproductor de @goodttv/interfaz, con el FetchLoader de hls.js para que sus peticiones a /stream/ pasen por la
-// página.
-const PLATFORM: Platform = { hls: { loader: FetchLoader } }
+// página, e Inicio de la última vez, que se lee sin esperar (home-cache.ts).
+const PLATFORM: Platform = {
+  hls: { loader: FetchLoader },
+  savedHome: () => readSavedHome(pageStorage()),
+}
 
 const element = document.querySelector("#root")
 if (element === null) throw new TypeError("Root element is missing")

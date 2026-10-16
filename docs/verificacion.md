@@ -474,8 +474,41 @@ lista, y apunta cada `seeking`, cada error de hls.js y los eventos del empalme.
     parado en la primera ronda, ninguno en la segunda, y ~2600 fotogramas. El búfer mínimo, 0,1-0,8 s;
   - **TS** (`carola`): igual en las dos;
   - **arranque:** igual (primer fotograma, mediana de 889 frente a 897 ms).
-- **El usuario** lo probó en Zen, con su perfil, el 16 de octubre: `illojuan` va perfecto. Sale en la 0.2.1.
-- **Sin comprobar:** la tele en el mini PC; si las paradas de 2-3 s en *Adaptativo* con fMP4 son el precio de cargar
-  fragmento a fragmento o ruido de las dos pruebas a la vez.
+- **El usuario** lo probó en Zen, con su perfil, el 16 de octubre: `illojuan` va perfecto. Sale en la 0.2.1, que
+  también probó en la tele, en el mini PC y con el mando: todo bien.
+- **Sin comprobar:** si las paradas de 2-3 s en *Adaptativo* con fMP4 son el precio de cargar fragmento a fragmento o
+  ruido de las dos pruebas a la vez.
 - **Límite:** se decide al crear el reproductor. Si una emisión nueva cambia de formato con él abierto, sigue con lo
   decidido hasta que se vuelva a abrir el canal.
+
+## Inicio al abrir en la tele
+
+16 de octubre. El usuario, en la tele con la 0.2.1: al abrir, menos de medio segundo de una pantalla que no llegaba a
+distinguir, luego «Cargando canales…» y luego la lista, en total ~1 s. Por el código, la primera era la bienvenida sin
+cuenta: Inicio se pedía sin cuenta mientras se comprobaba la sesión (dos peticiones a Twitch), como en la extensión
+antes del 15 de octubre ([Icono y arranque](#icono-y-arranque)).
+- **El arreglo:** el de la extensión, ahora común
+  (`useHome`, [arquitectura.md](arquitectura.md#las-tres-piezas-de-electron)): lo de la última vez con esa cuenta
+  mientras llega lo de ahora, y ni bienvenida ni «Cargando canales…» mientras no se sabe si hay cuenta. La tele lo
+  guarda en `saved-home.json`, por IPC, y el foco del mando entra cuando Inicio ya tiene algo.
+- **Medido en la app real** (Electron sin ventana, perfil temporal, `.lab/inicio-tele/probar.mjs`), con la cuenta y
+  los seguidos simulados en el proceso principal, 0,5 s por petición:
+  - a los 25 ms, la lista guardada y el nombre de la cuenta; a los 39 ms, el foco en su primer canal;
+  - a 1 s, la lista de ahora en su sitio. El canal enfocado seguía en ella, con otro título: conserva el foco, y la
+    vista previa pasa al título de ahora;
+  - en ningún momento la bienvenida ni «Cargando canales…»;
+  - sin cuenta: la bienvenida a los 20 ms y el foco en «Vincular cuenta» a los 32 ms. Lo guardado (de otra cuenta) no
+    llega a verse y se borra.
+- **Revisión de Codex** (`gpt-6.1-sol`), con dos arreglos:
+  - la vista previa guardaba el canal enfocado entero, así que tras un refresco seguía con su título y sus espectadores
+    de antes hasta mover el foco. Ahora guarda solo cuál es y lo busca en las listas de ahora;
+  - la tele no guarda un Inicio de más de 1 MB (unos 100 kB con 100 seguidos en directo), para que un renderer
+    comprometido no deje un archivo enorme que se lea en cada arranque.
+
+  Lo que no se cambió: el foco puede quedarse en las pestañas si la cuenta resulta ser otra en los 16 ms entre que sale
+  lo guardado y el primer fotograma (la cuenta necesita al menos una petición de red), o si lo guardado no tiene ni un
+  canal, tampoco en populares.
+- **Pruebas:** `bun run verify`, con pruebas nuevas del hook (React, `inicio.test.ts`), del archivo de la tele y del
+  IPC; los 7 e2e de la tele y los 25 pasos de la interfaz en Chrome y Firefox.
+- **Sin comprobar:** con la cuenta real, en la tele (sale en la 0.2.2). La primera vez tras actualizar no hay nada
+  guardado: hasta la lista se verá «Cargando canales…», ya sin la bienvenida.

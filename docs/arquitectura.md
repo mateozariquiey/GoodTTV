@@ -61,7 +61,6 @@ src/goodttv.tsx        monta las pantallas de escritorio; una sola pestaña a la
 │   ├── Search.tsx     búsqueda siempre arriba (/); Enter abre el canal con ese nombre exacto
 │   ├── Sidebar.tsx    tus seguidos en directo; plegable
 │   ├── HomeView.tsx   miniaturas de tus seguidos y populares, y «Seguir viendo»
-│   ├── home-cache.ts  Inicio de la última vez, para enseñarlo nada más abrir
 │   ├── ChannelView.tsx  el vídeo con controles encima, ficha del canal y chat; modo teatro
 │   ├── SettingsView.tsx cuenta, retraso, chat y la lista de atajos
 │   ├── shortcuts.ts   atajos de teclado (Espacio, M, T, F, C, ↑ ↓, /, Esc)
@@ -69,7 +68,8 @@ src/goodttv.tsx        monta las pantallas de escritorio; una sola pestaña a la
 ├── api.ts             window.api: lo que en la tele hacen el proceso principal y el IPC, aquí en la página
 │   ├── @goodttv/servicios   cuenta, Helix, chat por EventSub y almacén local
 │   ├── storage.ts           la sesión y los datos en chrome.storage.local, sin cifrar
-│   └── wake-lock.ts         que la pantalla no se apague mientras se ve un directo
+│   ├── wake-lock.ts         que la pantalla no se apague mientras se ve un directo
+│   └── home-cache.ts        Inicio de la última vez (window.api.home), en localStorage
 ├── directo-fetch.ts   el directo sin anuncios, atendido en la página
 └── lab.ts             laboratorio por la dirección: ?pausa= (pausas simuladas), ?registro, ?chatsintetico= y ?chatreal
 src/fondo.ts           abre o trae al frente la página; menú «Abrir en GoodTTV» en twitch.tv
@@ -98,13 +98,13 @@ src/fondo.ts           abre o trae al frente la página; menú «Abrir en GoodTT
   carga la ventana. Aquí la página es la propia extensión: Manifest V3 no deja cargar código ajeno,
   y los tokens se quedan en los servicios; la interfaz solo recibe datos. Se guardan sin cifrar en
   `chrome.storage.local`, y Ajustes lo avisa.
-- **Inicio sale ya al abrir** (`escritorio/home-cache.ts`). Comprobar la cuenta y pedir los directos a Twitch tarda
-  alrededor de un segundo. Mientras tanto se enseña lo que se vio la última vez con esa cuenta, guardado en
-  `localStorage` (se lee sin esperar, así que sale en la primera imagen; sin tokens), y se sustituye en cuanto llega lo
-  de ahora. Se olvida al cerrar sesión, y no se usa si la cuenta resulta ser otra. Sin nada guardado, Inicio dice
-  «Cargando…» hasta saber si hay cuenta: antes enseñaba la bienvenida sin cuenta y luego a todos los seguidos como
-  desconectados. `useResource` vuelve a «cargando» al cambiar de función de carga, para que lo cargado sin cuenta no
-  se enseñe como si fuera con ella.
+- **Inicio sale ya al abrir** (`useHome`, en `packages/interfaz/src/data.ts`, común con la tele). Comprobar la cuenta
+  y pedir los directos a Twitch tarda alrededor de un segundo. Mientras tanto se enseña lo que se vio la última vez con
+  esa cuenta (`window.api.home`, sin tokens), y se sustituye en cuanto llega lo de ahora. Se olvida al cerrar sesión, y
+  no se usa si la cuenta resulta ser otra. Sin nada guardado, Inicio dice «Cargando…» hasta saber si hay cuenta: antes
+  enseñaba la bienvenida sin cuenta y luego a todos los seguidos como desconectados. `useResource` vuelve a «cargando»
+  al cambiar de función de carga, para que lo cargado sin cuenta no se enseñe como si fuera con ella. La extensión lo
+  guarda en `localStorage` (`home-cache.ts`), que la plataforma lee sin esperar: sale en la primera imagen.
 - **Una sola GoodTTV a la vez** (`goodttv.tsx`). La pestaña abierta tiene un bloqueo del navegador
   (`navigator.locks`). Otra pestaña avisa y puede pedirlo:
   1. se pone a la cola y lo anuncia por un `BroadcastChannel`;
@@ -149,6 +149,7 @@ Proceso principal (src/main) ── tiene todos los permisos
 │                          recientes y preferencias. La tele aporta dónde se guardan:
 ├── token-vault.ts         la sesión, cifrada con el llavero del sistema (o archivo 0600 sin él)
 ├── local-store.ts         recientes y preferencias (archivo JSON local)
+├── saved-home.ts          Inicio de la última vez (window.api.home; archivo JSON local)
 ├── settings-store.ts      el Client ID (variables de entorno y de compilación)
 └── ipc.ts                 la única puerta de entrada desde la interfaz
         │  IPC validado con Zod (@goodttv/contratos)
@@ -165,6 +166,11 @@ iframe de player.twitch.tv (otro origen; la app no lo toca por dentro)
 
 **Regla de oro:** el renderer nunca ve un token. Las llamadas a Twitch con credenciales salen
 del proceso principal, y la interfaz recibe datos ya validados.
+
+**Inicio al abrir** (`useHome`, como en la extensión): mientras se comprueba la cuenta y llegan los directos, lo que
+se vio la última vez con esa cuenta. La tele no lo guarda en `localStorage`: el servidor local cambia de puerto en cada
+arranque, y con él el origen de la página, así que no duraría. Lo guarda el proceso principal en `saved-home.json`
+(archivo 0600), y la interfaz lo pide por IPC al abrir: tarda unos milisegundos, durante los que Inicio no enseña nada.
 
 ## Cómo viaja una pulsación del mando
 
@@ -194,6 +200,8 @@ Twitch, la siguiente tecla vuelve a la interfaz. Las excepciones son dos:
   espacios (gana el primero que exista) o `none`.
 - Sin memoria, el foco empieza en el control marcado con `data-nav-entry`. Las pestañas
   (`data-nav-transient`) no se recuerdan, y al subir a ellas se entra por la pestaña actual.
+- Al abrir, el foco entra cuando Inicio ya tiene algo: la lista (guardada o de ahora), un error o, sin cuenta, la
+  bienvenida (`App.tsx`). Antes caería en las pestañas, y ahí se quedaría al llegar la lista.
 - Si el foco se pierde (el elemento desaparece o estaba en el iframe), la primera tecla solo lo
   recupera y no mueve nada.
 
@@ -287,6 +295,6 @@ guarda los últimos 150.
 | --- | --- |
 | Añadir una tecla del mando | `packages/contratos/src/keys.ts` (`actionForKey`) y su prueba |
 | Cambiar colores, tamaños o espaciado | `packages/interfaz/src/styles.css` (variables en `:root`) |
-| Añadir una sección a Inicio | `packages/interfaz/src/data.ts` (`loadHome`) y `screens/HomeScreen.tsx` |
+| Añadir una sección a Inicio | `packages/interfaz/src/data.ts` (`loadHome`, y `toSavedHome` con `SavedHomeSchema` en `@goodttv/contratos` para que se guarde) y `screens/HomeScreen.tsx` |
 | Otro proveedor de emotes | `packages/servicios/src/chat/emote-catalog.ts` y el host en `packages/contratos/src/chat.ts` y en la CSP de `src/renderer/index.html` |
 | Una llamada nueva a Twitch | `packages/servicios/src/twitch-service.ts` → `ipc.ts` → `preload/index.ts` → `packages/contratos/src/contracts.ts` |

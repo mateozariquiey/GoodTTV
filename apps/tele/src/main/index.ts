@@ -8,6 +8,7 @@ import { createInputRouter } from "./input-router"
 import { registerIpc } from "./ipc"
 import { localDataFile } from "./local-store"
 import { createPlayerInteraction } from "./player-interaction"
+import { savedHomeStore } from "./saved-home"
 import { SettingsStore } from "./settings-store"
 import { createStreamService, type StreamService } from "./stream/stream-service"
 import { TokenVault } from "./token-vault"
@@ -169,6 +170,7 @@ const createWindow = async (): Promise<void> => {
   })
   registerIpc({
     chat,
+    home: savedHomeStore(app.getPath("userData")),
     input,
     local: new LocalStore(localDataFile(app.getPath("userData"))),
     mainWindow,

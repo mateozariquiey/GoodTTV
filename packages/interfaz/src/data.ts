@@ -5,9 +5,11 @@ import type {
   Preferences,
   PreferencesPatch,
   RecentChannel,
+  SavedHome,
   StreamCard,
 } from "@goodttv/contratos"
-import { useCallback, useEffect, useRef, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { usePlatform } from "./platform"
 
 // Data hooks. Every remote list has the same four states so screens can always offer a way on:
 // loading (first load), ready (possibly empty), error (with retry) and refreshing in place.
@@ -134,6 +136,97 @@ export const loadHome = async (signedIn: boolean): Promise<HomeData> => {
     recents,
   }
 }
+
+type Account = Extract<AuthSnapshot, { readonly kind: "authenticated" }>
+
+// Lo guardado vale mientras no se sabe la cuenta, o si resulta ser la misma.
+export const savedFor = (
+  saved: SavedHome | null | undefined,
+  auth: AuthSnapshot | undefined,
+): SavedHome | undefined =>
+  saved != null &&
+  (auth === undefined || (auth.kind === "authenticated" && auth.login === saved.account.login))
+    ? saved
+    : undefined
+
+export const toHomeData = (saved: SavedHome): HomeData => ({
+  following: saved.following,
+  popular: saved.popular,
+  recentLive: new Map(saved.recentLive.map((stream) => [stream.userLogin, stream])),
+  recents: saved.recents,
+})
+
+export const toSavedHome = (account: Account, home: HomeData, savedAt: number): SavedHome => ({
+  account,
+  following: [...home.following],
+  popular: [...home.popular],
+  recentLive: [...home.recentLive.values()],
+  recents: [...home.recents],
+  savedAt,
+})
+
+// Inicio en la tele y en la extensión. Comprobar la cuenta y pedir los directos a Twitch tarda alrededor de un segundo:
+// mientras tanto, lo que se vio la última vez con esa cuenta (window.api.home), que se sustituye en cuanto llega lo de
+// ahora. Deja de valer si la cuenta resulta ser otra, o ninguna, y se olvida al cerrar sesión. Sin nada guardado,
+// «cargando» hasta saber si hay cuenta: sin ella, Inicio enseñaría la bienvenida y los seguidos como desconectados.
+export const useHome = (auth: AuthSnapshot | undefined) => {
+  // undefined mientras se lee: la tele lo pide por IPC; la extensión lo lee sin esperar (la plataforma).
+  const { savedHome } = usePlatform()
+  const [saved, setSaved] = useState<SavedHome | null | undefined>(savedHome)
+  useEffect(() => {
+    if (saved !== undefined) return undefined
+    let active = true
+    window.api.home.saved().then(
+      (value) => {
+        if (active) setSaved(value)
+      },
+      () => {
+        if (active) setSaved(null)
+      },
+    )
+    return () => {
+      active = false
+    }
+  }, [saved])
+  const usable = savedFor(saved, auth)
+  const shown = auth ?? usable?.account
+  const signedIn = shown?.kind === "authenticated"
+  const known = auth !== undefined
+  const load = useMemo(() => (known ? () => loadHome(signedIn) : undefined), [known, signedIn])
+  const home = useResource(load)
+  // Si falla la primera carga, como cuando falla un refresco: se sigue viendo lo último bueno (el refresco periódico
+  // lo reintenta).
+  const resource = useMemo(
+    (): Resource<HomeData> =>
+      home.resource.kind !== "ready" && usable !== undefined
+        ? { kind: "ready", updatedAt: usable.savedAt, value: toHomeData(usable) }
+        : home.resource,
+    [home.resource, usable],
+  )
+  useEffect(() => {
+    if (auth === undefined || auth.kind === "error") return // un fallo de red no es cerrar sesión
+    if (auth.kind !== "authenticated") void window.api.home.forget().catch(() => undefined)
+    else if (home.resource.kind === "ready") {
+      void window.api.home
+        .save(toSavedHome(auth, home.resource.value, Date.now()))
+        .catch(() => undefined)
+    }
+  }, [auth, home.resource])
+  return {
+    auth: shown,
+    // Lo que se ve es lo guardado: aún no ha llegado lo de ahora.
+    fromSaved: resource !== home.resource,
+    known,
+    // Aún leyendo lo guardado (unos milisegundos en la tele): ni «cargando» ni la bienvenida.
+    reading: saved === undefined,
+    refresh: home.refresh,
+    resource,
+    retry: home.retry,
+    signedIn,
+  }
+}
+
+export type Home = ReturnType<typeof useHome>
 
 export const searchChannels = async (query: string): Promise<readonly ChannelCard[]> =>
   (await window.api.catalog.search({ first: 20, query })).items

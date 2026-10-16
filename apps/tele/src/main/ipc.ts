@@ -5,6 +5,7 @@ import {
   LoginsInputSchema,
   PreferencesPatchSchema,
   RecentChannelSchema,
+  SavedHomeSchema,
   SearchInputSchema,
 } from "@goodttv/contratos"
 import type { EventSubChat, LocalStore, TwitchService } from "@goodttv/servicios"
@@ -13,9 +14,11 @@ import { z } from "zod"
 import { CHANNELS } from "../shared/channels"
 import type { InputRouter } from "./input-router"
 import type { PlayerInteraction } from "./player-interaction"
+import type { SavedHomeStore } from "./saved-home"
 
 type IpcOptions = {
   readonly chat: Pick<EventSubChat, "close" | "open">
+  readonly home: SavedHomeStore
   readonly input: Pick<InputRouter, "setProbing" | "setTextEntry">
   readonly local: Pick<LocalStore, "addRecent" | "preferences" | "recents" | "updatePreferences">
   readonly mainWindow: BrowserWindow
@@ -96,6 +99,10 @@ export const registerIpc = (options: IpcOptions): void => {
     options.chat.open(input.broadcasterId),
   )
   handle(CHANNELS.chatClose, none, () => options.chat.close())
+
+  handle(CHANNELS.homeSaved, none, () => options.home.saved())
+  handle(CHANNELS.homeSave, z.tuple([SavedHomeSchema]), (home) => options.home.save(home))
+  handle(CHANNELS.homeForget, none, () => options.home.forget())
 
   handle(CHANNELS.inputSetTextEntry, z.tuple([z.boolean()]), (active) =>
     options.input.setTextEntry(active),

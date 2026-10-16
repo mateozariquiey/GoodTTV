@@ -15,12 +15,14 @@ export {
 export {
   formatUptime,
   formatViewers,
+  type Home,
   type HomeData,
   loadHome,
   type Resource,
   searchChannels,
   useAppStatus,
   useAuth,
+  useHome,
   usePreferences,
   useResource,
 } from "./data"

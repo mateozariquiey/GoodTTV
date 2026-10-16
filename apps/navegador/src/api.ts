@@ -7,6 +7,7 @@ import {
   type SettingsSource,
   TwitchService,
 } from "@goodttv/servicios"
+import { forgetHome, pageStorage, readSavedHome, saveHome } from "./home-cache"
 import { storageText, storageTokens } from "./storage"
 import { createWakeLock } from "./wake-lock"
 
@@ -38,6 +39,7 @@ export const createExtensionApi = (): AppApi => {
   })
   const local = new LocalStore(storageText(chrome.storage.local, "local-data"))
   const wakeLock = createWakeLock()
+  const page = pageStorage()
 
   return {
     app: {
@@ -72,6 +74,11 @@ export const createExtensionApi = (): AppApi => {
       },
       // Como el IPC de la tele: un identificador que no sea válido no llega a tocar el chat.
       open: async (input) => chat.open(ChatOpenInputSchema.parse(input).broadcasterId),
+    },
+    home: {
+      forget: async () => forgetHome(page),
+      save: async (home) => saveHome(page, home),
+      saved: async () => readSavedHome(page),
     },
     // Sin mando: las pantallas de escritorio atienden el teclado ellas mismas (escritorio/shortcuts.ts).
     input: {

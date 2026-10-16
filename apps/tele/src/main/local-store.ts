@@ -4,13 +4,15 @@ import type { TextStorage } from "@goodttv/servicios"
 
 // Where the TV app keeps recents and preferences (LocalStore, @goodttv/servicios): local-data.json
 // in its user data folder. Writes are atomic (temporary file + rename, owner-only permissions),
-// following VacuumStream's favourites store.
+// following VacuumStream's favourites store. Inicio de la última vez va aparte (saved-home.ts).
 
 const isMissingFile = (error: unknown): boolean =>
   error instanceof Error && "code" in error && error.code === "ENOENT"
 
-export const localDataFile = (directory: string): TextStorage => {
-  const path = join(directory, "local-data.json")
+export type OwnerFile = TextStorage & { readonly remove: () => Promise<void> }
+
+export const ownerFile = (directory: string, name: string): OwnerFile => {
+  const path = join(directory, name)
   return {
     read: async () => {
       try {
@@ -20,6 +22,7 @@ export const localDataFile = (directory: string): TextStorage => {
         throw error
       }
     },
+    remove: () => rm(path, { force: true }),
     write: async (text) => {
       await mkdir(directory, { mode: 0o700, recursive: true })
       const temporaryPath = `${path}.tmp`
@@ -35,3 +38,6 @@ export const localDataFile = (directory: string): TextStorage => {
     },
   }
 }
+
+export const localDataFile = (directory: string): TextStorage =>
+  ownerFile(directory, "local-data.json")

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react"
 import { type Channel, fromStream, toRecent } from "./channel"
-import { useAppStatus, useAuth, usePreferences } from "./data"
+import { useAppStatus, useAuth, useHome, usePreferences } from "./data"
 import { useLayer, useRemoteInput } from "./navigation"
 import { PlayerScreen } from "./player/PlayerScreen"
 import { AccountScreen } from "./screens/AccountScreen"
@@ -26,7 +26,20 @@ export const App = () => {
   const [tab, setTab] = useState<Tab>("home")
   const [watching, setWatching] = useState<Watching>()
   const shell = useRef<HTMLDivElement>(null)
-  const signedIn = account.auth?.kind === "authenticated"
+  // Al abrir, lo que se vio la última vez mientras se comprueba la cuenta y llega lo de ahora (useHome).
+  const home = useHome(account.auth)
+  const { auth, signedIn } = home
+  // El foco del mando entra cuando Inicio ya tiene algo: la lista (guardada o de ahora), un error o, sin cuenta, la
+  // bienvenida. Antes caería en las pestañas, y ahí se quedaría al llegar la lista. Una vez dentro, no se vuelve a
+  // esperar.
+  const [started, setStarted] = useState(false)
+  if (
+    !started &&
+    !home.reading &&
+    (home.resource.kind !== "loading" || (home.known && !signedIn))
+  ) {
+    setStarted(true)
+  }
 
   // Text entry (letters, Space and Backspace go to the field) only makes sense on Search; never
   // let it outlive the screen, even if the field is hidden without a blur event.
@@ -48,7 +61,7 @@ export const App = () => {
       },
       root: shell,
     },
-    watching === undefined,
+    watching === undefined && started,
   )
 
   const play = useCallback(
@@ -102,16 +115,16 @@ export const App = () => {
               </button>
             ))}
           </nav>
-          {account.auth?.kind === "authenticated" ? (
+          {auth?.kind === "authenticated" ? (
             <span className="topbar__account">
-              {account.auth.displayName}
+              {auth.displayName}
               <Avatar
                 channel={{
-                  displayName: account.auth.displayName,
-                  login: account.auth.login,
-                  ...(account.auth.profileImageUrl === undefined
+                  displayName: auth.displayName,
+                  login: auth.login,
+                  ...(auth.profileImageUrl === undefined
                     ? {}
-                    : { profileImageUrl: account.auth.profileImageUrl }),
+                    : { profileImageUrl: auth.profileImageUrl }),
                 }}
                 size="sm"
               />
@@ -122,12 +135,12 @@ export const App = () => {
           <section aria-label="Siguiendo" hidden={tab !== "home"}>
             <HomeScreen
               active={watching === undefined && tab === "home"}
+              home={home}
               key={signedIn ? "signed-in" : "guest"}
               latencyMode={preferences.latencyMode}
               onLink={() => setTab("account")}
               onSearch={() => setTab("search")}
               onWatch={play}
-              signedIn={signedIn}
             />
           </section>
           <section aria-label="Buscar" hidden={tab !== "search"}>

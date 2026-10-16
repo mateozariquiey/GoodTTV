@@ -113,6 +113,17 @@ export const RecentChannelSchema = z.strictObject({
 export const RECENTS_LIMIT = 20
 export const RecentsListSchema = z.array(RecentChannelSchema).max(RECENTS_LIMIT)
 
+// Lo último que se vio en Inicio con la cuenta vinculada, para enseñarlo nada más abrir mientras llega lo de ahora. Sin
+// tokens: solo lo que se ve. Cada versión lo guarda a su manera (window.api.home).
+export const SavedHomeSchema = z.object({
+  account: AuthenticatedAuthSchema,
+  following: z.array(StreamCardSchema).max(100), // loadHome pide 100
+  popular: z.array(StreamCardSchema).max(100),
+  recentLive: z.array(StreamCardSchema).max(RECENTS_LIMIT),
+  recents: RecentsListSchema,
+  savedAt: z.number().int().nonnegative(),
+})
+
 // Retraso del directo con el reproductor propio (variante privada, D11): «sin-paradas» deja un margen fijo que cubre
 // las pausas globales; «adaptativo» lo deja solo tras la primera; «directo» no añade retraso ni rellena las pausas.
 export const LatencyModeSchema = z.enum(["sin-paradas", "adaptativo", "directo"])
@@ -162,6 +173,7 @@ export type PlayerInteractionEnd = z.infer<typeof PlayerInteractionEndSchema>
 export type Preferences = z.infer<typeof PreferencesSchema>
 export type PreferencesPatch = z.infer<typeof PreferencesPatchSchema>
 export type RecentChannel = z.infer<typeof RecentChannelSchema>
+export type SavedHome = z.infer<typeof SavedHomeSchema>
 export type SearchInput = z.input<typeof SearchInputSchema>
 export type StreamCard = z.infer<typeof StreamCardSchema>
 
@@ -185,6 +197,12 @@ export interface AppApi {
     readonly close: () => Promise<void>
     readonly onBatch: (listener: (batch: ChatBatch) => void) => () => void
     readonly open: (input: ChatOpenInput) => Promise<number>
+  }
+  // Inicio de la última vez (SavedHomeSchema); null si no hay nada guardado.
+  readonly home: {
+    readonly forget: () => Promise<void>
+    readonly save: (home: SavedHome) => Promise<void>
+    readonly saved: () => Promise<SavedHome | null>
   }
   readonly input: {
     readonly onAction: (listener: (action: InputAction) => void) => () => void

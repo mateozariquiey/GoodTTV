@@ -1,6 +1,6 @@
 {
   "name": "goodttv",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "description": "Cliente de Twitch para la tele, manejado con un mando: directos, seguidos y chat con emotes de 7TV, BTTV y FFZ",
   "author": {
     "name": "Mateo Zariquiey",

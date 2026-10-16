@@ -99,6 +99,7 @@ const setup = (ownsProfile = true) => {
     },
   )
   const localDataFile = vi.fn((directory: string) => ({ directory }))
+  const savedHomeStore = vi.fn((directory: string) => ({ saved: directory }))
   const EmoteCatalog = vi.fn(
     class {
       public constructor() {
@@ -166,6 +167,7 @@ const setup = (ownsProfile = true) => {
   vi.doMock("@goodttv/servicios", () => ({ EmoteCatalog, EventSubChat, LocalStore, TwitchService }))
   vi.doMock("./local-store", () => ({ localDataFile }))
   vi.doMock("./player-interaction", () => ({ createPlayerInteraction }))
+  vi.doMock("./saved-home", () => ({ savedHomeStore }))
   vi.doMock("./settings-store", () => ({ SettingsStore }))
   vi.doMock("./token-vault", () => ({ TokenVault }))
   return {
@@ -187,6 +189,7 @@ const setup = (ownsProfile = true) => {
     on,
     ready,
     registerIpc,
+    savedHomeStore,
     server,
     serverStarted,
     serving,
@@ -299,11 +302,12 @@ describe("profile ownership at the real main entry point", () => {
     expect(fixture.TokenVault).toHaveBeenCalledExactlyOnceWith("/profile", expect.any(Object))
     expect(fixture.localDataFile).toHaveBeenCalledExactlyOnceWith("/profile")
     expect(fixture.LocalStore).toHaveBeenCalledExactlyOnceWith({ directory: "/profile" })
+    expect(fixture.savedHomeStore).toHaveBeenCalledExactlyOnceWith("/profile")
     expect(fixture.SettingsStore).toHaveBeenCalledExactlyOnceWith()
     expect(fixture.TwitchService).toHaveBeenCalledTimes(1)
     expect(fixture.createInputRouter).toHaveBeenCalledExactlyOnceWith(fixture.window.webContents)
     expect(fixture.registerIpc).toHaveBeenCalledExactlyOnceWith(
-      expect.objectContaining({ mainWindow: fixture.window }),
+      expect.objectContaining({ home: { saved: "/profile" }, mainWindow: fixture.window }),
     )
     expect(fixture.window.loadURL).toHaveBeenCalledExactlyOnceWith(fixture.server.origin)
     expect(fixture.window.restore).not.toHaveBeenCalled()

@@ -17,6 +17,7 @@ import {
   PreferencesSchema,
   RecentChannelSchema,
   RecentsListSchema,
+  SavedHomeSchema,
   SearchInputSchema,
   StreamCardSchema,
 } from "@goodttv/contratos"
@@ -82,6 +83,11 @@ const api: AppApi = {
       subscribe(CHANNELS.chatBatch, (batch) => [ChatBatchSchema.parse(batch)] as const, listener),
     open: (input) =>
       invoke(z.number().int().nonnegative(), CHANNELS.chatOpen, ChatOpenInputSchema.parse(input)),
+  },
+  home: {
+    forget: () => invoke(z.undefined(), CHANNELS.homeForget),
+    save: (home) => invoke(z.undefined(), CHANNELS.homeSave, SavedHomeSchema.parse(home)),
+    saved: () => invoke(SavedHomeSchema.nullable(), CHANNELS.homeSaved),
   },
   input: {
     onAction: (listener) =>

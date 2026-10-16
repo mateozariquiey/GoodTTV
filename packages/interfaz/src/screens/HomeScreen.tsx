@@ -1,7 +1,7 @@
 import type { LatencyMode } from "@goodttv/contratos"
-import { useCallback, useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { type Channel, fromRecent, fromStream, previewAt } from "../channel"
-import { loadHome, useResource } from "../data"
+import type { Home } from "../data"
 import { navigation } from "../navigation"
 import { usePrewarm } from "../player/useHlsPlayer"
 import { Avatar, ChannelRow, LiveBadge, StateMessage, Uptime, Viewers } from "../ui"
@@ -14,11 +14,11 @@ type Section = {
 
 type HomeScreenProps = {
   readonly active: boolean
+  readonly home: Home
   readonly latencyMode: LatencyMode
   readonly onLink: () => void
   readonly onSearch: () => void
   readonly onWatch: (channel: Channel, lineup: readonly Channel[]) => void
-  readonly signedIn: boolean
 }
 
 const REFRESH_MS = 120_000
@@ -29,29 +29,25 @@ export const rowId = (section: string, login: string): string => `home-${section
 
 export const HomeScreen = ({
   active,
+  home,
   latencyMode,
   onLink,
   onSearch,
   onWatch,
-  signedIn,
 }: HomeScreenProps) => {
-  const load = useCallback(() => loadHome(signedIn), [signedIn])
-  const { refresh, resource, retry } = useResource(load)
-  const [previewed, setPreviewed] = useState<Channel>()
-  // Con el foco quieto en un canal en directo, su directo se va preparando: al pulsar OK suele estar ya listo.
-  usePrewarm(
-    active && previewed !== undefined && previewed.live !== false ? previewed.login : null,
-    latencyMode,
-    PREWARM_MS,
-  )
+  const { fromSaved, known, reading, refresh, resource, retry, signedIn } = home
+  const [previewedId, setPreviewedId] = useState<string>() // la fila enfocada (rowId)
 
-  // Refresh in place when coming back from playback and periodically while visible.
+  // Refresh in place when coming back from playback and periodically while visible. Lo guardado de la última vez no
+  // cuenta: lo de ahora ya está en camino.
   useEffect(() => {
     if (!active) return undefined
-    if (resource.kind === "ready" && Date.now() - resource.updatedAt > STALE_MS) void refresh()
+    if (!fromSaved && resource.kind === "ready" && Date.now() - resource.updatedAt > STALE_MS) {
+      void refresh()
+    }
     const timer = setInterval(() => void refresh(), REFRESH_MS)
     return () => clearInterval(timer)
-  }, [active, refresh, resource])
+  }, [active, fromSaved, refresh, resource])
 
   // If the focused channel vanished in a refresh, put focus back on something real.
   useEffect(() => {
@@ -86,6 +82,22 @@ export const HomeScreen = ({
     ]
   }, [resource, signedIn])
 
+  // La fila enfocada, con lo que digan las listas de ahora: un refresco, o lo de ahora tras lo guardado, puede cambiar
+  // su título, sus espectadores o si está en directo sin que la fila pierda el foco.
+  const previewed = useMemo(() => {
+    for (const section of sections) {
+      const channel = section.channels.find((each) => rowId(section.id, each.login) === previewedId)
+      if (channel !== undefined) return channel
+    }
+    return undefined
+  }, [previewedId, sections])
+  // Con el foco quieto en un canal en directo, su directo se va preparando: al pulsar OK suele estar ya listo.
+  usePrewarm(
+    active && previewed !== undefined && previewed.live !== false ? previewed.login : null,
+    latencyMode,
+    PREWARM_MS,
+  )
+
   const liveFollowing = sections.find((section) => section.id === "following")?.channels.length ?? 0
   const firstChannel = sections.find((section) => section.channels.length > 0)?.channels[0]
   const preview = previewed ?? firstChannel
@@ -93,7 +105,7 @@ export const HomeScreen = ({
   return (
     <div className="home">
       <div className="guide">
-        {resource.kind === "loading" ? (
+        {resource.kind === "loading" && !reading ? (
           <StateMessage kind="loading" title="Cargando canales…" />
         ) : null}
         {resource.kind === "error" ? (
@@ -104,7 +116,7 @@ export const HomeScreen = ({
             title="No se pudo cargar la lista de Twitch"
           />
         ) : null}
-        {signedIn ? null : (
+        {signedIn || !known ? null : (
           <div className="guide__intro">
             <p>Vincula tu cuenta para ver aquí a quién sigues en directo.</p>
             <div className="guide__actions">
@@ -162,7 +174,7 @@ export const HomeScreen = ({
                       channel={channel}
                       entry={channel === firstChannel}
                       navId={rowId(section.id, channel.login)}
-                      onFocus={() => setPreviewed(channel)}
+                      onFocus={() => setPreviewedId(rowId(section.id, channel.login))}
                       onOpen={() =>
                         onWatch(
                           channel,
@@ -177,19 +189,22 @@ export const HomeScreen = ({
           </section>
         ))}
       </div>
-      <Preview channel={preview} signedIn={signedIn} />
+      <Preview channel={preview} known={known || signedIn} signedIn={signedIn} />
     </div>
   )
 }
 
 const Preview = ({
   channel,
+  known,
   signedIn,
 }: {
   readonly channel: Channel | undefined
+  readonly known: boolean // sin saber aún si hay cuenta, ni una cosa ni otra
   readonly signedIn: boolean
 }) => {
   const [failed, setFailed] = useState<string>()
+  if (channel === undefined && !known) return <aside className="preview preview--empty" />
   if (channel === undefined) {
     return (
       <aside className="preview preview--empty">
