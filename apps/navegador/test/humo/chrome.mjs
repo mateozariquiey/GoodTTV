@@ -35,6 +35,9 @@ export const launchChrome = async ({
       "--remote-debugging-port=0",
       "--no-first-run",
       "--no-default-browser-check",
+      // Sin el llavero del sistema: si está bloqueado (una sesión sin escritorio, como la VM de agentes), Chrome
+      // espera a que se desbloquee antes de abrir las cookies, y ninguna petición de red sale. El perfil es temporal.
+      "--password-store=basic",
       `--disable-extensions-except=${extension}`,
       `--load-extension=${extension}`,
       "--autoplay-policy=no-user-gesture-required",

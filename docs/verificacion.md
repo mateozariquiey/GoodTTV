@@ -238,7 +238,32 @@ scripts y las capturas están en `.lab/zoom/` (no se suben).
     siguiente encogen como mucho un 3 %.
 - **Pruebas:** `bun run verify`, y `test:interfaz` en Chrome, Firefox y Zen (25 pasos).
 - **El usuario** lo probó en su navegador el 12 de octubre y lo dio por bueno.
+- **La 0.2.0 publicada** (con la búsqueda centrada en la barra): el usuario la probó en su navegador el 12 de octubre
+  y funciona.
 - **Sin comprobar:** Ctrl + de verdad en Chrome (solo simulado).
+
+### Icono y arranque
+
+15 de octubre, en la VM de agentes del mini PC (Chrome for Testing 155, Firefox 158 y Zen 1.23, sin ventana).
+- **Icono:** la pestaña muestra el SVG de `public/icono.svg` en Chrome, Firefox y Zen; antes no tenía ninguno. En
+  Zen, una pestaña fijada lo conserva al reiniciar, antes de cargarse.
+- **Marcadores en Firefox y Zen:** siguen sin icono, y la extensión no puede hacer nada. Places rechaza guardar el
+  favicon de una página `moz-extension://` (`setFaviconForPage` da `NS_ERROR_ILLEGAL_VALUE`; con una página https lo
+  acepta). Para tenerlo a mano con su icono: fijar la pestaña o usar el botón de la extensión.
+- **Arranque**, con un arnés (`.lab/arranque-visual/arranque.mjs`, no se sube):
+  - Chrome con la extensión y una sesión ficticia;
+  - un `fetch` simulado que contesta a id.twitch.tv y a Helix con datos reales del momento, y con retrasos que suman
+    ~1 s, como la red de verdad;
+  - una línea de tiempo de lo que se ve, más capturas.
+
+  | Momento | Antes | Ahora |
+  | --- | --- | --- |
+  | 50-90 ms | Bienvenida sin cuenta y «Vincula tu cuenta» | Inicio de la última vez (2.ª apertura); «Cargando…» la primera |
+  | ~630 ms | Todos los seguidos fuera de directo y los recientes «Desconectado» | Igual |
+  | ~1100 ms | Inicio con los datos | Inicio con los datos de ahora |
+
+  Si Helix falla al refrescar, se sigue viendo lo guardado; antes, la columna decía «Ninguno de tus seguidos está en
+  directo». Pasan los 25 pasos de la prueba de la interfaz en Chrome y en Firefox.
 
 ## Rendimiento del reproductor propio
 
@@ -376,5 +401,81 @@ por segundo con emotes e insignias de Twitch), en Chrome con la GPU, 3 canales:
 - el mini PC, la TV y tu pantalla;
 - Zen con tu perfil;
 - el chat de verdad con una cuenta, con emotes animados de 7TV;
-- sesiones de más de 7 min con la carga progresiva (las de los modos duran 400 s);
 - el precalentado con el ratón real (la prueba lo pide directamente).
+
+### «Sin paradas»: saltos al crecer el retraso
+
+15 de octubre. El usuario vio saltos constantes en *Sin paradas*, sobre todo en `elxokas`, que no emitía durante las
+pruebas. Medido en la VM de agentes, sin ventana y con decodificación por software, con
+`herramientas/laboratorio/vigilar.mjs`. Muestrea cada segundo la posición, el retraso, el búfer y la ventana de la
+lista, y apunta cada `seeking`, cada error de hls.js y los eventos del empalme.
+- **En condiciones normales no salta:** 20 min en Firefox (`carola`) y 20 min en Chrome (`alexelcapo`) sin un salto, una
+  parada ni un error; son también las primeras sesiones largas con la carga progresiva. La posición queda a 14-17 s
+  del principio de la lista publicada, que eran 20 fragmentos (40 s).
+- **El margen era corto.** *Sin paradas* conserva el retraso que se añade, pero la lista solo abarcaba 16 s más que el
+  objetivo:
+  - tras una pausa de la persona de 35 s, el retraso quedó en 60 s y la posición 20 s por detrás del principio de la
+    lista, viviendo solo del búfer;
+  - tras cada relleno con el VOD (cuatro pausas globales simuladas de 75 s, `?pausa=150,75`), el retraso subió de 25 a
+    30 s; al salir de la lista los trozos del VOD (~10 s), su principio avanzaba de golpe y dejaba ~12 s de margen;
+  - fuera de la lista, hls.js recoloca la posición (`synchronizeToLiveEdge`, y `getNextFragment` cuando lo siguiente
+    ya no está en ella).
+- **Comparación a la vez** (Chrome, `caedrel`, pausa de la persona de 50 s):
+  - **la versión anterior** quedó 35 s por detrás del principio de la lista y saltó 38 s hacia delante, que se
+    perdieron. Después se quedó pegada al principio de la lista (a 0-2 s), con un objetivo de 77 s que la lista no
+    abarcaba: cualquier parada desde ahí la vuelve a recolocar;
+  - **la nueva** siguió desde donde se pausó, sin saltos, con la posición a ~24 s del principio de la lista.
+- **El arreglo:** la lista abarca 100 s, más que lo que hls.js deja quedarse atrás (84 s), y el retraso conservado se
+  queda 10 s por debajo de ese tope ([arquitectura.md](arquitectura.md#reproducción)). Los fragmentos en directo de
+  Twitch se pueden descargar hasta unos 4,5 min: a los 268 s, sí; a los 328 s, ya no.
+- **Pruebas:** pasan los 7 e2e de la tele, la prueba de la interfaz y la de los modos (`carola`, Chrome y Firefox):
+  - *Sin paradas*, `150,45`: ninguna parada, dos rellenos y vuelta con 0 s de salto;
+  - *Adaptativo*: una parada de 12-14 s en la primera pausa, como antes, ninguna después y vuelta con 0 s de salto.
+- **Sin comprobar:** el canal del usuario (`elxokas`); en él es probable que se sumen pausas de anuncios con un VOD más
+  lento y paradas de red. Que esta fuera la causa de lo que vio el usuario es una hipótesis; queda pendiente probarlo
+  en ese canal.
+
+### fMP4: saltos con la carga progresiva
+
+15 de octubre por la tarde. El usuario, en Zen y *Sin paradas*, vio saltos sin parar en `illojuan`, y el retraso en
+«0 s por detrás»; en otros canales, no. Medido en la VM de agentes con `vigilar.mjs` (datos en `.lab/illojuan/`).
+- **La diferencia es el formato.** `illojuan` emite en fMP4 (`EXT-X-MAP`, calidades sin «(source)»: *Enhanced
+  Broadcasting*); los canales de las pruebas anteriores (`carola`, `alexelcapo`, `caedrel`), en MPEG-TS. De los 24 con
+  más espectadores en ese momento, 7 iban en fMP4. El VOD va en el mismo formato que el directo. Cada fragmento de
+  `illojuan` es normal: 2 s, 120 fotogramas a 60 fps, en 19 trozos CMAF (`moof` + `mdat`) con un `emsg` delante.
+- **El empalme no tenía la culpa:** ejecutado aparte, publica fragmentos continuos (tiempo de vídeo y PDT, +2 s cada
+  uno). El anuncio de entrada solo lo tuvo `embed`, y no influye.
+- **hls.js sí.** Con `progressive: true`, cada trozo que llega se compara con el principio del fragmento entero; a partir
+  de 1 s de diferencia, `isInvalidInitPts` (`passthrough-remuxer.ts`) da el reloj por malo, lo recalcula y coloca ese
+  trozo en el principio del fragmento, encima de lo anterior. Cada fragmento de 2 s ocupaba ~1,1 s en la lista de
+  hls.js (50 fragmentos en ~55 s). Lo confirmó la revisión de Codex reproduciéndolo con las clases de hls.js y
+  fragmentos reales: 2 s el primero y 1,18 / 1,07 / 1,08 s los siguientes; con `progressive: false`, 2,000 s todos. Con
+  MPEG-TS no pasa: va por otro remuxer.
+- **Antes, en Zen,** 20 min: el retraso real cayó de 27 a ~2 s en 40 s y no se recuperó; el vídeo estuvo parado 538 s
+  (el 45 %), con el búfer a ~0 y hasta 14 rangos en `buffered`. En Chrome, igual los 4 min que duró.
+- **Sin carga progresiva** (la misma versión, solo con `progressive: false`), en Zen, 5 min: ningún salto ni parada, el
+  retraso real fijo en 22,2 s y ~21 s de búfer.
+- **El arreglo:** sin carga progresiva cuando la primera lista trae `EXT-X-MAP`
+  ([arquitectura.md](arquitectura.md#reproducción)); MPEG-TS la conserva. El precio en fMP4: el último fragmento
+  (PREFETCH) entra en el búfer al completarse, como antes de la carga progresiva.
+- **Con el arreglo,** en *Sin paradas*, sin un salto, una parada ni un error de hls.js:
+
+  | Canal (formato) | Navegador | Duración | Antes | Ahora |
+  | --- | --- | --- | --- | --- |
+  | `illojuan` (fMP4) | Zen | 10 min | 538 s parado en 20 min; retraso real ~2 s | retraso real fijo en 20,9 s; búfer 19-20 s |
+  | `buster` (fMP4) | Chrome | 2,5 min | 43 saltos, 55 s parado; retraso real ~4 s | fijo en 22,8 s; búfer ~19,5 s |
+  | `carola` (TS) | Chrome | 2,5 min | — | fijo en 20,5 s; búfer ~20,8 s |
+
+  Pasan `bun run verify` (con una prueba nueva en `reproductor-propio.test.ts`), los 25 pasos de la prueba de la
+  interfaz en Chrome y Firefox (`illojuan,carola`) y los 7 e2e de la tele.
+- **Rendimiento, en *Adaptativo*** (margen de 5 s, donde más pesa la carga progresiva), las dos versiones a la vez en
+  Chrome sin ventana, 2 rondas de 45 s por canal:
+  - **fMP4** (`illojuan`, `buster`): antes, ~21 s parado de cada 45 s y ~1000 fotogramas pintados; ahora, 2-3 s
+    parado en la primera ronda, ninguno en la segunda, y ~2600 fotogramas. El búfer mínimo, 0,1-0,8 s;
+  - **TS** (`carola`): igual en las dos;
+  - **arranque:** igual (primer fotograma, mediana de 889 frente a 897 ms).
+- **El usuario** lo probó en Zen, con su perfil, el 16 de octubre: `illojuan` va perfecto. Sale en la 0.2.1.
+- **Sin comprobar:** la tele en el mini PC; si las paradas de 2-3 s en *Adaptativo* con fMP4 son el precio de cargar
+  fragmento a fragmento o ruido de las dos pruebas a la vez.
+- **Límite:** se decide al crear el reproductor. Si una emisión nueva cambia de formato con él abierto, sigue con lo
+  decidido hasta que se vuelva a abrir el canal.

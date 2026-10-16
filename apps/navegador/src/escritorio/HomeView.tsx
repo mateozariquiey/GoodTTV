@@ -123,6 +123,14 @@ export const HomeView = ({
       </div>
     )
   }
+  // Sin cuenta, o sin saber aún si la hay: ni la bienvenida ni «Seguir viendo» hasta tener lo de verdad.
+  if (resource.kind === "loading" && !signedIn) {
+    return (
+      <div className="page">
+        <p className="page__note">Cargando…</p>
+      </div>
+    )
+  }
   return (
     <div className="page">
       {signedIn ? (

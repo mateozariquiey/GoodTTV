@@ -61,6 +61,7 @@ src/goodttv.tsx        monta las pantallas de escritorio; una sola pestaña a la
 │   ├── Search.tsx     búsqueda siempre arriba (/); Enter abre el canal con ese nombre exacto
 │   ├── Sidebar.tsx    tus seguidos en directo; plegable
 │   ├── HomeView.tsx   miniaturas de tus seguidos y populares, y «Seguir viendo»
+│   ├── home-cache.ts  Inicio de la última vez, para enseñarlo nada más abrir
 │   ├── ChannelView.tsx  el vídeo con controles encima, ficha del canal y chat; modo teatro
 │   ├── SettingsView.tsx cuenta, retraso, chat y la lista de atajos
 │   ├── shortcuts.ts   atajos de teclado (Espacio, M, T, F, C, ↑ ↓, /, Esc)
@@ -76,6 +77,8 @@ src/fondo.ts           abre o trae al frente la página; menú «Abrir en GoodTT
 
 - **Un solo manifest para los dos navegadores** (`public/manifest.json`, MV3):
   - el fondo, declarado como `service_worker` (Chrome) y como `scripts` (Firefox);
+  - el icono, en PNG (Chrome no admite SVG en el manifest); la página lleva el mismo en SVG
+    (`public/icono.svg`) como favicon, en negativo si el navegador va en claro;
   - `gecko.id`;
   - permisos de host para Twitch y sus CDN.
 
@@ -95,6 +98,13 @@ src/fondo.ts           abre o trae al frente la página; menú «Abrir en GoodTT
   carga la ventana. Aquí la página es la propia extensión: Manifest V3 no deja cargar código ajeno,
   y los tokens se quedan en los servicios; la interfaz solo recibe datos. Se guardan sin cifrar en
   `chrome.storage.local`, y Ajustes lo avisa.
+- **Inicio sale ya al abrir** (`escritorio/home-cache.ts`). Comprobar la cuenta y pedir los directos a Twitch tarda
+  alrededor de un segundo. Mientras tanto se enseña lo que se vio la última vez con esa cuenta, guardado en
+  `localStorage` (se lee sin esperar, así que sale en la primera imagen; sin tokens), y se sustituye en cuanto llega lo
+  de ahora. Se olvida al cerrar sesión, y no se usa si la cuenta resulta ser otra. Sin nada guardado, Inicio dice
+  «Cargando…» hasta saber si hay cuenta: antes enseñaba la bienvenida sin cuenta y luego a todos los seguidos como
+  desconectados. `useResource` vuelve a «cargando» al cambiar de función de carga, para que lo cargado sin cuenta no
+  se enseñe como si fuera con ella.
 - **Una sola GoodTTV a la vez** (`goodttv.tsx`). La pestaña abierta tiene un bloqueo del navegador
   (`navigator.locks`). Otra pestaña avisa y puede pedirlo:
   1. se pone a la cola y lo anuncia por un `BroadcastChannel`;
@@ -219,6 +229,12 @@ funciona como se describe a continuación.
   que sobre de margen se salta (un salto de ~1-2 s hacia el segundo 3); acelerar a 1,05× durante
   ~30 s descartaba fotogramas (60 fps a 1,05× piden 63 por segundo). No se salta tras una pausa de
   la persona ni con la lista parada (una pausa global): ese retraso no es margen que sobre.
+- **La lista abarca 100 s** (`WINDOW_SECONDS` en el empalme), más de lo que hls.js deja quedarse atrás antes de
+  saltar (`liveMaxLatencyDuration`: el objetivo más 60 s, 84 s en *Sin paradas*). *Sin paradas* y *Adaptativo* (tras
+  el primer relleno) conservan el retraso que se añade, como una pausa de la persona, hasta 10 s por debajo de ese
+  tope. Con 20 fragmentos (40 s) y el objetivo de 24 s, bastaban 16 s de más para que la posición se saliera de la
+  lista, y hls.js la recolocaba a saltos (15 oct, [verificacion.md](verificacion.md#sin-paradas-saltos-al-crecer-el-retraso)).
+  Los fragmentos de Twitch se pueden descargar unos 4,5 min.
 - **Recarga bloqueante larga:** el directo retiene la petición de la lista hasta 20 s, y también la
   que llega sin `_HLS_msn` si ese reproductor (`visita`) ya tiene lo último. Tras una respuesta sin
   novedades, hls.js pregunta sin `_HLS_msn` y, si vuelve igual, no pregunta otra vez hasta pasados
@@ -228,6 +244,11 @@ funciona como se describe a continuación.
   a medida que llega. El último de Twitch (PREFETCH) se descarga mientras se codifica, durante unos
   2 s; antes el búfer solo crecía al completarse cada fragmento y bajaba a ~1 s justo antes. El
   primer fragmento se pide sin esperar al MediaSource (`startFragPrefetch`).
+  - **Solo con MPEG-TS.** Los canales con fMP4 (`EXT-X-MAP`; p. ej. con *Enhanced Broadcasting*, como `illojuan`) se
+    cargan fragmento a fragmento: hls.js 1.7 sitúa cada trozo que llega respecto al principio del fragmento y, a partir
+    de 1 s, lo da por desfasado (`isInvalidInitPts`) y lo pone encima de lo anterior. Se decide con la primera lista,
+    antes de cargar nada (`useHlsPlayer`, `LEVEL_LOADED`); el VOD va en el mismo formato que el directo
+    ([verificacion.md](verificacion.md#fmp4-saltos-con-la-carga-progresiva)).
 - **El chat, barato de pintar:** cada lote solo pinta los mensajes nuevos (`Message` memoizado) y la
   lista lleva `contain: strict`, así que los mensajes que entran no recolocan el resto de la pantalla.
 

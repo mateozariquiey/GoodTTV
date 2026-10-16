@@ -8,6 +8,7 @@ export const Sidebar = ({
   channels,
   collapsed,
   current,
+  failed,
   loading,
   onCollapse,
   onOpen,
@@ -16,6 +17,7 @@ export const Sidebar = ({
   readonly channels: readonly Channel[]
   readonly collapsed: boolean
   readonly current: string | undefined
+  readonly failed: boolean
   readonly loading: boolean
   readonly onCollapse: () => void
   readonly onOpen: (channel: Channel) => void
@@ -35,12 +37,14 @@ export const Sidebar = ({
         <SidebarSimpleIcon aria-hidden="true" />
       </button>
     </div>
-    {!signedIn ? (
+    {loading && channels.length === 0 ? (
+      <p className="sidebar__note">Cargando…</p>
+    ) : !signedIn ? (
       <p className="sidebar__note">
         <a href="#/ajustes">Vincula tu cuenta</a> para ver aquí a quién sigues.
       </p>
-    ) : loading && channels.length === 0 ? (
-      <p className="sidebar__note">Cargando…</p>
+    ) : failed && channels.length === 0 ? (
+      <p className="sidebar__note">No se pudo cargar.</p>
     ) : channels.length === 0 ? (
       <p className="sidebar__note">Ninguno de tus seguidos está en directo.</p>
     ) : (

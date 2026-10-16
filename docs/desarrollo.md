@@ -68,7 +68,7 @@ X11. La tecla Atrás del navegador no se puede simular así y se envía Escape, 
 
 ```bash
 bun run package:appimage
-sha256sum apps/tele/dist/GoodTTV-0.2.0-x86_64.AppImage
+sha256sum apps/tele/dist/GoodTTV-0.2.1-x86_64.AppImage
 ```
 
 - El AppImage arranca a pantalla completa (`--fullscreen` va en su lanzador).
@@ -82,8 +82,8 @@ sha256sum apps/tele/dist/GoodTTV-0.2.0-x86_64.AppImage
 En el mini PC:
 
 ```bash
-chmod +x GoodTTV-0.2.0-x86_64.AppImage
-./GoodTTV-0.2.0-x86_64.AppImage                 # necesita libfuse2
+chmod +x GoodTTV-0.2.1-x86_64.AppImage
+./GoodTTV-0.2.1-x86_64.AppImage                 # necesita libfuse2
 APPIMAGE_EXTRACT_AND_RUN=1 ./GoodTTV-…AppImage   # alternativa sin FUSE
 bash diagnostico.sh > diagnostico.txt           # apps/tele/scripts: GPU, VA-API, pantallas, audio, mando
 ```

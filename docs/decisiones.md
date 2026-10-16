@@ -1,6 +1,6 @@
 # Auditoría de VacuumStream y decisiones de la variante
 
-> Estado: decisiones aplicadas hasta GoodTTV 0.2.0. Lo comprobado y lo pendiente están en
+> Estado: decisiones aplicadas hasta GoodTTV 0.2.1. Lo comprobado y lo pendiente están en
 > [verificacion.md](verificacion.md).
 
 Fecha: 8 de octubre de 2026. Base: VacuumStream 0.2.1 (`0427456`, MIT), con su historial

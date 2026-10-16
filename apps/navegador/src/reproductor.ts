@@ -132,6 +132,9 @@ const start = async (element: HTMLVideoElement): Promise<void> => {
     element.play().catch((error: unknown) => estado.errores.push(`play: ${String(error)}`))
   })
   hls.once(Hls.Events.LEVEL_LOADED, (_event, data) => {
+    // fMP4, sin carga progresiva (ver useHlsPlayer.ts).
+    if (data.details.fragments.some((frag) => frag.initSegment !== null))
+      hls.config.progressive = false
     hls.startLoad(Math.max(0, data.details.edge - target))
   })
   hls.on(Hls.Events.FRAG_LOADED, (_event, data) => {

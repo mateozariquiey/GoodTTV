@@ -25,7 +25,9 @@ const { FakeHls, players } = vi.hoisted(() => {
     latestLevelDetails: { age: number } | null = { age: 0.5 }
     playingDate = null
     targetLatency: number | null = 5
-    constructor() {
+    readonly config: { progressive?: boolean }
+    constructor(config: { progressive?: boolean }) {
+      this.config = { ...config }
       players.push(this)
     }
     on(event: string, handler: Handler): void {
@@ -147,9 +149,25 @@ describe("error fatal de medios", () => {
     const { player, video } = await open()
     video.currentTime = 0
     player.emit("error", { fatal: true, type: "mediaError" })
-    player.emit("levelLoaded", { details: { edge: 30 } }) // objetivo: 2,5 fragmentos de 2 s
-    player.emit("levelLoaded", { details: { edge: 32 } })
+    player.emit("levelLoaded", { details: { edge: 30, fragments: [] } }) // objetivo: 2,5 fragmentos de 2 s
+    player.emit("levelLoaded", { details: { edge: 32, fragments: [] } })
     expect(player.calls).toEqual(["recoverMediaError", "startLoad -1", "startLoad 25"])
+  })
+})
+
+describe("carga progresiva", () => {
+  it("con fMP4 (EXT-X-MAP) se quita antes de empezar a cargar; con MPEG-TS se queda", async () => {
+    const { player: fmp4 } = await open()
+    expect(fmp4.config.progressive).toBe(true)
+    fmp4.emit("levelLoaded", { details: { edge: 30, fragments: [{ initSegment: {} }] } })
+    expect(fmp4.config.progressive).toBe(false)
+    expect(fmp4.calls).toEqual(["startLoad 25"])
+
+    await show("b")
+    const ts = players.at(-1)
+    if (ts === undefined) throw new Error("sin reproductor")
+    ts.emit("levelLoaded", { details: { edge: 30, fragments: [{ initSegment: null }] } })
+    expect(ts.config.progressive).toBe(true)
   })
 })
 

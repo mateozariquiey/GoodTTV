@@ -27,7 +27,11 @@ const VOD_RETURN_WAIT_MS = 25_000 // al volver del relleno, cuánto se espera al
 // (un VOD muy atrasado no alcanzaría nunca el directo que se conserva).
 const RETURN_AHEAD_MAX_MS = 45_000
 const VOD_TARGET = 13 // TARGETDURATION fija con relleno: cubre los trozos del VOD (hasta 12,5 s) y no cambia
-const WINDOW = 20 // fragmentos publicados en la lista (con margen para el modo sin paradas)
+// Segundos que abarca la lista publicada. Más de lo que el reproductor deja quedarse atrás antes de saltar al directo
+// (liveMaxLatencyDuration en useHlsPlayer.ts: 84 s en el modo sin paradas). Si la posición se sale de la lista, hls.js
+// la recoloca a saltos; con 20 fragmentos (40 s), bastaba con que se sumaran 16 s al margen de 24 s (una pausa de la
+// persona, una parada). Los fragmentos en directo de Twitch se siguen pudiendo descargar minutos después.
+const WINDOW_SECONDS = 100
 
 type SessionState = "abriendo" | "abierta" | "anuncio" | "directo" | "error"
 
@@ -690,8 +694,15 @@ export class Empalme {
   private push(entry: Published): void {
     this.out.push(entry)
     this.pendingDiscontinuity = false
-    while (this.out.length > WINDOW)
-      if (this.out.shift()?.discontinuity === true) this.discontinuities++
+    // Se quita el más antiguo mientras el resto siga abarcando la ventana.
+    let rest = this.out.reduce((total, each) => total + each.duration, 0)
+    for (;;) {
+      const first = this.out[0]
+      if (first === undefined || rest - first.duration < WINDOW_SECONDS) break
+      this.out.shift()
+      if (first.discontinuity) this.discontinuities++
+      rest -= first.duration
+    }
     this.notify()
   }
 

@@ -101,6 +101,24 @@ describe("numeración común", () => {
     expect(out.every((o) => o.pdt === t(o.seq ?? 0))).toBe(true)
   })
 
+  it("publica los últimos 100 s, más de lo que el reproductor deja quedarse atrás", () => {
+    const { empalme, sessions } = make({ sources: ["embed"] })
+    const [embed] = sessions
+    if (embed === undefined) throw new Error("sin sesiones")
+    // Un hueco (121-124 no llegan nunca) deja una discontinuidad que luego sale de la lista.
+    for (let k = 0; k <= 80; k++) {
+      const last = 104 + k
+      if (last >= 121 && last <= 124) continue
+      const first = last > 124 ? Math.max(100 + k, 125) : 100 + k
+      empalme.receive(embed, playlist(first, first, L(first, last)))
+    }
+    const out = empalme.publishedForTests
+    expect(out.at(-1)?.seq).toBe(184)
+    expect(out.reduce((total, o) => total + o.duration, 0)).toBe(100)
+    expect(out[0]?.seq).toBe(135)
+    expect(empalme.playlist()).toContain("#EXT-X-DISCONTINUITY-SEQUENCE:1")
+  })
+
   it("retira los prefetch que dejan de estar confirmados", () => {
     const { empalme, sessions, events } = make({ sources: ["site", "embed"] })
     const [site, embed] = sessions

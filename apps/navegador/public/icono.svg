@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16">
+  <title>GoodTTV</title>
+  <!-- La marca de la barra superior (.brand__logo en escritorio/desktop.css), ajustada a la cuadrícula de 16 px para
+       que se vea nítida en la pestaña y en los marcadores. Con el navegador en claro, en negativo: el cuadrado blanco
+       no se distinguiría del fondo. -->
+  <style>
+    .fondo { fill: #f2f2f4; }
+    .barra { fill: #0c0c0e; }
+    @media (prefers-color-scheme: light) {
+      .fondo { fill: #0c0c0e; }
+      .barra { fill: #f2f2f4; }
+    }
+  </style>
+  <rect class="fondo" width="16" height="16" rx="3.5"/>
+  <rect class="barra" x="5" y="4" width="2" height="8" rx="0.5"/>
+  <rect class="barra" x="9" y="4" width="2" height="8" rx="0.5"/>
+</svg>

@@ -25,6 +25,13 @@ const errorMessage = (error: unknown): string => {
 
 export const useResource = <Value>(load: (() => Promise<Value>) | undefined) => {
   const [resource, setResource] = useState<Resource<Value>>({ kind: "loading" })
+  // What another loader returned (signed out, then in) does not answer the new one: back to loading, in this same
+  // render, so it is never shown as if it did. Functions go in state through updaters, or React would call them.
+  const [loaded, setLoaded] = useState(() => load)
+  if (loaded !== load) {
+    setLoaded(() => load)
+    setResource({ kind: "loading" })
+  }
   const generation = useRef(0)
   const run = useCallback(async () => {
     if (load === undefined) return

@@ -2,7 +2,9 @@ import {
   type Channel,
   fromRecent,
   fromStream,
+  type HomeData,
   loadHome,
+  type Resource,
   useAppStatus,
   useAuth,
   usePreferences,
@@ -11,6 +13,7 @@ import {
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { ChannelView } from "./ChannelView"
 import { HomeView } from "./HomeView"
+import { forgetHome, pageStorage, readSavedHome, saveHome } from "./home-cache"
 import { usePointerPrewarm } from "./prewarm"
 import { navigate, useRoute } from "./routes"
 import { SettingsView } from "./SettingsView"
@@ -29,9 +32,37 @@ export const Desktop = () => {
   const account = useAuth()
   const status = useAppStatus()
   const { preferences, update } = usePreferences()
-  const signedIn = account.auth?.kind === "authenticated"
-  const load = useCallback(() => loadHome(signedIn), [signedIn])
+  // Al abrir, lo que se vio la última vez (home-cache.ts) mientras se comprueba la cuenta y llega lo de ahora; deja de
+  // valer si la cuenta resulta ser otra, o ninguna.
+  const [storage] = useState(pageStorage)
+  const [saved] = useState(() => readSavedHome(storage))
+  const savedAccount =
+    saved !== undefined &&
+    (account.auth === undefined ||
+      (account.auth.kind === "authenticated" && account.auth.login === saved.account.login))
+      ? saved
+      : undefined
+  const auth = account.auth ?? savedAccount?.account
+  const signedIn = auth?.kind === "authenticated"
+  // Inicio se pide cuando ya se sabe si hay cuenta: sin ella, salen todos los seguidos como desconectados.
+  const known = account.auth !== undefined
+  const load = useMemo(() => (known ? () => loadHome(signedIn) : undefined), [known, signedIn])
   const home = useResource(load)
+  // Si falla la primera carga, como cuando falla un refresco: se sigue viendo lo último bueno (el refresco de cada
+  // 2 min lo reintenta).
+  const resource = useMemo(
+    (): Resource<HomeData> =>
+      home.resource.kind !== "ready" && savedAccount !== undefined
+        ? { kind: "ready", updatedAt: savedAccount.savedAt, value: savedAccount.home }
+        : home.resource,
+    [home.resource, savedAccount],
+  )
+  useEffect(() => {
+    const current = account.auth
+    if (current === undefined || current.kind === "error") return // un fallo de red no es cerrar sesión
+    if (current.kind !== "authenticated") forgetHome(storage)
+    else if (home.resource.kind === "ready") saveHome(storage, current, home.resource.value)
+  }, [account.auth, home.resource, storage])
   const { refresh } = home
   useEffect(() => {
     const timer = setInterval(() => void refresh(), REFRESH_MS)
@@ -45,7 +76,7 @@ export const Desktop = () => {
     wasHome.current = atHome
   }, [atHome, refresh])
 
-  const data = home.resource.kind === "ready" ? home.resource.value : undefined
+  const data = resource.kind === "ready" ? resource.value : undefined
   const following = useMemo(() => data?.following.map(fromStream) ?? [], [data])
   const popular = useMemo(() => data?.popular.map(fromStream) ?? [], [data])
   const recents = useMemo(
@@ -107,7 +138,6 @@ export const Desktop = () => {
     return () => removeEventListener("keydown", onKey)
   }, [route.view, theater])
 
-  const auth = account.auth
   return (
     <div
       className={`desktop${theater && channel !== undefined ? " desktop--theater" : ""}${collapsed ? " desktop--collapsed" : ""}`}
@@ -122,7 +152,8 @@ export const Desktop = () => {
         channels={following}
         collapsed={collapsed}
         current={channel?.login}
-        loading={home.resource.kind === "loading"}
+        failed={resource.kind === "error"}
+        loading={resource.kind === "loading"}
         onCollapse={() => setCollapsed((value) => !value)}
         onOpen={open}
         signedIn={signedIn}
@@ -153,7 +184,7 @@ export const Desktop = () => {
             onRetry={home.retry}
             popular={popular}
             recents={recents}
-            resource={home.resource}
+            resource={resource}
             signedIn={signedIn}
           />
         )}

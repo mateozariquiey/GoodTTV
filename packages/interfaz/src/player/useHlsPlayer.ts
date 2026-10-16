@@ -44,6 +44,10 @@ const SYNC_SEGMENTS = 2.5
 const CATCHUP_RATE = 1.05 // velocidad para recuperar el margen cuando el modo lo pide
 const NO_STOP_TARGET = 24 // modo sin paradas: margen fijo (s) hasta el final de la lista, que cubre la espera del VOD
 const LIVE_MAX_BEHIND = 4 // modo directo: más atrás que esto sobre el objetivo, hls.js salta al directo
+const MAX_BEHIND = 60 // los otros modos: lo mismo, con margen para las pausas de la persona (la lista abarca 100 s)
+// El margen conservado se queda al menos esto por debajo de liveMaxLatencyDuration. Con el objetivo por encima, cada
+// lista nueva puede hacer que hls.js recoloque la posición, y con la lista larga apenas la movería: saltos repetidos.
+const KEEP_BELOW_MAX = 10
 // Si se empieza mientras se publican trozos del VOD (crece a saltos de ~10 s), margen (s) para no quedarse sin datos.
 const VOD_START_TARGET = 16
 
@@ -179,6 +183,7 @@ export const useHlsPlayer = (
             : info.filling
               ? Math.max(VOD_START_TARGET, segmentTarget)
               : segmentTarget
+        const maxLatency = target + (mode === "directo" ? LIVE_MAX_BEHIND : MAX_BEHIND)
         const player = new Hls({
           autoStartLoad: false, // empieza a cargar en el objetivo (LEVEL_LOADED, abajo)
           // Sin subtítulos ni pistas de metadatos (la interfaz no los usa): hls.js crearía pistas data: que la
@@ -199,13 +204,14 @@ export const useHlsPlayer = (
               timeoutRetry: { maxNumRetry: 60, maxRetryDelayMs: 0, retryDelayMs: 0 },
             },
           },
-          liveMaxLatencyDuration: target + (mode === "directo" ? LIVE_MAX_BEHIND : 60),
+          liveMaxLatencyDuration: maxLatency,
           liveSyncDuration: target,
           liveSyncOnStallIncrease: 0,
           manifestLoadingMaxRetry: 60,
           manifestLoadingRetryDelay: 1000,
           // Cada fragmento se añade al vídeo a medida que llega. El último de Twitch (PREFETCH) se descarga mientras
-          // se codifica, durante unos 2 s: sin esto el búfer solo crecía al completarse cada fragmento.
+          // se codifica, durante unos 2 s: sin esto el búfer solo crecía al completarse cada fragmento. Solo con
+          // MPEG-TS (ver LEVEL_LOADED).
           progressive: true,
           // El primer fragmento se pide sin esperar a que el <video> tenga listo su MediaSource.
           startFragPrefetch: true,
@@ -217,6 +223,14 @@ export const useHlsPlayer = (
         // del final que TARGETDURATION, y con relleno la lista declara 13 s (los trozos del VOD): empezaría al
         // principio de la lista, más atrás de lo pedido, y luego aceleraría (1,05× descarta fotogramas).
         player.once(Hls.Events.LEVEL_LOADED, (_event, data) => {
+          // fMP4 (EXT-X-MAP; p. ej. los canales con Enhanced Broadcasting), sin carga progresiva: hls.js 1.7 sitúa cada
+          // trozo que llega respecto al principio del fragmento y, a partir de 1 s, lo da por desfasado y lo pone
+          // encima de lo anterior. Cada fragmento de 2 s ocupaba ~1,1 s: saltos y la imagen pegada al borde (15 oct,
+          // illojuan). Se decide aquí, antes del primer fragmento: hls.js copia la configuración al crear el
+          // transmuxer.
+          if (data.details.fragments.some((frag) => frag.initSegment !== null)) {
+            player.config.progressive = false
+          }
           player.startLoad(Math.max(0, data.details.edge - target))
         })
         // Al arrancar no hay contenido que preservar: lo que sobre de margen se salta en vez de recuperarlo acelerando,
@@ -246,7 +260,7 @@ export const useHlsPlayer = (
         // Margen según el modo (D11). Adaptativo: tras la primera pausa global del canal (llegan trozos del VOD) se
         // conserva el margen que deja el relleno en vez de recuperarlo acelerando, para que las siguientes no se
         // noten; antes, si se queda atrás, acelera un poco. Sin paradas: nunca acelera; el margen mínimo es fijo y lo
-        // que se añada (una pausa de la persona) se conserva, como en adaptativo tras el primer relleno. Directo:
+        // que se añada (una pausa de la persona) se conserva, hasta un tope, como en adaptativo tras el primer relleno. Directo:
         // acelera un poco si se queda atrás, y si se queda mucho hls.js salta (liveMaxLatencyDuration).
         let keepMargin = mode === "sin-paradas"
         player.on(Hls.Events.FRAG_LOADING, (_event, data) => {
@@ -273,7 +287,10 @@ export const useHlsPlayer = (
           }
           if (keepMargin) {
             video.playbackRate = 1
-            if (extra > 1) player.targetLatency = player.latency // hls.js tampoco debe intentar recuperarlo
+            // hls.js tampoco debe intentar recuperarlo. Por encima del tope no se conserva: si el retraso pasa de
+            // liveMaxLatencyDuration, hls.js salta adelante hasta el tope.
+            if (extra > 1)
+              player.targetLatency = Math.min(player.latency, maxLatency - KEEP_BELOW_MAX)
           } else if (extra > 1) video.playbackRate = CATCHUP_RATE
           else if (extra < 0.3) video.playbackRate = 1
         }, 1000)
