@@ -97,6 +97,19 @@ describe("EmoteCatalog", () => {
     expect(fetchJson).toHaveBeenCalledTimes(6)
   })
 
+  it("lists the channel's and the global emotes apart for picking, each name once", async () => {
+    const { channel, global } = await new EmoteCatalog({ fetchJson }).listForChannel("123")
+    // 7TV first, then BTTV; the channel's "Shared" hides the global one.
+    expect(channel.map((emote) => emote.name)).toEqual(["Shared", "PETPET", "OnlyBttv"])
+    expect(global.map((emote) => emote.name)).toEqual([
+      "EZ",
+      "RainTime",
+      "catJAM",
+      "TopHat",
+      "ZreknarF",
+    ])
+  })
+
   it("ignores ids that are not Twitch user ids", async () => {
     fetchJson.mockClear()
     await new EmoteCatalog({ fetchJson }).forChannel("../123")

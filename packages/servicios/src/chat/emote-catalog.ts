@@ -129,6 +129,12 @@ export type EmoteCatalogOptions = {
 }
 
 const CHANNEL_TTL_MS = 10 * 60_000
+const PROVIDER_RANK: Readonly<Record<ChatEmote["provider"], number>> = {
+  "7tv": 0,
+  bttv: 1,
+  ffz: 2,
+  twitch: 3,
+}
 const GLOBAL_TTL_MS = 6 * 60 * 60_000
 
 export class EmoteCatalog {
@@ -156,6 +162,29 @@ export class EmoteCatalog {
       if (!lookup.has(emote.name)) lookup.set(emote.name, emote)
     }
     return lookup
+  }
+
+  // The same emotes as forChannel, for picking them (CHAT-1): the channel's and the global ones apart, each name once,
+  // in priority order (7TV, then BTTV, then FFZ).
+  public async listForChannel(
+    twitchUserId: string,
+  ): Promise<{ readonly channel: ChatEmote[]; readonly global: ChatEmote[] }> {
+    const [globalEmotes, channelEmotes] = await Promise.all([
+      this.#globalEmotes(),
+      this.#channelEmotes(twitchUserId),
+    ])
+    const seen = new Set<string>()
+    // Stable sort: each provider keeps its own order.
+    const unique = (emotes: readonly ChatEmote[]): ChatEmote[] =>
+      [...emotes]
+        .sort((a, b) => PROVIDER_RANK[a.provider] - PROVIDER_RANK[b.provider])
+        .filter((emote) => {
+          if (seen.has(emote.name)) return false
+          seen.add(emote.name)
+          return true
+        })
+    const channel = unique(channelEmotes)
+    return { channel, global: unique(globalEmotes) }
   }
 
   #globalEmotes(): Promise<ChatEmote[]> {

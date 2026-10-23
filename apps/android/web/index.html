@@ -1,0 +1,15 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <!-- Ni marcos ni objetos incrustados: el puente con la app (MainActivity.kt) se ve desde cualquier marco de la
+         página, y no comprueba quién llama. -->
+    <meta http-equiv="Content-Security-Policy" content="frame-src 'none'; object-src 'none'" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>GoodTTV</title>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="./pagina.tsx"></script>
+  </body>
+</html>

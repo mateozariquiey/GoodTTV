@@ -1,5 +1,12 @@
-import type { ChatBatch, ChatEvent, ChatMessage, ChatStatus } from "@goodttv/contratos"
-import { useEffect, useRef, useState } from "react"
+import type {
+  ChatBatch,
+  ChatEmoteGroups,
+  ChatEvent,
+  ChatMessage,
+  ChatStatus,
+} from "@goodttv/contratos"
+import { useCallback, useEffect, useRef, useState } from "react"
+import { NO_EMOTES } from "./emote-complete"
 
 export const CHAT_HISTORY = 150
 
@@ -9,17 +16,28 @@ export type ChatState = {
 }
 
 // What the panel shows: the chat plus how many seconds it is being held to match the picture (rounded; null while
-// not known yet).
-export type ChatView = ChatState & { readonly delay: number | null }
+// not known yet). send, where one can write (not on the TV, D24): resolves with null once sent, or with the reason
+// it was not; emotes, the ones that can be written in this channel.
+export type ChatView = ChatState & {
+  readonly delay: number | null
+  readonly emotes?: () => Promise<ChatEmoteGroups>
+  readonly send?: (text: string) => Promise<string | null>
+}
 
 export const applyChatEvents = (state: ChatState, events: readonly ChatEvent[]): ChatState => {
   let messages = [...state.messages]
   let status = state.status
   for (const event of events) {
     switch (event.kind) {
-      case "message":
-        messages.push(event.message)
+      case "message": {
+        // One's own message is shown as soon as it is sent; the copy from EventSub, with badges and Twitch emotes,
+        // takes its place.
+        let index = messages.length - 1
+        while (index >= 0 && messages[index]?.id !== event.message.id) index--
+        if (index >= 0) messages[index] = event.message
+        else messages.push(event.message)
         break
+      }
       case "delete":
         messages = messages.filter((message) => message.id !== event.messageId)
         break
@@ -79,12 +97,16 @@ export class ChatDelayQueue {
 // answers with the session number wait for it.
 // delay(): seconds to hold chat events so chat stays in step with a delayed picture (own player, D11), or null
 // while not known. Events keep their order; connection status is never delayed.
+// connected: false closes the connection but keeps the messages (a hidden tab in the extension, so that several tabs
+// do not use up EventSub's three connections); back to true, it reconnects and goes on from them.
 export const useChat = (
   broadcasterId: string | undefined,
   enabled: boolean,
   delay: () => number | null = () => 0,
+  connected = true,
 ): ChatView => {
   const [state, setState] = useState<ChatState>({ messages: [], status: "off" })
+  const shown = useRef<string | undefined>(undefined) // the channel whose messages are on screen
   const delayRef = useRef(delay)
   delayRef.current = delay
   const [held, setHeld] = useState<number | null>(0)
@@ -100,18 +122,26 @@ export const useChat = (
     return () => clearInterval(timer)
   }, [enabled])
 
+  const live = enabled && connected
   useEffect(() => {
-    if (!enabled) return undefined
+    if (!live) return undefined
     return () => {
       void window.api.chat.close()
     }
-  }, [enabled])
+  }, [live])
 
   useEffect(() => {
+    if (enabled && !connected && broadcasterId === shown.current) return undefined // paused: keep what is shown
     if (!enabled || broadcasterId === undefined) {
+      shown.current = undefined
       setState({ messages: [], status: "off" })
       // A channel opened by name has no id for chat: stop reading the previous one.
       if (enabled) void window.api.chat.close()
+      return undefined
+    }
+    if (!connected) {
+      shown.current = undefined
+      setState({ messages: [], status: "off" })
       return undefined
     }
     let session: number | undefined
@@ -132,7 +162,11 @@ export const useChat = (
       queue.push(events)
       release()
     }
-    setState({ messages: [], status: "connecting" })
+    // Back from a pause on the same channel, the messages stay and the new ones follow them.
+    if (shown.current === broadcasterId)
+      setState((current) => ({ ...current, status: "connecting" }))
+    else setState({ messages: [], status: "connecting" })
+    shown.current = broadcasterId
     const unsubscribe = window.api.chat.onBatch((batch) => {
       if (session === undefined) early.push(batch)
       else apply(batch)
@@ -152,7 +186,41 @@ export const useChat = (
       clearInterval(timer)
       unsubscribe()
     }
-  }, [broadcasterId, enabled])
+  }, [broadcasterId, connected, enabled])
 
-  return { ...state, delay: held }
+  const send = useCallback(
+    async (text: string): Promise<string | null> => {
+      const write = window.api.chat.send
+      if (write === undefined || broadcasterId === undefined) return "Aquí no se puede escribir."
+      try {
+        const result = await write({ broadcasterId, message: text })
+        if (!result.sent) return result.reason
+        // Sin esperar a la cola del retraso: lo propio sale ya. Si la copia de EventSub ya llegó, se queda esa.
+        if (shown.current === broadcasterId) {
+          setState((current) =>
+            current.messages.some((message) => message.id === result.message.id)
+              ? current
+              : applyChatEvents(current, [{ kind: "message", message: result.message }]),
+          )
+        }
+        return null
+      } catch {
+        return "No se pudo enviar. Inténtalo otra vez."
+      }
+    },
+    [broadcasterId],
+  )
+
+  const emotes = useCallback(async (): Promise<ChatEmoteGroups> => {
+    const list = window.api.chat.emotes
+    if (list === undefined || broadcasterId === undefined) return NO_EMOTES
+    return list({ broadcasterId })
+  }, [broadcasterId])
+
+  return {
+    ...state,
+    delay: held,
+    ...(window.api.chat.send === undefined ? {} : { send }),
+    ...(window.api.chat.emotes === undefined ? {} : { emotes }),
+  }
 }

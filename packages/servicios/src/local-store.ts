@@ -18,6 +18,9 @@ export interface TextStorage {
   // undefined: nothing saved yet.
   readonly read: () => Promise<string | undefined>
   readonly write: (text: string) => Promise<void>
+  // Si varias páginas lo comparten (pestañas de la extensión): lee, cambia y escribe sin que otra lo haga a la vez, o
+  // se perdería un reciente. Sin esto, la operación sin más.
+  readonly exclusive?: <Result>(operation: () => Promise<Result>) => Promise<Result>
 }
 
 const StoredSchema = z.strictObject({
@@ -107,7 +110,9 @@ export class LocalStore {
   }
 
   #serialize<Result>(operation: () => Promise<Result>): Promise<Result> {
-    const result = this.#operations.then(operation, operation)
+    const exclusive = this.#storage.exclusive
+    const run = exclusive === undefined ? operation : () => exclusive(operation)
+    const result = this.#operations.then(run, run)
     this.#operations = result.then(
       () => undefined,
       () => undefined,

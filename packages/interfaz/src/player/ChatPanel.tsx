@@ -20,9 +20,12 @@ const EmoteImage = ({
   readonly emote: ChatEmote
   readonly overlay?: boolean
 }) => (
+  // data-*: lo que enseña la extensión al pasar el ratón por encima (su nombre y de dónde es).
   <img
     alt={overlay ? "" : emote.name}
     className={overlay ? "emote__overlay" : "emote__image"}
+    data-name={emote.name}
+    data-provider={emote.provider}
     decoding="async"
     draggable={false}
     src={emote.url}
@@ -38,7 +41,7 @@ const Token = ({ token }: { readonly token: ChatToken }) => {
   if (token.kind === "text") return <>{token.text}</>
   if (token.kind === "mention") return <span className="mention">{token.text}</span>
   return (
-    <span className="emote" title={token.emote.name}>
+    <span className="emote">
       <EmoteImage emote={token.emote} />
       {token.overlays.map((overlay, index) => (
         // biome-ignore lint/suspicious/noArrayIndexKey: overlays are fixed per message.

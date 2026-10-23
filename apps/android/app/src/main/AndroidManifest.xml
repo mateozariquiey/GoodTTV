@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <uses-permission android:name="android.permission.INTERNET" />
+    <!-- Para seguir reproduciendo con Media3 en segundo plano o con la pantalla apagada (FondoService.kt). -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
+
+    <!-- Sin copias de seguridad ni traspaso a otro teléfono (res/xml/extraccion.xml). -->
+    <application
+        android:allowBackup="false"
+        android:dataExtractionRules="@xml/extraccion"
+        android:icon="@mipmap/icono"
+        android:label="${nombre}"
+        android:theme="@style/Tema">
+
+        <!-- Los cambios de tamaño y orientación no recrean la actividad: la WebView se adapta sin recargar la página, y
+             el vídeo del canal (Media3, debajo de ella) sigue sonando. singleTop: si ya está delante, una «ruta» nueva
+             le llega a onNewIntent en vez de perderse. No singleTask: volver por el icono destruiría lo que haya encima
+             (ReproductorActivity, al medir). Que solo haya una lo asegura MainActivity. Con el PiP de Android: el canal,
+             al salir de la app. -->
+        <activity
+            android:name=".MainActivity"
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden|uiMode"
+            android:exported="true"
+            android:launchMode="singleTop"
+            android:supportsPictureInPicture="true">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <!-- Media3 a pantalla completa, solo para medir desde adb (medir/media3.mjs): en la app va en MainActivity. -->
+        <activity
+            android:name=".ReproductorActivity"
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden|uiMode"
+            android:exported="true" />
+
+        <!-- Mantiene la app (y el motor) con red en segundo plano mientras hay un canal abierto (Reproductor.kt). -->
+        <service
+            android:name=".FondoService"
+            android:exported="false"
+            android:foregroundServiceType="mediaPlayback" />
+    </application>
+</manifest>

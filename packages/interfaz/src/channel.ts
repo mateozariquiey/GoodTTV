@@ -4,6 +4,7 @@ import type { ChannelCard, RecentChannel, StreamCard } from "@goodttv/contratos"
 export type Channel = {
   readonly category?: string
   readonly displayName: string
+  readonly followers?: number
   readonly live?: boolean
   readonly login: string
   readonly profileImageUrl?: string
@@ -30,11 +31,13 @@ export const fromStream = (stream: StreamCard): Channel => ({
 export const fromSearch = (card: ChannelCard): Channel => ({
   category: card.category,
   displayName: card.displayName,
+  ...(card.followers === undefined ? {} : { followers: card.followers }),
   live: card.isLive,
   login: card.login,
   profileImageUrl: card.thumbnailUrl,
   title: card.title,
   userId: card.id,
+  ...(card.viewerCount === undefined ? {} : { viewerCount: card.viewerCount }),
 })
 
 export const fromRecent = (recent: RecentChannel, stream: StreamCard | undefined): Channel =>

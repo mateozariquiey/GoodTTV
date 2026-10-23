@@ -9,6 +9,7 @@ import {
 import { type DirectoOptions, type EmpalmeEvent, parseSimulatedPause } from "@goodttv/sin-anuncios"
 import Hls from "hls.js"
 import { parseRoute } from "./escritorio/routes"
+import { WAITS } from "./escritorio/sonido"
 
 // Lo del laboratorio en las páginas de la extensión, por la dirección (como GOODTTV_PAUSA_SIMULADA y
 // GOODTTV_REGISTRO_EMPALME en la tele): ?pausa=cada,duración[,arranque] simula pausas globales para probar el relleno
@@ -16,7 +17,9 @@ import { parseRoute } from "./escritorio/routes"
 // además, la prueba de rendimiento lee el hls.js del reproductor (window.hlsPrueba) y sus hitos de arranque
 // (window.marcasPrueba). ?sinred: comprobar la cuenta falla como sin red hasta que la prueba ponga
 // window.redPrueba = true, o hasta cerrar sesión (sin sesión no hace falta la red); desde entonces, lo que diga la
-// cuenta de verdad (EXT-4).
+// cuenta de verdad (EXT-4). ?esperas=s,s acorta las esperas de una pestaña sin sonido (sonido.ts), para medir cuánto se
+// tarda en volver a ella desde cada escalón. ?twitchfalso[=ms]: una cuenta y un Helix falsos, con esa espera por
+// petición, para medir el arranque de Inicio con cuenta (twitch-falso.ts); no guarda recientes, como el chat de abajo.
 
 // Campos del empalme que se pueden guardar (los mismos que registra la tele, más los de nueva-numeracion): los
 // errores y las URL pueden llevar el token de Twitch.
@@ -70,6 +73,12 @@ const instrumentHls = (): void => {
 export const labOptions = (search: string): Pick<DirectoOptions, "log" | "simulatedPause"> => {
   const params = new URLSearchParams(search)
   const events: SafeEvent[] = []
+  // ?esperas=s,s: cuánto espera una pestaña sin sonido antes de pararse y con el empalme caliente (sonido.ts).
+  const waits = (params.get("esperas") ?? "").split(",").map(Number)
+  if (waits.length === 2 && waits.every((seconds) => Number.isFinite(seconds) && seconds > 0)) {
+    WAITS.silentMs = (waits[0] ?? 0) * 1000
+    WAITS.warmMs = (waits[1] ?? 0) * 1000
+  }
   if (params.has("registro")) {
     Object.assign(globalThis, { registroEmpalme: events })
     instrumentHls()
@@ -87,6 +96,8 @@ export const labOptions = (search: string): Pick<DirectoOptions, "log" | "simula
 //   ?chatsintetico=N  N mensajes por segundo, con emotes e insignias de Twitch
 //   ?chatreal         el chat real del canal abierto, leído por IRC anónimo, con sus emotes de Twitch, 7TV, BTTV y
 //                     FFZ (los mismos tokenizador y catálogo que la app)
+//   &escribir         con ?chatreal, la cuenta ficticia puede escribir (CHAT-1): lo «enviado» no sale de la página, y
+//                     los emotes para elegir son los del canal (7TV, BTTV y FFZ), sin los de Twitch de una cuenta
 type ChatSource = (login: string, emit: (events: ChatEvent[]) => void) => () => void
 
 const EMOTES = [25, 354, 1902, 41, 425618, 305954156].map((id) => ({
@@ -194,9 +205,13 @@ const fragmentsOf = (text: string, emotes: string): ChatFragment[] => {
   return fragments
 }
 
+// El catálogo y el canal (su id, que da el IRC) del chat real, para los emotes de ?escribir.
+const catalog = new EmoteCatalog()
+let room: string | undefined
+
 const ircSource: ChatSource = (login, emit) => {
   const socket = new WebSocket("wss://irc-ws.chat.twitch.tv:443")
-  const catalog = new EmoteCatalog()
+  room = undefined
   let emotes: EmoteLookup = new Map()
   const pending: ChatEvent[] = []
   socket.addEventListener("open", () => {
@@ -213,9 +228,10 @@ const ircSource: ChatSource = (login, emit) => {
         continue
       }
       const { command, prefix, tags, trailing } = parseIrc(line)
-      const room = tags["room-id"]
-      if (command === "ROOMSTATE" && room !== undefined) {
-        void catalog.forChannel(room).then((lookup) => {
+      const roomId = tags["room-id"]
+      if (command === "ROOMSTATE" && roomId !== undefined) {
+        room = roomId
+        void catalog.forChannel(roomId).then((lookup) => {
           emotes = lookup
         })
       }
@@ -266,7 +282,10 @@ const withoutNetwork = (api: AppApi): AppApi => {
 
 export const labApi = (base: AppApi, search: string): AppApi => {
   const params = new URLSearchParams(search)
-  const api = params.has("sinred") ? withoutNetwork(base) : base
+  const reached = params.has("sinred") ? withoutNetwork(base) : base
+  const api = params.has("twitchfalso")
+    ? { ...reached, recents: { ...reached.recents, add: () => reached.recents.list() } }
+    : reached
   const perSecond = Number(params.get("chatsintetico") ?? 0)
   const source =
     perSecond > 0 ? syntheticSource(perSecond) : params.has("chatreal") ? ircSource : null
@@ -276,11 +295,22 @@ export const labApi = (base: AppApi, search: string): AppApi => {
     for (const listener of listeners) listener(batch)
   }
   let stop = (): void => undefined
+  const writing = params.has("escribir") && source === ircSource
+  const roomId = async (): Promise<string | undefined> => {
+    for (let i = 0; i < 50 && room === undefined; i++)
+      await new Promise((done) => setTimeout(done, 100))
+    return room
+  }
   return {
     ...api,
     auth: {
       ...api.auth,
-      snapshot: async () => ({ displayName: "Prueba", kind: "authenticated", login: "prueba" }),
+      snapshot: async () => ({
+        displayName: "Prueba",
+        kind: "authenticated",
+        login: "prueba",
+        ...(writing ? { canChat: true } : {}),
+      }),
     },
     catalog: {
       ...api.catalog,
@@ -322,6 +352,31 @@ export const labApi = (base: AppApi, search: string): AppApi => {
         }
         return 1
       },
+      ...(writing
+        ? {
+            emotes: async () => {
+              const id = await roomId()
+              if (id === undefined) return { channel: [], global: [], twitch: [] }
+              return { ...(await catalog.listForChannel(id)), twitch: [] }
+            },
+            send: async ({ message }) => {
+              const id = await roomId()
+              const lookup = id === undefined ? new Map() : await catalog.forChannel(id)
+              return {
+                message: {
+                  action: false,
+                  badges: [],
+                  color: "#a970ff",
+                  displayName: "Prueba",
+                  id: crypto.randomUUID(),
+                  tokens: tokenizeFragments([{ text: message, type: "text" }], lookup),
+                  userId: "1",
+                },
+                sent: true,
+              }
+            },
+          }
+        : {}),
     },
     recents: { ...api.recents, add: () => api.recents.list() },
   }

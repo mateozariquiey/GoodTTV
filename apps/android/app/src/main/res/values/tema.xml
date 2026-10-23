@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- El fondo de la página (el de la familia, como la extensión), también bajo las barras del sistema y antes de que
+         cargue (sin destello blanco). -->
+    <color name="fondo">#0c0c0e</color>
+
+    <style name="Tema" parent="@android:style/Theme.DeviceDefault.NoActionBar">
+        <item name="android:windowBackground">@color/fondo</item>
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="android:windowLightNavigationBar">false</item>
+    </style>
+</resources>

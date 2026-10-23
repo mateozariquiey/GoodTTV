@@ -7,6 +7,7 @@ class FakeEmpalme implements DirectoEmpalme {
   status_: EmpalmeStatus = {
     filling: false,
     offline: false,
+    playing: null,
     published: 0,
     qualities: [],
     quality: null,
@@ -283,6 +284,29 @@ describe("createDirecto", () => {
     expect(response.headers.get("content-range")).toBe("bytes 0-2/10")
     expect(response.headers.get("x-otra")).toBeNull()
     expect(new Uint8Array(await response.arrayBuffer())).toEqual(new Uint8Array([1, 2, 3]))
+  })
+
+  it("pide a Twitch por el fetch que se le da, no por el global, y se lo pasa al empalme", async () => {
+    const global = vi.fn(async () => new Response(null, { status: 599 }))
+    vi.stubGlobal("fetch", global)
+    const red = vi.fn(async () => new Response(new Uint8Array([7]), { status: 200 }))
+    const empalmes: FakeEmpalme[] = []
+    directo = createDirecto({
+      createEmpalme: (options) => {
+        const empalme = new FakeEmpalme(options)
+        empalmes.push(empalme)
+        return empalme
+      },
+      fetch: red,
+    })
+    const vod = "https://d1.cloudfront.net/v/3.ts"
+    await directo.handle(url("/stream/canal/live.m3u8"))
+    expect(empalmes[0]?.options.fetch).toBe(red)
+    empalmes[0]?.vodUrls.add(vod)
+    const response = await directo.handle(url(`/stream/vod?${new URLSearchParams({ u: vod })}`))
+    expect(response.status).toBe(200)
+    expect(red).toHaveBeenCalledWith(vod, expect.anything())
+    expect(global).not.toHaveBeenCalled()
   })
 
   it("un fallo de red da 500 y se registra", async () => {

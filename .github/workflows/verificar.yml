@@ -1,3 +1,4 @@
+# Cada push a main y cada PR: verify, actionlint y el empaquetado. También se lanza a mano (workflow_dispatch).
 name: CI
 
 on:

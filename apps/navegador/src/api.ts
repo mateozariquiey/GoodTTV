@@ -1,106 +1,53 @@
-import { type AppApi, type ChatBatch, ChatOpenInputSchema } from "@goodttv/contratos"
+import type { AppApi } from "@goodttv/contratos"
 import {
-  EmoteCatalog,
-  EventSubChat,
-  LocalStore,
+  createPageApi,
+  type PageApiOptions,
+  pageStorage,
   resolveClientId,
-  type SettingsSource,
-  TwitchService,
+  TWITCH_CHAT_SCOPES,
 } from "@goodttv/servicios"
-import { forgetHome, pageStorage, readSavedHome, saveHome } from "./home-cache"
+import {
+  channelByLogin,
+  commentsFrom,
+  liveArchive,
+  searchChannels,
+  storyboardOf,
+  videoById,
+  videosOf,
+  vodMasterUrl,
+} from "@goodttv/sin-anuncios"
 import { storageText, storageTokens } from "./storage"
 import { createWakeLock } from "./wake-lock"
 
-// window.api de la extensión: lo mismo que en la tele hacen el proceso principal y su IPC (apps/tele/src/main/ipc.ts),
-// pero en la propia página, que es privilegiada (sin código ajeno, por la CSP de Manifest V3). Los tokens se quedan
-// en los servicios; la interfaz solo recibe datos.
-export const createExtensionApi = (): AppApi => {
-  const settings: SettingsSource = {
+// window.api de la extensión (createPageApi, de @goodttv/servicios): la sesión y los datos en chrome.storage.local,
+// Inicio de la última vez en localStorage y la pantalla encendida con la Wake Lock API. lab: la sesión y lo de
+// localStorage en otro sitio (la cuenta falsa del laboratorio, twitch-falso.ts).
+export const createExtensionApi = (
+  lab: Partial<Pick<PageApiOptions, "homeStorage" | "tokens">> = {},
+): AppApi =>
+  createPageApi({
+    // Buscar canales con la relevancia de twitch.tv y sin cuenta, como invitado.
+    channels: {
+      byLogin: (login) => channelByLogin(login),
+      search: (query, first) => searchChannels(query, { first }),
+    },
     // Un fork compila con VITE_TWITCH_CLIENT_ID; si no, el del proyecto.
-    load: async () => ({
-      clientId: resolveClientId(undefined, import.meta.env["VITE_TWITCH_CLIENT_ID"]),
-    }),
-  }
-  const twitch = new TwitchService(settings, storageTokens(chrome.storage.local, "twitch-token"))
-  const emotes = new EmoteCatalog()
-  const batches = new Set<(batch: ChatBatch) => void>()
-  const chat = new EventSubChat({
-    api: {
-      badges: (broadcasterId) => twitch.badges(broadcasterId),
-      emotes: (broadcasterId) => emotes.forChannel(broadcasterId),
-      subscribe: (type, broadcasterId, userId, sessionId) =>
-        twitch.createChatSubscription(type, broadcasterId, userId, sessionId),
-      unsubscribe: (subscriptionId) => twitch.deleteSubscription(subscriptionId),
-      viewer: () => twitch.viewer(),
+    clientId: resolveClientId(undefined, import.meta.env["VITE_TWITCH_CLIENT_ID"]),
+    homeStorage: pageStorage(),
+    localData: storageText(chrome.storage.local, "local-data"),
+    // También escribe en el chat (CHAT-1, D24).
+    scopes: TWITCH_CHAT_SCOPES,
+    setWatching: createWakeLock().setWatching,
+    tokens: storageTokens(chrome.storage.local, "twitch-token"),
+    version: chrome.runtime.getManifest().version,
+    // Los VOD (VOD-1), como invitado: la página no está sujeta a CORS con los permisos de la extensión.
+    vods: {
+      archive: (login) => liveArchive(login),
+      comments: (videoId, offset) => commentsFrom(videoId, offset),
+      get: (id) => videoById(id),
+      list: (login) => videosOf(login),
+      playback: (id) => vodMasterUrl(id),
+      storyboard: (url) => storyboardOf(url),
     },
-    emit: (batch) => {
-      for (const listener of batches) listener(batch)
-    },
+    ...lab,
   })
-  const local = new LocalStore(storageText(chrome.storage.local, "local-data"))
-  const wakeLock = createWakeLock()
-  const page = pageStorage()
-
-  return {
-    app: {
-      // videoDecode vacío: el navegador no lo dice (Ajustes no muestra la línea).
-      status: async () => ({
-        ...twitch.status(),
-        version: chrome.runtime.getManifest().version,
-        videoDecode: "",
-      }),
-    },
-    auth: {
-      begin: () => twitch.beginAuthorization(),
-      logout: async () => {
-        chat.close()
-        await twitch.logout()
-      },
-      snapshot: () => twitch.authSnapshot(),
-    },
-    catalog: {
-      followed: (input) => twitch.followed(input),
-      live: (input) => twitch.live(input),
-      search: (input) => twitch.search(input),
-      streamsByLogin: (logins) => twitch.streamsByLogin(logins),
-    },
-    chat: {
-      close: async () => chat.close(),
-      onBatch: (listener) => {
-        batches.add(listener)
-        return () => {
-          batches.delete(listener)
-        }
-      },
-      // Como el IPC de la tele: un identificador que no sea válido no llega a tocar el chat.
-      open: async (input) => chat.open(ChatOpenInputSchema.parse(input).broadcasterId),
-    },
-    home: {
-      forget: async () => forgetHome(page),
-      save: async (home) => saveHome(page, home),
-      saved: async () => readSavedHome(page),
-    },
-    // Sin mando: las pantallas de escritorio atienden el teclado ellas mismas (escritorio/shortcuts.ts).
-    input: {
-      onAction: () => () => undefined,
-      onProbe: () => () => undefined,
-      setProbing: async () => undefined,
-      setTextEntry: async () => undefined,
-    },
-    player: {
-      beginInteraction: () =>
-        Promise.reject(new Error("Sin reproductor de Twitch en la extensión")),
-      endInteraction: async () => undefined,
-      onInteractionEnded: () => () => undefined,
-      setWatching: wakeLock.setWatching,
-    },
-    preferences: {
-      get: () => local.preferences(),
-      update: (patch) => local.updatePreferences(patch),
-    },
-    recents: {
-      add: (channel) => local.addRecent(channel),
-      list: () => local.recents(),
-    },
-  }
-}

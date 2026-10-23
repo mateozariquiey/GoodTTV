@@ -2,22 +2,33 @@
 
 **English** · [Español](README.es.md)
 
-Twitch without ads, with clients of its own for watching live streams on the TV and in the browser. An Android
-version is in development.
+Twitch without ads, in apps of its own: a browser extension, an Android app and a TV app. The three share the code
+that removes the ads, the account and the chat.
 
 > [!WARNING]
 > Removing ads breaks Twitch's terms of service. GoodTTV is a personal project: use it at your own risk. It is not in
 > any store and has no relationship with Twitch.
 
-| Version | For | Status |
+| App | For | Status |
 | --- | --- | --- |
-| [TV](#tv) (`apps/tele`) | A Linux mini PC connected to the TV, with a remote | 0.2.3 (0.2.2 tested on the mini PC) |
-| [Browser](#browser) (`apps/navegador`) | Chrome, Chromium, Firefox and Zen, with mouse and keyboard | 0.2.3 |
-| [Android](#android) | Phones | In development |
+| [Browser](#browser) (`apps/navegador`) | Chrome, Chromium, Firefox and Zen, with mouse and keyboard | 0.3.0 |
+| [Android](#android) (`apps/android`) | Phones with Android 13 or later | 0.3.0, experimental |
+| [TV](#tv) (`apps/tele`) | A Linux mini PC connected to the TV, with a remote | 0.3.0, no longer tested on a real TV |
 
 The interfaces are in Spanish for now.
 
-![Extension: the video with its controls on top, the channel info and chat; on the left, followed channels that are live](docs/media/escritorio-canal.jpg)
+![Extension: a channel with its controls on top of the video, its card and chat; on the left, followed channels that are live](docs/media/escritorio-canal.jpg)
+
+## New in 0.3.0
+
+- **VODs**, in the extension and on Android: a seek bar with previews, speed, the chat as it was written live, and
+  they pick up where you left off.
+- **Rewind a live stream** back to its start, and return with "Ir al directo". ← and → move 10 s.
+- **Write in chat**, with 7TV, BTTV, FFZ and your Twitch emotes. You need to link your account again to allow it.
+- **Search like twitch.tv**, by relevance and forgiving typos, with no account.
+- **Several tabs at once**, each with its own channel. Only the last one you looked at plays sound.
+- **Home opens faster**, and it no longer shows channels from a past session as if they were live.
+- **The first Android version**, experimental.
 
 ## How it removes ads
 
@@ -30,18 +41,94 @@ Twitch inserts ads into the stream itself, and each viewer session gets them sep
   broadcast is back.
 
 The fill needs the channel's VOD to be public and to arrive in time; otherwise the picture freezes while the break
-lasts. Video plays through [hls.js](https://github.com/video-dev/hls.js) in a `<video>` element of its own. There are
-three delay modes: Adaptive (the default), No stalls and Live. Chat is delayed as much as the picture, so they stay
-roughly in step.
+lasts. There are three delay modes: Adaptive (the default), No stalls and Live. Chat is delayed as much as the
+picture, so they stay roughly in step.
 
 In the extension, across several channels and 12 starts, the first frame arrives in 0.86 s (median) and 0.06 % of
 frames are dropped, with no stalls ([details](docs/verificacion.md#rendimiento-del-reproductor-propio), in Spanish).
 
+## Browser
+
+An extension that opens GoodTTV in a tab of its own, made for mouse and keyboard. The same code runs in Chrome and
+Firefox.
+
+![Extension home: followed channels that are live, continue watching and VODs left halfway; on the left, the column of followed channels](docs/media/escritorio-inicio.jpg)
+
+- **Home:** your followed channels that are live, the channels you watched last, the VODs you left halfway and popular
+  streams.
+- **A column with your followed channels that are live,** sorted by viewers or, like Twitch's "Recommended for you",
+  by how much you watch each one. It can be collapsed.
+- **Search always at the top** (`/`), ranked like twitch.tv's.
+- **The channel:** the controls sit on top of the video and hide when the mouse rests: quality, theater mode (`T`),
+  full screen (`F`), chat (`C`) and mute (`M`). ↑/↓ switch channel, ←/→ move 10 s and `End` goes back to live. If the
+  channel keeps its VOD, the bar reaches back to the start of the broadcast.
+- **Chat** with 7TV, BTTV, FFZ and Twitch emotes. Hovering an emote shows its name. To write, `Tab` and `:` complete
+  emotes, or you can pick them from a list.
+- **VODs** below each channel. They open in the best quality your connection allows, pick up 5 s before where you
+  left off, and show their chat in step with the picture.
+- **"Siguiendo"** on a channel you follow. Following and unfollowing open twitch.tv: Twitch's API no longer allows it.
+- **Several tabs**, each with its own channel. Only the last one you looked at plays sound; the others wait, and coming
+  back takes about 0.1 s during the first few minutes.
+- **Starts sooner** when the mouse rests on a channel: it gets it ready.
+- **"Abrir en GoodTTV"** (open in GoodTTV) in the context menu of twitch.tv links.
+
+![Extension: a VOD with its controls, its chat and the channel's other videos below](docs/media/escritorio-vod.jpg)
+
+**Install:** it is not in the stores. Download `goodttv-0.3.0.xpi` from the
+[releases](https://github.com/mateozariquiey/GoodTTV/releases).
+- **Zen** (and Firefox Developer Edition or Nightly): in `about:config`, set `xpinstall.signatures.required` to
+  `false`. Then, in `about:addons`, gear menu → "Install Add-on From File…".
+- **Firefox:** it only accepts unsigned add-ons temporarily: `about:debugging` → "This Firefox" → "Load Temporary
+  Add-on…". It is removed when Firefox closes.
+- **Chrome and Chromium,** on Windows too:
+  1. The `.xpi` is a ZIP file. Unzip it into a folder you will keep. On Windows, rename it to `.zip` and use "Extract
+     all", or open it with 7-Zip.
+  2. In `chrome://extensions`, turn on "Developer mode" (top right).
+  3. Click "Load unpacked" and choose that folder.
+
+  Do not move or delete the folder afterwards: Chrome loads the extension from it. To update, unzip the new version
+  into the same folder and press the reload arrow on the GoodTTV card.
+
+  ![chrome://extensions with "Developer mode" turned on and the "Load unpacked" button highlighted](docs/media/chrome-cargar-en.png)
+
+To build it, `bun run build:navegador` (the extension ends up in `apps/navegador/dist`) or `bun run pack:navegador`
+(the `.xpi`). More in [docs/desarrollo.md](docs/desarrollo.md#extensión-de-navegador) (in Spanish).
+
+## Android
+
+**Experimental.** The same ad removal, account and chat, with screens made for touch: Home, search, the channel with
+its chat and videos, VODs and rewinding live. Video plays with Android's own player (Media3) and keeps going with the
+screen off, with its controls in the notification, on the lock screen and on headphones. As in Twitch's app, a channel
+you leave keeps playing in a corner, swiping down on the video goes back, and leaving the app turns it into
+picture-in-picture.
+
+<p>
+  <img alt="Android home: followed channels that are live, each with a small thumbnail" src="docs/media/android-inicio.jpg" width="270">
+  <img alt="Android: a channel with the video on top, its card and chat" src="docs/media/android-canal.jpg" width="270">
+</p>
+
+It has been tested on one phone only (a Galaxy S25 Ultra with Android 16). Whether chat stays in step with the picture
+has been checked by eye, not measured.
+
+**Install** (Android 13 or later): download `GoodTTV-0.3.0.apk` from the
+[releases](https://github.com/mateozariquiey/GoodTTV/releases) on the phone and open it. Android will ask you to allow
+installing apps from the browser or the file manager, and Play Protect may warn that it does not know the developer.
+New versions install over the old one and keep your account, because they are signed with the same key. From a
+computer, `adb install -r GoodTTV-0.3.0.apk` does the same. The signing certificate's SHA-256 fingerprint is
+`38:CF:EA:F9:1C:2F:8C:C4:B8:35:27:11:BD:77:7F:56:0E:A8:D5:4F:87:37:C4:91:6C:B6:BA:C8:27:32:5A:D6` (`apksigner verify --print-certs` shows it).
+
+To build it you need the Android SDK and JDK 21: see [apps/android/README.md](apps/android/README.md) (in Spanish).
+
 ## TV
 
 Made to be used from the couch on a Linux mini PC with a small remote: arrows, OK, Back and Play/Pause. Watch the live
-channels you follow, search for channels, and read chat with **7TV, BTTV, FFZ** and Twitch emotes. There are no VODs,
-clips or categories.
+channels you follow, search for channels, and read chat with 7TV, BTTV, FFZ and Twitch emotes. The VODs, rewinding and
+writing in chat of the other apps are not here.
+
+**Status:** since October 2026 it no longer runs on a real TV. It is still built and checked with the automated tests
+(unit and end-to-end, in Electron), but nobody uses it day to day. 0.2.2 was the last version tested on the mini PC with
+its remote: HDMI audio, hardware video decoding (VA-API), the remote and readability from 3 m
+([details](docs/verificacion.md#en-el-mini-pc-la-tv-y-el-mando), in Spanish).
 
 ![TV home: followed channels that are live and a preview of the focused one](docs/media/inicio.jpg)
 
@@ -49,18 +136,15 @@ From 0.1.0, with Twitch's official player: [playback](docs/media/reproduccion.jp
 [demo video (84 s, remote keys only)](docs/media/demo.mp4) ·
 [search with the on-screen keyboard](docs/media/buscar.jpg) · [quality chooser](docs/media/calidad.jpg)
 
-- **Guide-style home.** On the left, the channels you follow that are live, with viewers, category and uptime, then
-  channels you watched recently and popular streams. On the right, a large preview of the focused channel.
-- **Its own ad-free player.** The video takes the full height, with chat on the right. The title and controls appear
-  on top when you press a key and hide by themselves. If the own player fails, you can switch to Twitch's official
-  one, with the controls below it. ↑/↓ switch channel without leaving playback, and Play/Pause always works.
-- **Read-only chat of its own**, through EventSub. It shows Twitch, 7TV, BTTV and FFZ emotes (global and per channel),
-  zero-width emotes, badges and mentions, in two text sizes.
+- **Guide-style home:** on the left, the channels you follow that are live, then the ones you watched recently and
+  popular streams; on the right, a large preview of the focused one.
+- **Its own ad-free player,** full height, with chat on the right. The title and controls appear when you press a key
+  and hide by themselves. ↑/↓ switch channel without leaving playback, and Play/Pause always works. If it fails, you can
+  switch to Twitch's official player.
 - **Search** with an on-screen keyboard driven by the remote; a physical keyboard works too.
-- **Back keeps your place.** Leaving playback returns focus to the channel you came from.
-- **Account linking from your phone**, with a QR code or a Twitch code. It only asks for read access: your follows and
+- **Back keeps your place:** leaving playback returns focus to the channel you came from.
+- **Account linking from your phone,** with a QR code or a Twitch code. It only asks for read access: your follows and
   chat.
-- **Remote test** in Settings: shows which key each button sends.
 
 | Remote | Action |
 | --- | --- |
@@ -75,44 +159,8 @@ x86_64) and run it; it starts full screen and needs `libfuse2`. To build it:
 ```bash
 bun install --frozen-lockfile
 bun run build && bun run start   # in a window, for testing
-bun run package:appimage         # apps/tele/dist/GoodTTV-0.2.3-x86_64.AppImage
+bun run package:appimage         # apps/tele/dist/GoodTTV-0.3.0-x86_64.AppImage
 ```
-
-**Status:** 0.2.2 is tested on the mini PC (GMKtec M6 Ultra) with its remote: HDMI audio, hardware video decoding
-(VA-API), the remote and readability at 3 m. Suspend/resume is not, because that machine never sleeps. Details,
-and what is left, are in [docs/verificacion.md](docs/verificacion.md) (in Spanish).
-
-## Browser
-
-An extension that opens GoodTTV in a tab of its own, with an interface made for mouse and keyboard. The same code
-works in Chrome and Firefox.
-
-- **Home** with thumbnails of your followed channels that are live and of popular ones, and "Continue watching".
-- **A column of followed channels that are live**, which can be collapsed.
-- **Search always at the top** (`/` shortcut). Enter opens the channel with that name.
-- **Controls on top of the video**, hidden when the mouse rests: quality, theater mode (`T`), full screen (`F`), chat
-  (`C`) and mute (`M`). ↑/↓ switch channel.
-- **Starts sooner** if the mouse rests on a channel: it gets it ready.
-- **"Abrir en GoodTTV"** (open in GoodTTV) in the context menu of twitch.tv links.
-- **Account linking** with a code, as on the TV.
-- **Keeps pace in a hidden tab**, even though the browser slows its timers down.
-
-**Install:** it is not in the stores. Download `goodttv-0.2.3.xpi` from the
-[releases](https://github.com/mateozariquiey/GoodTTV/releases):
-- **Zen** (and Firefox Developer Edition or Nightly): in `about:config`, set `xpinstall.signatures.required` to
-  `false`. Then, in `about:addons`, gear menu → "Install Add-on From File…".
-- **Firefox:** it only accepts unsigned add-ons temporarily: `about:debugging` → "This Firefox" → "Load Temporary
-  Add-on…". It is removed when Firefox closes.
-- **Chrome and Chromium:** unzip the `.xpi` (it is a ZIP file) into a folder. In `chrome://extensions`, turn on
-  "Developer mode" and click "Load unpacked".
-
-To build it, `bun run build:navegador` (the extension ends up in `apps/navegador/dist`) or `bun run pack:navegador`
-(the `.xpi`). More in [docs/desarrollo.md](docs/desarrollo.md#extensión-de-navegador) (in Spanish).
-
-## Android
-
-In development. The interface will run in a WebView, the splicing in JavaScript and the video with Media3, and it will
-keep playing with the screen off.
 
 ## The code
 
@@ -120,18 +168,19 @@ A monorepo with Bun workspaces:
 
 | Folder | Contents |
 | --- | --- |
-| `apps/tele` | The TV app (Electron) |
 | `apps/navegador` | The extension (Manifest V3) |
+| `apps/android` | The Android app (Kotlin and the web interface, built with Gradle; not a Bun workspace) |
+| `apps/tele` | The TV app (Electron) |
 | `packages/sin-anuncios` | Session splicing and VOD fill |
 | `packages/interfaz` | What the interfaces share: player, chat and data |
 | `packages/servicios` | Account, Twitch API (Helix), chat and storage |
-| `packages/contratos` | The API types shared by every version |
+| `packages/contratos` | The API types shared by every app |
 
 Requirements: Node.js 24 or later and Bun 1.4.2.
 
 ```bash
 bun install --frozen-lockfile
-bun run verify   # Biome, TypeScript, unit tests and builds
+bun run verify   # Biome, TypeScript, unit tests and builds (Android is built apart, with Gradle)
 ```
 
 The design documents are in Spanish: [architecture](docs/arquitectura.md), [decisions](docs/decisiones.md),
@@ -148,8 +197,8 @@ MIT licensed. This repository keeps its full history. From VacuumStream, the TV 
 - the Helix adapter and the Twitch SDK loader;
 - the spatial focus algorithm and packaging with electron-builder.
 
-The rest is GoodTTV's own: the TV and desktop interfaces, chat with third-party emotes, the ad-free player and the
-extension. The reasons behind each decision are in [docs/decisiones.md](docs/decisiones.md).
+The rest is GoodTTV's own: the TV, desktop and phone interfaces, chat with third-party emotes, the ad-free player, the
+extension and the Android app. The reasons behind each decision are in [docs/decisiones.md](docs/decisiones.md).
 
 ## Contributing
 

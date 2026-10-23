@@ -1,8 +1,8 @@
-import type { Directo } from "@goodttv/sin-anuncios"
+import { createDirecto, type Directo, type DirectoOptions } from "./directo"
 
-// En la extensión no hay servidor local: las peticiones fetch de la página a sus propias rutas /stream/ las atiende el
-// directo en memoria, como un service worker. Así el reproductor pide igual que en la tele (useHlsPlayer.ts), con
-// hls.js usando su FetchLoader. Todo lo demás pasa al fetch del navegador.
+// En una página (la extensión, Android) no hay servidor local: las peticiones fetch de la página a sus propias rutas
+// /stream/ las atiende el directo en memoria, como un service worker. Así el reproductor pide igual que en la tele
+// (useHlsPlayer.ts), con hls.js usando su FetchLoader. Todo lo demás pasa al fetch del navegador.
 export const createDirectoFetch = (
   directo: Directo,
   origin: string,
@@ -36,6 +36,11 @@ export const createDirectoFetch = (
   }
 }
 
-export const installDirectoFetch = (directo: Directo): void => {
-  globalThis.fetch = createDirectoFetch(directo, location.origin, globalThis.fetch.bind(globalThis))
+// Crea el directo y pone en la página el fetch que lo atiende. El directo pide a Twitch con el fetch original del
+// navegador, así que sus peticiones no pasan por sí mismo.
+export const installDirecto = (options: DirectoOptions = {}): Directo => {
+  const nativeFetch = globalThis.fetch.bind(globalThis)
+  const directo = createDirecto({ fetch: nativeFetch, ...options })
+  globalThis.fetch = createDirectoFetch(directo, location.origin, nativeFetch)
+  return directo
 }

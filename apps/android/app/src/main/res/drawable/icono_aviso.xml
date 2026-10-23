@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- El icono pequeño de la notificación (FondoService.kt): las barras de icono_monocromo.xml, sin el margen del icono
+     adaptable (de 108 se quedan los 48 del centro). El color lo pone el sistema. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="48"
+    android:viewportHeight="48">
+    <group
+        android:translateX="-30"
+        android:translateY="-30">
+        <path
+            android:fillColor="#FFFFFFFF"
+            android:pathData="M42.75,36 h4.5 a2.25,2.25 0 0 1 2.25,2.25 v31.5 a2.25,2.25 0 0 1 -2.25,2.25 h-4.5 a2.25,2.25 0 0 1 -2.25,-2.25 v-31.5 a2.25,2.25 0 0 1 2.25,-2.25 z M60.75,36 h4.5 a2.25,2.25 0 0 1 2.25,2.25 v31.5 a2.25,2.25 0 0 1 -2.25,2.25 h-4.5 a2.25,2.25 0 0 1 -2.25,-2.25 v-31.5 a2.25,2.25 0 0 1 2.25,-2.25 z" />
+    </group>
+</vector>

@@ -1,6 +1,6 @@
 import type { SavedHome, StreamCard } from "@goodttv/contratos"
 import { describe, expect, it } from "vitest"
-import { forgetHome, readSavedHome, saveHome } from "./home-cache"
+import { forgetHome, readSavedHome, saveHome } from "./page-home"
 
 // localStorage en memoria.
 const memoryStorage = () => {

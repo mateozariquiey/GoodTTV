@@ -41,6 +41,10 @@ export const useBehind = (latency: { readonly current: number | null }): number 
 // Margen hasta el final de la lista, en fragmentos del directo. Con la carga progresiva, el último (PREFETCH, que se
 // descarga mientras se codifica) se añade a medida que llega: con 2,5 quedan 1-2 s de búfer.
 const SYNC_SEGMENTS = 2.5
+// Sin carga progresiva (fMP4, ver LEVEL_LOADED), el último fragmento solo cuenta al llegar entero, como antes de D16:
+// con 2,5 el búfer bajaba a ~0,05 s. En 5 canales fMP4 (21 oct), 2,5 dio 16 s de paradas en 4 de 10 visitas y 3,
+// ninguna, con ~0,6 s más de retraso.
+const FMP4_SYNC_SEGMENTS = 3
 const CATCHUP_RATE = 1.05 // velocidad para recuperar el margen cuando el modo lo pide
 const NO_STOP_TARGET = 24 // modo sin paradas: margen fijo (s) hasta el final de la lista, que cubre la espera del VOD
 const LIVE_MAX_BEHIND = 4 // modo directo: más atrás que esto sobre el objetivo, hls.js salta al directo
@@ -50,12 +54,16 @@ const MAX_BEHIND = 60 // los otros modos: lo mismo, con margen para las pausas d
 const KEEP_BELOW_MAX = 10
 // Si se empieza mientras se publican trozos del VOD (crece a saltos de ~10 s), margen (s) para no quedarse sin datos.
 const VOD_START_TARGET = 16
+// Al retroceder, fragmentos que se dejan hasta el principio de la lista: mientras se ve, la lista avanza a la par, y lo
+// que sale de ella ya no se puede pedir.
+const SEEK_FLOOR_SEGMENTS = 3
 
 type StreamInfo = {
   readonly filling: boolean
   readonly offline: boolean
   readonly qualities: readonly { readonly id: string; readonly label: string }[]
-  readonly quality: string | null
+  readonly quality: string | null // la pedida: con ella se pide la lista, para que el directo no recree el empalme
+  readonly playing?: string | null // la que suena, si el canal no tiene la pedida: la que enseña el menú
   readonly segmentDuration: number | null
 }
 
@@ -117,6 +125,8 @@ export const useHlsPlayer = (
   const videoRef = useRef<HTMLVideoElement | undefined>(undefined)
   const userPaused = useRef(false)
   const latency = useRef<number | null>(null)
+  const seeker = useRef<((seconds: number, orStart: boolean) => boolean) | null>(null)
+  const [rewound, setRewound] = useState(false)
   const { hls: platformHls } = usePlatform()
 
   const patch = useCallback((next: Partial<PlayerState>) => {
@@ -130,6 +140,7 @@ export const useHlsPlayer = (
     let active = true
     const abort = new AbortController()
     setState({ ...INITIAL, muted: videoRef.current?.muted ?? false })
+    setRewound(false)
     // Un canal que nunca arranca se informa en vez de girar para siempre. El plazo es de cada visita: con otro canal
     // que también carga, la fase no cambia y un efecto aparte seguiría con el plazo del anterior.
     const stall = setTimeout(() => {
@@ -175,7 +186,7 @@ export const useHlsPlayer = (
           patch({ phase: "offline", playing: false })
           return
         }
-        patch({ qualities: info.qualities, quality: info.quality ?? "auto" })
+        patch({ qualities: info.qualities, quality: info.playing ?? info.quality ?? "auto" })
         const segmentTarget = SYNC_SEGMENTS * (info.segmentDuration ?? 2)
         const target =
           mode === "sin-paradas"
@@ -183,7 +194,7 @@ export const useHlsPlayer = (
             : info.filling
               ? Math.max(VOD_START_TARGET, segmentTarget)
               : segmentTarget
-        const maxLatency = target + (mode === "directo" ? LIVE_MAX_BEHIND : MAX_BEHIND)
+        let maxLatency = target + (mode === "directo" ? LIVE_MAX_BEHIND : MAX_BEHIND)
         const player = new Hls({
           autoStartLoad: false, // empieza a cargar en el objetivo (LEVEL_LOADED, abajo)
           // Sin subtítulos ni pistas de metadatos (la interfaz no los usa): hls.js crearía pistas data: que la
@@ -228,10 +239,19 @@ export const useHlsPlayer = (
           // encima de lo anterior. Cada fragmento de 2 s ocupaba ~1,1 s: saltos y la imagen pegada al borde (15 oct,
           // illojuan). Se decide aquí, antes del primer fragmento: hls.js copia la configuración al crear el
           // transmuxer.
+          let start = target
           if (data.details.fragments.some((frag) => frag.initSegment !== null)) {
             player.config.progressive = false
+            const fmp4 = FMP4_SYNC_SEGMENTS * (info.segmentDuration ?? 2)
+            if (fmp4 > start) {
+              start = fmp4
+              maxLatency = fmp4 + (mode === "directo" ? LIVE_MAX_BEHIND : MAX_BEHIND)
+              player.config.liveSyncDuration = fmp4
+              player.config.liveMaxLatencyDuration = maxLatency
+              player.targetLatency = fmp4
+            }
           }
-          player.startLoad(Math.max(0, data.details.edge - target))
+          player.startLoad(Math.max(0, data.details.edge - start))
         })
         // Al arrancar no hay contenido que preservar: lo que sobre de margen se salta en vez de recuperarlo acelerando,
         // que descarta fotogramas (60 fps a 1,05× piden 63 por segundo). Puede sobrar al poco de empezar: la primera
@@ -266,6 +286,35 @@ export const useHlsPlayer = (
         player.on(Hls.Events.FRAG_LOADING, (_event, data) => {
           if (mode === "adaptativo" && data.frag.url.includes("/stream/vod")) keepMargin = true
         })
+        // Retroceder y avanzar unos segundos dentro de la lista (abarca ~100 s), sin pasar del objetivo del modo. Lo
+        // retrocedido se conserva, como el margen de una pausa: sin acelerar y sin que hls.js salte al directo (solo si
+        // se sale de la lista y se queda sin datos), hasta volver a él.
+        let back = false
+        const setBack = (on: boolean): void => {
+          back = on
+          player.config.liveMaxLatencyDuration = on ? Number.POSITIVE_INFINITY : maxLatency
+          setRewound(on)
+        }
+        seeker.current = (seconds, orStart) => {
+          const details = player.latestLevelDetails
+          const targetLatency = player.targetLatency
+          if (details === null || targetLatency === null || video.readyState === 0) return false
+          // El objetivo, a mano: liveSyncPosition no se acerca al final más que TARGETDURATION (13 s con relleno), como
+          // al arrancar (LEVEL_LOADED).
+          const live = details.edge + details.age - targetLatency
+          const floor = details.fragmentStart + SEEK_FLOOR_SEGMENTS * (info.segmentDuration ?? 2)
+          let to = Math.min(video.currentTime + seconds, live)
+          // Más atrás que el principio de la lista, solo hasta él, y sin adelantar: con la lista aún corta (al abrir el
+          // canal), ese principio puede quedar por delante de lo que se ve.
+          if (to < floor && to < video.currentTime) {
+            if (!orStart) return false
+            to = Math.min(floor, video.currentTime)
+          }
+          setBack(to < live - 1)
+          video.playbackRate = 1
+          video.currentTime = to
+          return true
+        }
         catchup = setInterval(() => {
           const playing = player.playingDate
           latency.current = playing === null ? null : (Date.now() - playing.getTime()) / 1000
@@ -273,6 +322,11 @@ export const useHlsPlayer = (
           if (target === null || video.paused || video.readyState < 3) return
           const extra = player.latency - target
           if (!Number.isFinite(extra)) return
+          if (back) {
+            // De vuelta en el objetivo: avanzando, o porque hls.js ha saltado al directo.
+            if (extra > 1) return
+            setBack(false)
+          }
           const starting =
             !pausedOnce && playingSince !== null && performance.now() - playingSince < STARTUP_MS
           // Solo con la lista al día: si se ha quedado parada (una pausa global, Twitch se retrasa), el retraso
@@ -304,6 +358,7 @@ export const useHlsPlayer = (
       abort.abort()
       clearTimeout(stall)
       if (catchup !== undefined) clearInterval(catchup)
+      seeker.current = null
       hls?.destroy()
       video.pause()
       video.removeAttribute("src")
@@ -357,6 +412,15 @@ export const useHlsPlayer = (
     video.muted = !video.muted
     patch({ muted: video.muted })
   }, [patch])
+  const setMuted = useCallback(
+    (muted: boolean) => {
+      const video = videoRef.current
+      if (video === undefined || video.muted === muted) return
+      video.muted = muted
+      patch({ muted })
+    },
+    [patch],
+  )
   // Volumen de 0 a 1 (la tele no lo usa: el del sistema). Subirlo quita el silencio.
   const setVolume = useCallback(
     (volume: number) => {
@@ -372,12 +436,21 @@ export const useHlsPlayer = (
   const setQuality = useCallback((next: string) => setQualityState(next), [])
   const retry = useCallback(() => setAttempt((value) => value + 1), [])
   const syncIntent = useCallback(() => undefined, [])
+  // Mueve la imagen «seconds» dentro de la lista del directo; hacia delante, como mucho hasta el objetivo del modo.
+  // false si no llega tan atrás: no se mueve, salvo con orStart, que la deja al principio de la lista.
+  const seekBy = useCallback(
+    (seconds: number, orStart = false): boolean => seeker.current?.(seconds, orStart) ?? false,
+    [],
+  )
 
   return {
     latency,
     pause,
     play,
     retry,
+    rewound,
+    seekBy,
+    setMuted,
     setQuality,
     setVolume,
     state,

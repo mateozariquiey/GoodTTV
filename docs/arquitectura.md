@@ -27,11 +27,12 @@ docs/                     esta documentación
   - **los servicios:** dónde guardar la sesión (`TokenStore`), los recientes y las preferencias
     (`TextStorage`) y de dónde sale el Client ID (`SettingsSource`).
 - **`@goodttv/sin-anuncios`** no carga tipos de Node: solo usa `fetch`, `Response`,
-  `crypto.getRandomValues` y `Uint8Array`, que existen en Electron, en una extensión y en Android.
+  `crypto.getRandomValues` y `Uint8Array`, que existen en Electron, en una extensión y en Android. Pide a Twitch por
+  el `fetch` que se le da (`createDirecto({ fetch })`); si no, por el global.
   Sus rutas `/stream/` (`directo.ts`: lista con recarga bloqueante, `info`, `precalentar` y trozos
   del VOD) responden con `Response` estándar, sin depender del transporte. En la tele las sirve el servidor
   local (`apps/tele/src/main/stream/stream-service.ts`, un adaptador HTTP); en la extensión, la
-  propia página atiende sus `fetch` a `/stream/` (`apps/navegador/src/directo-fetch.ts`). `apps/tele`
+  propia página atiende sus `fetch` a `/stream/` (`directo-fetch.ts`, en el paquete). `apps/tele`
   lo declara como `devDependency` para que electron-vite lo meta en el bundle y electron-builder no
   lo empaquete aparte.
 - **Lo sin anuncios que sigue fuera de `@goodttv/sin-anuncios`.** Es lo que habría que separar
@@ -54,25 +55,33 @@ datos, cuenta y los mensajes con emotes), no las pantallas. El botón de la exte
 `src/goodttv.html`.
 
 ```text
-src/goodttv.tsx        monta las pantallas de escritorio; una sola pestaña a la vez
+src/goodttv.tsx        monta las pantallas de escritorio; avisa de lo que cambian otras pestañas
 ├── escritorio/        las pantallas
 │   ├── Desktop.tsx    barra, columna de seguidos y la vista de la dirección; atajos generales
 │   ├── routes.ts      la vista en la dirección: #/, #/canal/<login>, #/ajustes (atrás y enlaces)
-│   ├── Search.tsx     búsqueda siempre arriba (/); Enter abre el canal con ese nombre exacto
-│   ├── Sidebar.tsx    tus seguidos en directo; plegable
+│   ├── Search.tsx     búsqueda siempre arriba (/): la lista por relevancia de twitch.tv, y Enter abre el elegido
+│   ├── Sidebar.tsx    tus seguidos en directo; plegable (solo avatares)
 │   ├── HomeView.tsx   miniaturas de tus seguidos y populares, y «Seguir viendo»
-│   ├── ChannelView.tsx  el vídeo con controles encima, ficha del canal y chat; modo teatro
+│   ├── ChannelView.tsx  el vídeo con controles encima, ficha del canal (con «Siguiendo») y chat; modo teatro
+│   ├── ChatPanel.tsx  el chat; un emote dice su nombre al pasar el ratón, y un clic lo pone en la caja
+│   ├── ChatCompose.tsx  la caja para escribir (CHAT-1): Tab y «:» completan emotes, y la lista de emotes
+│   ├── sonido.ts      con varias pestañas, suena una sola (EXT-5)
+│   ├── VodView.tsx    un VOD (VOD-1): barra con miniaturas, velocidad, calidad y chat del vídeo; reanuda
+│   ├── SkipButton.tsx retroceder y avanzar 10 s (← →), en el directo y en un VOD
+│   ├── useVodPlayer.ts  hls.js para el VOD: arranque en buena calidad, carga progresiva y por dónde va
+│   ├── Videos.tsx     los vídeos de un canal (debajo de la ficha, COL-2, y de un VOD) y sus tarjetas
 │   ├── SettingsView.tsx cuenta, retraso, chat y la lista de atajos
-│   ├── shortcuts.ts   atajos de teclado (Espacio, M, T, F, C, ↑ ↓, /, Esc)
+│   ├── shortcuts.ts   atajos de teclado (Espacio, ← →, Fin, M, T, F, C, ↑ ↓, /, Esc)
 │   └── desktop.css    los estilos
 ├── api.ts             window.api: lo que en la tele hacen el proceso principal y el IPC, aquí en la página
-│   ├── @goodttv/servicios   cuenta, Helix, chat por EventSub y almacén local
+│   ├── @goodttv/servicios   createPageApi (page-api.ts): cuenta, Helix, chat por EventSub, almacén local e
+│   │                        Inicio de la última vez (page-home.ts, en localStorage)
 │   ├── storage.ts           la sesión y los datos en chrome.storage.local, sin cifrar
-│   ├── wake-lock.ts         que la pantalla no se apague mientras se ve un directo
-│   └── home-cache.ts        Inicio de la última vez (window.api.home), en localStorage
-├── directo-fetch.ts   el directo sin anuncios, atendido en la página
-└── lab.ts             laboratorio por la dirección: ?pausa= (pausas simuladas), ?registro, ?chatsintetico=, ?chatreal y ?sinred
-src/fondo.ts           abre o trae al frente la página; menú «Abrir en GoodTTV» en twitch.tv
+│   └── wake-lock.ts         que la pantalla no se apague mientras se ve un directo
+└── lab.ts             laboratorio por la dirección: ?pausa= (pausas simuladas), ?registro, ?chatsintetico=, ?chatreal
+                       (con &escribir, una cuenta ficticia que escribe), ?sinred y ?twitchfalso (una cuenta y un Helix
+                       falsos, con una espera por petición, para medir el arranque de Inicio: twitch-falso.ts)
+src/fondo.ts           abre GoodTTV o trae al frente la pestaña con esa vista; menú «Abrir en GoodTTV» en twitch.tv
 ```
 
 - **Un solo manifest para los dos navegadores** (`public/manifest.json`, MV3):
@@ -85,11 +94,48 @@ src/fondo.ts           abre o trae al frente la página; menú «Abrir en GoodTT
   Con esos permisos, las páginas de la extensión no están sujetas a CORS. Vite compila `dist/` sin
   minificar, y `empaquetar.mjs` lo mete en `out/goodttv-<versión>.xpi` (un ZIP con `manifest.json`
   en la raíz) para instalarlo en Zen o firmarlo en AMO (D15).
-- **El fondo apenas hace nada** (`src/fondo.ts`): abre la página o la trae al frente, y pone
-  «Abrir en GoodTTV» en el menú contextual de los enlaces y las páginas de twitch.tv. El canal lo
-  saca de la dirección (`twitch-links.ts`) y lo abre con `#/canal/<login>`; si la página ya está
-  abierta, solo cambia su dirección. Todo lo demás vive en la página, porque en Chrome el fondo es
-  un service worker que el navegador puede detener.
+- **El fondo apenas hace nada** (`src/fondo.ts`): abre GoodTTV, y pone «Abrir en GoodTTV» en el menú
+  contextual de los enlaces y las páginas de twitch.tv. El canal lo saca de la dirección
+  (`twitch-links.ts`): si una pestaña ya lo muestra, la trae al frente; si no, abre otra con
+  `#/canal/<login>`. Todo lo demás vive en la página, porque en Chrome el fondo es un service worker
+  que el navegador puede detener. Debe quedar en un solo archivo, sin importaciones.
+- **Escribir en el chat (CHAT-1, D24),** con la API oficial (`POST /helix/chat/messages`, permiso `user:write:chat`, que
+  la extensión y Android piden al vincular: `TWITCH_CHAT_SCOPES`; la tele sigue con los de lectura). Lo enviado sale
+  ya, sin la cola del retraso: los servicios lo devuelven con el color de la persona y sus emotes, y la copia que llega
+  por EventSub (con insignias) ocupa su sitio. Si Twitch no lo envía, su motivo. Los emotes para escribir
+  (`window.api.chat.emotes`) son los del canal y los globales de 7TV, BTTV y FFZ (`EmoteCatalog.listForChannel`) y los
+  de Twitch de la cuenta (`GET /helix/chat/emotes/user`, permiso `user:read:emotes`); se piden la primera vez que se va
+  a escribir (`useChatEmotes`), y completarlos es común (`emote-complete.ts`, en `@goodttv/interfaz`). Los de 7TV, BTTV
+  y FFZ se envían como texto: los ve como imagen quien tenga su extensión, o GoodTTV.
+- **Los VOD (VOD-1, D24),** como invitado y sin anuncios, como el relleno del empalme: los vídeos de un canal, la lista
+  maestra de usher, las miniaturas de la barra y el chat del vídeo (`vods.ts`, en `@goodttv/sin-anuncios`; a la
+  interfaz llegan por `window.api.vods`, con los emotes y las insignias que pone `createPageApi`). El chat solo se puede
+  pedir por posición: por cursor exige Client-Integrity (`useReplayChat` pide por delante de lo que se ve). Por dónde
+  va cada vídeo se guarda en `localStorage` (`vod-progress.ts`, en `@goodttv/interfaz`): reanuda 5 s antes y lo dice;
+  pasado el 97 % (o a 45 s del final) cuenta como visto. Los vídeos del canal salen debajo de su ficha (COL-2) y, sin
+  directo, en vez del vídeo, con una fila encima con los suyos a medias; también debajo de un VOD, y todos los que van
+  a medias, en Inicio. También son comunes los tiempos (`vod-format.ts`) y la lista maestra pedida de antemano
+  (`vod-cache.ts`). En Android (D25), el VOD lo reproduce Media3 con esa lista, por la red del teléfono y sin el motor
+  (`Reproductor.kt`), y la página (`pantallas/Vod.tsx`) pinta encima la barra y los controles, como en un canal.
+- **Buscar canales y abrir uno por su nombre, sin cuenta** (la extensión y Android): con el buscador de
+  twitch.tv como invitado (`canales.ts`, en `@goodttv/sin-anuncios`, que `createPageApi` usa en `catalog.search` y
+  `catalog.channel` si se le da): su relevancia, que corrige erratas, con la foto, los seguidores y si está en directo.
+  Sin esa fuente (la tele), la búsqueda de Helix, con cuenta. Un canal abierto por la dirección se completa con
+  `catalog.channel`: su nombre, su foto y su id, que el chat necesita también sin directo.
+- **Tus seguidos, por espectadores o «Recomendado para ti»** (la extensión y Android): Helix solo los da por espectadores; el
+  orden recomendado es propio, con los minutos que suena cada canal en GoodTTV, en directo o en sus VOD, que pesan la
+  mitad cada 14 días (`watch-time.ts`, en `@goodttv/interfaz`, en `localStorage`), y luego los abiertos hace poco.
+- **Retroceder el directo (DVR-1):** con el VOD que graba la emisión en curso (`liveArchive`, en `vods.ts`; va unos
+  segundos por detrás del directo), la barra del canal va desde que empezó. Lo que cubre la lista del empalme (~100 s,
+  menos el margen del modo), ← y la barra lo recorren en el mismo reproductor (`seekBy` de `useHlsPlayer`): lo
+  retrocedido se conserva, sin acelerar ni que hls.js vuelva solo al directo, hasta avanzar a él o pulsar «Ir al
+  directo» (Fin). Más atrás, o al reanudar tras más de un minuto en pausa, se abre ese VOD en ese momento
+  (`#/vod/<id>?t=…&directo=<canal>`): la hora del directo menos la de cuando empezó a grabarse; avanzar más allá de lo
+  grabado vuelve al canal, cuyo empalme se ha mantenido caliente. El camino del directo no cambia: mientras no se
+  retrocede, es el de siempre. En Android (D25), lo que cabe en la lista lo recorre Media3 dentro de su ventana del
+  directo (`saltar` y `alDirecto` en `Reproductor.kt`), al fotograma clave; lo de más atrás, igual que en la extensión.
+- **Si sigues el canal (SEG-1):** la ficha lo dice (`GET /helix/channels/followed`, con el permiso que ya había). Seguir
+  y dejar de seguir no tiene API oficial desde 2021 (D24): el botón abre el canal en twitch.tv.
 - **Sin embed oficial de respaldo:** Manifest V3 no admite código remoto, y el SDK de Twitch lo es.
   Si falla el reproductor propio, «Reintentar» o «Abrir en twitch.tv».
 - **La plataforma** (`packages/interfaz/src/platform.tsx`) solo lleva la configuración extra de
@@ -98,31 +144,54 @@ src/fondo.ts           abre o trae al frente la página; menú «Abrir en GoodTT
   carga la ventana. Aquí la página es la propia extensión: Manifest V3 no deja cargar código ajeno,
   y los tokens se quedan en los servicios; la interfaz solo recibe datos. Se guardan sin cifrar en
   `chrome.storage.local`, y Ajustes lo avisa.
-- **Inicio sale ya al abrir** (`useHome`, en `packages/interfaz/src/data.ts`, común con la tele). Comprobar la cuenta
-  y pedir los directos a Twitch tarda alrededor de un segundo. Mientras tanto se enseña lo que se vio la última vez con
-  esa cuenta (`window.api.home`, sin tokens), y se sustituye en cuanto llega lo de ahora. Se olvida al cerrar sesión, y
-  no se usa si la cuenta resulta ser otra. Sin nada guardado, Inicio dice «Cargando…» hasta saber si hay cuenta: antes
-  enseñaba la bienvenida sin cuenta y luego a todos los seguidos como desconectados. `useResource` vuelve a «cargando»
-  al cambiar de función de carga, para que lo cargado sin cuenta no se enseñe como si fuera con ella. La extensión lo
-  guarda en `localStorage` (`home-cache.ts`), que la plataforma lee sin esperar: sale en la primera imagen.
-- **Sin poder comprobar la cuenta** (sin red, Twitch caído), lo guardado sigue con un aviso y «Reintentar», nunca la
-  bienvenida (EXT-4). `useAuth` distingue los dos fallos:
+- **Inicio al abrir, sin esperas en cadena** (D26; `useHome`, en `packages/interfaz/src/data.ts`, común con la tele y
+  Android). Lo de ahora llega en unas décimas, porque lo que se pide a Twitch sale a la vez:
+  - **la sesión guarda la cuenta junto al token** (`StoredToken.identity`: id, nombre de usuario y permisos, de
+    `/validate`). Con ella, `TwitchSession.credentials` no espera a validar: la validación va a la vez, una sola por
+    token, y la cuenta (`auth.snapshot`) sí la espera. Si el token ya no vale, Helix contesta 401 y se renueva, y si
+    tampoco se puede, la validación cierra la sesión. Un token caducado se renueva sin probarlo. Una sesión de antes, o
+    recién vinculada, espera a la primera validación, que la guarda;
+  - **la foto y el nombre de la cuenta** se piden a la vez que se valida (`TwitchService.authSnapshot`, con la cuenta
+    guardada);
+  - **las fotos de los canales** se guardan una semana (`profile-pictures.ts`; en la página, en el `localStorage` de
+    Inicio; en la tele, en memoria) y solo se piden las que faltan;
+  - **`useHome` pide los directos al abrir** si lo guardado dice que había cuenta, sin esperar a comprobarla; al llegar
+    la cuenta, la misma carga sigue. Lo pedido antes de saberla, si falla, no es un error hasta que la cuenta lo diga
+    (puede ser que la sesión haya caducado).
+
+  Mientras llega, lo que se vio la última vez con esa cuenta (`window.api.home`, sin tokens) si es de hace menos de
+  5 min (`SAVED_HOME_FRESH_MS`); si es más viejo, `useHome` da su forma (`sketch`: cuántos directos había en cada lista
+  y los recientes), y las pantallas pintan los huecos vacíos, sin saltos al llegar lo de ahora. Lo guardado se olvida al
+  cerrar sesión, y no se usa si la cuenta resulta ser otra. Sin nada guardado, Inicio dice «Cargando…» hasta saber si
+  hay cuenta: antes enseñaba la bienvenida sin cuenta y luego a todos los seguidos como desconectados. `useResource`
+  vuelve a «cargando» al cambiar de función de carga, para que lo cargado sin cuenta no se enseñe como si fuera con
+  ella. La extensión lo guarda en `localStorage` (`page-home.ts`, en `@goodttv/servicios`), que la plataforma lee sin
+  esperar: sale en la primera imagen.
+- **Sin poder comprobar la cuenta** (sin red, Twitch caído), lo guardado sigue, sea de cuando sea, con un aviso de que
+  es de la última vez y «Reintentar», nunca la bienvenida (EXT-4). `useAuth` distingue los dos fallos:
   - si `auth.snapshot()` lanza, no ha contestado: `unreachable`, y la sesión sigue guardada. No se pide nada a Twitch,
     y se vuelve a comprobar sola con el evento `online` y cada 30 s. Ajustes ofrece también «Cerrar sesión»;
   - si devuelve `error`, sí ha contestado: la sesión ha caducado y `TwitchAuth` ya la ha cerrado. Lo guardado se
     olvida, como sin cuenta.
-- **Una sola GoodTTV a la vez** (`goodttv.tsx`). La pestaña abierta tiene un bloqueo del navegador
-  (`navigator.locks`). Otra pestaña avisa y puede pedirlo:
-  1. se pone a la cola y lo anuncia por un `BroadcastChannel`;
-  2. la primera se recarga en espera y suelta el bloqueo al descargarse;
-  3. la nueva solo arranca cuando la anterior ha parado.
-
-  Dos pestañas renovarían a la vez la misma sesión de Twitch, y el token de renovación solo vale una
-  vez.
-- **El directo, en la página.** `src/directo-fetch.ts` sustituye el `fetch` de la página: lo que
-  pide a sus propias rutas `/stream/` lo responde `@goodttv/sin-anuncios` en memoria, como el
-  servidor local de la tele. hls.js usa su `FetchLoader`, porque el `XhrLoader` por defecto no
-  pasaría por ahí. Así el reproductor pide lo mismo en las dos versiones.
+- **Varias pestañas a la vez,** cada una con su canal (EXT-5). Cada pestaña lleva su directo, su reproductor y su chat;
+  comparten la sesión de Twitch, los recientes y las preferencias, en `chrome.storage.local`:
+  - **lo que lee, cambia y escribe va en un bloqueo del navegador** (`navigator.locks`, uno por clave, `storage.ts`).
+    Renovar el token sobre todo: el token de renovación solo vale una vez, y si dos pestañas lo renovaran a la vez la
+    segunda daría la sesión por caducada en todas. Al entrar en el bloqueo, si otra ya lo renovó, se usa el suyo
+    (`TwitchSession`). Los recientes, igual (`LocalStore`), para no perder uno;
+  - **lo que cambia otra pestaña se avisa** (`chrome.storage.onChanged`, en `goodttv.tsx`): entrar o salir de la cuenta
+    y las preferencias;
+  - **suena una sola** (`escritorio/sonido.ts`), la última que se miró con un canal abierto. Las demás esperan por
+    escalones, para que volver sea rápido sin gastar de más: sin sonido, siguiendo el directo (1 min oculta); paradas,
+    con el empalme caliente (5 min más); y del todo paradas. Pasar a una pestaña que no es de GoodTTV no cambia nada;
+  - **el chat, solo en las pestañas a la vista:** EventSub admite tres conexiones con suscripciones por cuenta. Al
+    ocultarse se cierra sin vaciarse, y al volver sigue (`useChat`, `connected`);
+  - **el botón y «Abrir en GoodTTV»** llevan a la pestaña que ya muestra esa vista o abren otra junto a la actual. El
+    fondo no ve las direcciones de las pestañas (sin el permiso «tabs»): pregunta a las páginas (`pestanas.ts`).
+- **El directo, en la página.** `installDirecto` (`directo-fetch.ts`, en `@goodttv/sin-anuncios`) sustituye el
+  `fetch` de la página: lo que pide a sus propias rutas `/stream/` lo responde el directo en memoria, como el servidor
+  local de la tele, y el directo pide a Twitch con el `fetch` original. hls.js usa su `FetchLoader`, porque el
+  `XhrLoader` por defecto no pasaría por ahí. Así el reproductor pide lo mismo en las dos versiones.
 - **Sin worker de hls.js, como en la tele:** la versión ESM de hls.js no lo trae, así que
   demultiplexa en el hilo de la página. Por eso no afecta que Firefox no admita workers `blob:` en
   las páginas de extensión. No hace falta: con un directo a 1080p60 el hilo de la página está
@@ -173,10 +242,12 @@ iframe de player.twitch.tv (otro origen; la app no lo toca por dentro)
 **Regla de oro:** el renderer nunca ve un token. Las llamadas a Twitch con credenciales salen
 del proceso principal, y la interfaz recibe datos ya validados.
 
-**Inicio al abrir** (`useHome`, como en la extensión): mientras se comprueba la cuenta y llegan los directos, lo que
-se vio la última vez con esa cuenta. La tele no lo guarda en `localStorage`: el servidor local cambia de puerto en cada
-arranque, y con él el origen de la página, así que no duraría. Lo guarda el proceso principal en `saved-home.json`
-(archivo 0600), y la interfaz lo pide por IPC al abrir: tarda unos milisegundos, durante los que Inicio no enseña nada.
+**Inicio al abrir** (`useHome`, como en la extensión, D26): mientras llegan los directos, lo que se vio la última vez
+con esa cuenta si es de hace menos de 5 min; si no, «Cargando canales…». La tele no lo guarda en `localStorage`: el
+servidor local cambia de puerto en cada arranque, y con él el origen de la página, así que no duraría. Lo guarda el
+proceso principal en `saved-home.json` (archivo 0600), y la interfaz lo pide por IPC al abrir: tarda unos
+milisegundos, durante los que Inicio no enseña nada. Las fotos de los canales, en memoria del proceso principal: la
+primera carga tras abrir la app las pide todas.
 
 ## Cómo viaja una pulsación del mando
 
@@ -264,7 +335,9 @@ funciona como se describe a continuación.
     cargan fragmento a fragmento: hls.js 1.7 sitúa cada trozo que llega respecto al principio del fragmento y, a partir
     de 1 s, lo da por desfasado (`isInvalidInitPts`) y lo pone encima de lo anterior. Se decide con la primera lista,
     antes de cargar nada (`useHlsPlayer`, `LEVEL_LOADED`); el VOD va en el mismo formato que el directo
-    ([verificacion.md](verificacion.md#fmp4-saltos-con-la-carga-progresiva)).
+    ([verificacion.md](verificacion.md#fmp4-saltos-con-la-carga-progresiva)). Sin carga progresiva, el último
+    fragmento solo cuenta al llegar entero, como antes de D16: el margen sube a 3 fragmentos (con 2,5 se paraba,
+    [verificacion.md](verificacion.md#fmp4-paradas-con-el-margen-de-25-fragmentos)).
 - **El chat, barato de pintar:** cada lote solo pinta los mensajes nuevos (`Message` memoizado) y la
   lista lleva `contain: strict`, así que los mensajes que entran no recolocan el resto de la pantalla.
 
@@ -303,6 +376,6 @@ guarda los últimos 150.
 | --- | --- |
 | Añadir una tecla del mando | `packages/contratos/src/keys.ts` (`actionForKey`) y su prueba |
 | Cambiar colores, tamaños o espaciado | `packages/interfaz/src/styles.css` (variables en `:root`) |
-| Añadir una sección a Inicio | `packages/interfaz/src/data.ts` (`loadHome`, y `toSavedHome` con `SavedHomeSchema` en `@goodttv/contratos` para que se guarde) y `screens/HomeScreen.tsx` |
+| Añadir una sección a Inicio | `packages/interfaz/src/data.ts` (`loadHome`, `toSavedHome` con `SavedHomeSchema` en `@goodttv/contratos` para que se guarde y, si debe tener su forma mientras carga, `HomeSketch`) y `screens/HomeScreen.tsx` |
 | Otro proveedor de emotes | `packages/servicios/src/chat/emote-catalog.ts` y el host en `packages/contratos/src/chat.ts` y en la CSP de `src/renderer/index.html` |
 | Una llamada nueva a Twitch | `packages/servicios/src/twitch-service.ts` → `ipc.ts` → `preload/index.ts` → `packages/contratos/src/contracts.ts` |

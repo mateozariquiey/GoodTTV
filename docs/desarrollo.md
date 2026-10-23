@@ -56,8 +56,10 @@ E2E_CHANNELS=canal1,canal2 bun run test:e2e -- critical-path.spec.ts
 | `recovery.spec.ts` | Fallo del reproductor propio → «Usar el reproductor de Twitch» enfocado → fallo de este → «Reintentar» enfocado → se recupera; Atrás mientras carga. Sin poder comprobar la cuenta (IPC simulado): lo guardado y «Reintentar» al alcance del mando, nunca la bienvenida; con red, Inicio de la cuenta; sin ella, cerrar sesión desde Ajustes | Red |
 
 Variables: `E2E_XVFB`, `E2E_XDOTOOL` y `E2E_LD_LIBRARY_PATH` si los binarios no están en el
-`PATH`; `E2E_DISPLAY` (por defecto `:96`). El recorrido crítico prueba los canales de
-`E2E_CHANNELS` en orden hasta encontrar dos en directo.
+`PATH`; `E2E_DISPLAY` para fijar la pantalla de Xvfb, que si está ocupada hace fallar el arranque.
+Sin ella, Xvfb elige la primera pantalla libre, así que dos ejecuciones a la vez no comparten
+pantalla ni teclas. El recorrido crítico prueba los canales de `E2E_CHANNELS` en orden hasta
+encontrar dos en directo.
 
 **Sin Xvfb ni xdotool:** `E2E_WAYLAND=<socket>` usa un compositor Wayland sin pantalla ya en
 marcha (Weston con `kiosk-shell`, que da a la ventana toda la salida) y envía las teclas desde el
@@ -144,7 +146,7 @@ cuenta:
 - un modo de retraso que se conserva al recargar;
 - Inicio sin poder comprobar la cuenta (`?sinred`): lo guardado con el aviso, sin la bienvenida, «Reintentar» con
   red y «Cerrar sesión» sin ella;
-- una sola pestaña abierta.
+- dos pestañas a la vez, con sonido solo en la última que se abrió (EXT-5).
 
 ```bash
 bun run build:navegador
@@ -158,6 +160,13 @@ siguen el mismo código, pero no son de confianza para el navegador.
 La cuenta completa necesita a una persona: `node apps/navegador/test/humo/cuenta.mjs
 [--navegador firefox]` muestra un código para autorizarlo en twitch.tv/activate. Usa un perfil
 temporal que se borra al terminar, también si se corta con Ctrl+C.
+
+### Arranque de Inicio con cuenta
+
+Sin la cuenta de nadie: `goodttv.html?twitchfalso[=ms]` pone una cuenta y un Helix falsos, que contesta la propia página
+tras `ms` por petición (170 por defecto). La sesión e Inicio guardado van a `sessionStorage`, así que no pisa una cuenta
+de verdad, y no se guardan recientes. Los títulos de los directos llevan el id de cada carga, para distinguir lo de
+ahora de lo guardado (`apps/navegador/src/twitch-falso.ts`).
 
 ### Prueba de los modos de retraso
 
@@ -238,7 +247,11 @@ bun run test:humo -- --canales canal1 --oculta 360 --como silenciado   # pestañ
     (motivo en [verificacion.md](verificacion.md#extensión-de-navegador)).
   - **Firefox** es el del sistema; otra ruta, con `HUMO_FIREFOX`. Se controla por WebDriver BiDi
     con `--remote-allow-system-access`, que hace falta para leer las páginas de una extensión. Las
-    pruebas también corren en Zen: `HUMO_FIREFOX=/usr/bin/zen-browser` y `--navegador firefox`.
+    pruebas también corren en Zen, en el sobremesa y en `mini-agentes`: `HUMO_FIREFOX=$(command -v zen-browser)` y
+    `--navegador firefox`.
+    En `mini-agentes`, el del sistema es el snap, que no ve el perfil temporal en `/tmp` y no llega a
+    abrir («sin WebSocket en 30 s»): usa el descomprimido,
+    `HUMO_FIREFOX=~/.cache/firefox-release/firefox/firefox`.
 
 ## Client ID de Twitch
 

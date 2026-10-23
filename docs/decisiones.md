@@ -400,4 +400,6 @@ Al ampliar la e2e apareció otro fallo: al cerrar el selector de calidad, el foc
 ## 6. Hardware real
 
 Comprobado en el mini PC, la TV y el mando el 16 de octubre:
-[verificacion.md](verificacion.md#en-el-mini-pc-la-tv-y-el-mando).
+[verificacion.md](verificacion.md#en-el-mini-pc-la-tv-y-el-mando). Hacia el 19 de octubre se retiró esa configuración
+(la tele usa ahora otro aparato), así que desde la 0.3.0 la app de la tele solo se comprueba con las pruebas
+automáticas.

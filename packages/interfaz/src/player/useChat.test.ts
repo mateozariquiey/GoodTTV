@@ -23,6 +23,21 @@ describe("applyChatEvents", () => {
     expect(state.messages[0]?.id).toBe("10")
   })
 
+  it("puts the copy from EventSub in place of one's own message, already shown", () => {
+    const own = { ...message("mine"), color: "#ffffff" }
+    const state = applyChatEvents(
+      { messages: [message("a"), own, message("b")], status: "connected" },
+      [
+        {
+          kind: "message",
+          message: { ...message("mine"), badges: [{ title: "Sub", url: "https://x/b.png" }] },
+        },
+      ],
+    )
+    expect(state.messages.map((entry) => entry.id)).toEqual(["a", "mine", "b"])
+    expect(state.messages[1]?.badges).toHaveLength(1)
+  })
+
   it("applies moderation in order", () => {
     const state = applyChatEvents(
       { messages: [message("a", "1"), message("b", "2")], status: "connected" },

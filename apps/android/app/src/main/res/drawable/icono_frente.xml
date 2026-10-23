@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- La marca de GoodTTV (apps/navegador/public/icono.svg y .logo en web/estilos.css): las dos barras oscuras sobre el
+     cuadrado blanco, que aquí es el fondo del icono adaptable (values/icono.xml) y recorta el lanzador. Las proporciones,
+     las de la marca (16 unidades), sobre los 72 dp que se ven de los 108: 1 unidad = 4,5 dp. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <path
+        android:fillColor="#0c0c0e"
+        android:pathData="M42.75,36 h4.5 a2.25,2.25 0 0 1 2.25,2.25 v31.5 a2.25,2.25 0 0 1 -2.25,2.25 h-4.5 a2.25,2.25 0 0 1 -2.25,-2.25 v-31.5 a2.25,2.25 0 0 1 2.25,-2.25 z M60.75,36 h4.5 a2.25,2.25 0 0 1 2.25,2.25 v31.5 a2.25,2.25 0 0 1 -2.25,2.25 h-4.5 a2.25,2.25 0 0 1 -2.25,-2.25 v-31.5 a2.25,2.25 0 0 1 2.25,-2.25 z" />
+</vector>

@@ -48,13 +48,19 @@ export const listVariants = (master: string): readonly Variant[] => {
   return variants.sort((a, b) => b.bandwidth - a.bandwidth)
 }
 
-// La variante pedida o, si no hay, la de más ancho de banda.
+const heightOf = (resolution: string): number => Number(resolution.split("x")[1] ?? 0)
+
+// La variante pedida. Si el canal no la tiene (se eligió en otro canal), la misma resolución con otros fotogramas por
+// segundo o, si no, la mejor que no pase de esa resolución: no gasta más de lo que se eligió. Sin nada de eso, o sin
+// calidad pedida, la de más ancho de banda. Todas las sesiones eligen así la misma.
 export const pickVariant = (master: string, want: Want | null): Variant | undefined => {
   const variants = listVariants(master)
+  if (want === null) return variants[0]
   return (
-    (want === null
-      ? undefined
-      : variants.find((v) => v.resolution === want.resolution && v.fps === want.fps)) ?? variants[0]
+    variants.find((v) => v.resolution === want.resolution && v.fps === want.fps) ??
+    variants.find((v) => v.resolution === want.resolution) ??
+    variants.find((v) => heightOf(v.resolution) <= heightOf(want.resolution)) ??
+    variants[0]
   )
 }
 

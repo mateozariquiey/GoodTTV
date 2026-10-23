@@ -18,8 +18,10 @@ export {
   formatViewers,
   type Home,
   type HomeData,
+  type HomeSketch,
   loadHome,
   type Resource,
+  SAVED_HOME_FRESH_MS,
   searchChannels,
   useAppStatus,
   useAuth,
@@ -29,8 +31,20 @@ export {
 } from "./data"
 export { type Platform, PlatformContext, TV_PLATFORM } from "./platform"
 export { CHAT_STATUS_TEXT, Message } from "./player/ChatPanel"
+export {
+  emoteThumb,
+  insertAt,
+  NO_EMOTES,
+  replaceWord,
+  SUGGESTIONS_MAX,
+  suggestEmotes,
+  type Word,
+  wordAt,
+} from "./player/emote-complete"
 export { type ChatView, useChat } from "./player/useChat"
 export { useChatAtBottom } from "./player/useChatAtBottom"
+export { useChatCompose } from "./player/useChatCompose"
+export { useChatEmotes } from "./player/useChatEmotes"
 export {
   prewarmStream,
   TWITCH_VIEWER_LATENCY,
@@ -38,5 +52,24 @@ export {
   useHlsPlayer,
   usePrewarm,
 } from "./player/useHlsPlayer"
+export { useReplayChat } from "./player/useReplayChat"
 export type { PlayerPhase, PlayerState } from "./player/useTwitchPlayer"
 export { LATENCY_MODES, LATENCY_ORDER } from "./screens/AccountScreen"
+export { prefetchVod, renewVod, VOD_WARM_MS, vodDetail, vodPlayback } from "./vod-cache"
+export { formatAgo, formatClock } from "./vod-format"
+export {
+  forgetVodProgress,
+  isSeen,
+  resumeAt,
+  saveVodProgress,
+  unfinishedVods,
+  type VodProgress,
+  vodProgress,
+} from "./vod-progress"
+export {
+  addWatchMinute,
+  type FollowedOrder,
+  sortFollowed,
+  useFollowedOrder,
+  useWatchTime,
+} from "./watch-time"

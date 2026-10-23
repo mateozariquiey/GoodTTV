@@ -61,6 +61,9 @@ Fallos encontrados y corregidos en estas pruebas:
 
 ## En el mini PC, la TV y el mando
 
+El mini PC dejó de hacer de tele hacia el 19 de octubre, así que esto es lo comprobado mientras lo fue; desde la 0.3.0,
+la app de la tele solo se comprueba con las pruebas automáticas.
+
 16 de octubre, con la 0.2.2 (Electron 44.2.0) instalada desde el AppImage de la release:
 - **Equipo:** el mini PC (Ryzen 5 7640HS, Radeon 760M) con Kubuntu 26.04 y Plasma en Wayland, a 3840×2160 a 60 Hz,
   escala 100 % y sin HDR, conectado a la TV.
@@ -147,7 +150,7 @@ La prueba del reproductor sigue a 1080p y sin errores.
 - **Sin comprobar todavía:**
   - el menú contextual «Abrir en GoodTTV»: los navegadores sin ventana no lo dejan pulsar; está
     probada la lectura del canal desde la dirección;
-  - la pantalla completa real y la rueda para el volumen.
+  - la pantalla completa real (la rueda para el volumen se quitó el 22 de octubre: la rueda desplaza la página).
 
 Hito 5 (11 de octubre): el relleno con el VOD y los modos de retraso en la interfaz de escritorio, con
 la prueba de los modos ([desarrollo.md](desarrollo.md#prueba-de-los-modos-de-retraso)) y los mismos
@@ -345,8 +348,8 @@ frente a `7df4a65`, la de antes de D16. Misma prueba, con otros 6 canales:
   (`app.configureHostResolver({ enableHappyEyeballs: true })`) tarda 7-19 ms. El primer fotograma apenas cambia
   (~1010 ms), pero sí todas las demás conexiones nuevas: API, chat, emotes y miniaturas.
 - **Lo que quedaba:** la tele (Electron 44, Chromium 152) descargaba el primer fragmento más despacio que Chrome 155,
-  con el mismo código y la misma configuración. El 16 de octubre, en una red sin IPv6 no hubo diferencia: lo más
-  probable es la red, no Electron ([El primer fragmento, más lento en la tele](#el-primer-fragmento-más-lento-en-la-tele-ren-4)).
+  con el mismo código y la misma configuración. El 16 de octubre resultó ser la red, no Electron
+  ([El primer fragmento, más lento en la tele](#el-primer-fragmento-más-lento-en-la-tele-ren-4)).
 - **Paridad de la interfaz:** la tele usa ya el mismo chat que baja al final al cambiar de altura o cargar un emote
   (`useChatAtBottom`) y muestra «x s por detrás» junto a «En directo» (`useBehind`), como la extensión.
 - **Pruebas:** las 7 e2e de la tele pasan en Weston, y `test:interfaz`, en Chrome y Firefox.
@@ -480,6 +483,29 @@ lista, y apunta cada `seeking`, cada error de hls.js y los eventos del empalme.
 - **Límite:** se decide al crear el reproductor. Si una emisión nueva cambia de formato con él abierto, sigue con lo
   decidido hasta que se vuelva a abrir el canal.
 
+### fMP4: paradas con el margen de 2,5 fragmentos
+
+21 de octubre. En la comparación de la fase 1, `illojuan` (fMP4) bajó el búfer a 0,08 s en las dos versiones. Sin carga
+progresiva (fMP4 la desactiva, arriba), el último fragmento de Twitch solo cuenta al llegar entero, como antes de D16, y
+2,5 fragmentos de margen se quedaban cortos. Medido en `mini-agentes`, en la sesión GNOME con la GPU, con el margen
+de fMP4 configurable en una compilación aparte (`.lab/roadmap/rend-margen.mjs`):
+
+| Margen con fMP4 | Visitas | Paradas | Esperas | Búfer mínimo (mediana) | Perdidos | Latencia (mediana) |
+| --- | --- | --- | --- | --- | --- | --- |
+| 2,5 fragmentos (antes) | 10 | 16 s, en 4 | 33 | 0,42 s | 1,92 % | 2,79 s |
+| 3 fragmentos | 10 | 0 | 5 | 0,76 s | 0,17 % | 3,35 s |
+
+- **Canales:** los 5 en fMP4 de los 29 con más espectadores (`illojuan`, `otplol_`, `emiru`, `lirik` y
+  `bratishkinoff`), 2 rondas de 60 s alternando márgenes. Antes, `illojuan` solo, 2 rondas de 90 s con 2,5, 3, 3,5 y 4:
+  ninguna parada desde 3, y con 3,5 y 4 la latencia subía 1,3-2 s sin más ganancia.
+- **Ahora** el reproductor usa 3 fragmentos con fMP4 (`FMP4_SYNC_SEGMENTS`, en `useHlsPlayer`), en la extensión y en la
+  tele; con MPEG-TS sigue en 2,5. *Sin paradas* (24 s) y el arranque desde el VOD (16 s) ya tenían más.
+- **Confirmado** con la compilación final frente a la anterior, en `lirik`, `bratishkinoff` y `emiru` alternando:
+  la anterior, 7 s de paradas en 2 de 6 visitas, 19 esperas y un 1,03 % de fotogramas perdidos; la nueva, 2 s en 1
+  de 6 (`emiru`, con el búfer en 0,06 s), 4 esperas y un 0,72 % (casi todo de esa parada). La latencia pasa de 2,76 a
+  3,33 s y el primer fotograma, de 758 a 759 ms (medianas). En total, con 3 fragmentos, 1 parada en 18 visitas; con
+  2,5, 7 en 18. Si se quieren cero, 3,5 dio ninguna en 2 visitas, con ~1 s más de retraso: queda para medir más.
+
 ## Inicio al abrir en la tele
 
 16 de octubre. El usuario, en la tele con la 0.2.1: al abrir, menos de medio segundo de una pantalla que no llegaba a
@@ -511,6 +537,59 @@ antes del 15 de octubre ([Icono y arranque](#icono-y-arranque)).
   IPC; los 7 e2e de la tele y los 25 pasos de la interfaz en Chrome y Firefox.
 - **En la tele de verdad** (16 oct, 0.2.2, con la cuenta del usuario y el mando): la primera vez tras actualizar,
   «Cargando canales…» (aún no había nada guardado) y luego la lista; desde la segunda, la lista nada más abrir.
+
+## Inicio al abrir, sin esperas en cadena
+
+23 de octubre (D26). Al abrir, Inicio enseñaba un instante lo guardado de la última vez, aunque fuera de hace horas, y
+lo de ahora esperaba a cuatro peticiones a Twitch, una detrás de otra: validar la sesión, la foto de la cuenta, los
+directos y las fotos de sus canales. Cada una tarda ~170 ms desde `mini-agentes`, aun reutilizando la conexión, y la
+página pinta a los ~0,05 s, así que el tiempo se iba en la cadena.
+
+Medido en la extensión con una cuenta y un Helix falsos que contesta la propia página, 170 ms por petición
+(`?twitchfalso`, `twitch-falso.ts`; `herramientas/laboratorio/inicio.mjs`), Chrome for Testing sin ventana, las dos
+versiones a la vez, 5 cargas por escenario (mediana; entre la más rápida y la más lenta, menos de 25 ms):
+
+| Al abrir | Antes: lo de ahora | Antes: se veía | Ahora: lo de ahora | Ahora: se ve |
+| --- | --- | --- | --- | --- |
+| Lo guardado tiene 3 h | 730 ms | lo guardado, a los 34 ms | 218 ms | la forma de las listas, vacía, a los 35 ms |
+| Lo guardado tiene 5 h y el token ha caducado | 1074 ms | lo guardado | 384 ms | la forma vacía |
+| Otra pestaña (lo guardado tiene 1 min) | 733 ms | lo guardado | 224 ms | lo guardado |
+| La primera vez tras actualizar (sin la cuenta ni las fotos guardadas) | 727 ms | «Cargando…» | 726 ms | «Cargando…» |
+
+- **La cadena de antes:** validar (170 ms), la foto de la cuenta (170), los directos (170) y sus fotos (170). Con el
+  token caducado, además, validar daba 401, renovar y validar otra vez.
+- **Ahora:** los directos, la foto de la cuenta y la validación salen a la vez, al abrir; las fotos de los canales ya
+  están guardadas. Con el token caducado, se renueva sin probarlo, y después todo a la vez.
+- **La forma vacía ocupa lo mismo que lo de ahora** (capturas a 1600 × 900 con 3 s por petición): las miniaturas, las
+  filas de la columna y la línea de estado de «Seguir viendo» no se mueven al llegar lo de ahora.
+- **La primera vez** (tras actualizar, o tras vincular la cuenta) sigue igual: hasta la primera validación no se sabe
+  la cuenta, y las fotos de los canales aún no están guardadas.
+- **Límites:** la latencia es simulada y fija. Con la red real, cada petición varía, y lo de ahora llega cuando llega
+  la más lenta de las que salen a la vez. No se ha medido con la cuenta del usuario ni en Android: en el S25, el código
+  es el mismo (la página y sus servicios), pero las peticiones a Helix pasan por la red nativa.
+- **Pruebas:** de la sesión (credenciales sin esperar a validar, una sola validación, la cuenta guardada al validar y
+  conservada al renovar, el token caducado, la sesión que Twitch ya no acepta), del servicio (la foto de la cuenta a la
+  vez, las fotos de los canales y EXT-7 con la secuencia real: validar 200, la foto 401 y renovar 400), de las fotos
+  guardadas (`profile-pictures.test.ts`) y de `useHome` (`inicio.test.ts`: lo reciente, la forma, la carga temprana que
+  sigue al llegar la cuenta y un fallo antes de saberla).
+- **Revisión de Codex** (`gpt-6.1-sol`, razonamiento alto), con seis arreglos, cada uno con su prueba:
+  - **la carga de al abrir seguía aunque la cuenta resultara ser otra** (otra pestaña vincula otra mientras tanto), y
+    lo de la primera se guardaba como de la segunda. Ahora se vuelve a pedir si cambia la cuenta;
+  - **una renovación de la validación de al lado podía hacer fallar Inicio** (`SessionChangedError`) aunque la sesión
+    siguiera bien: las credenciales se vuelven a leer una vez;
+  - **las fotos guardadas en memoria (la tele) se quedaban solo con las del último lote;**
+  - **las fotos podían volver a guardarse tras cerrar sesión** (una respuesta en camino), y no se olvidaban si la sesión
+    caducaba o la cerraba otra página;
+  - **la lista y los datos del VOD en curso se renovaban cada 4 min con una caché de 5:** la llamada del minuto 4 no
+    renovaba nada, y entre el 5 y el 8 retroceder volvía a esperarlos. Ahora se piden otra vez sin esperar a que caduquen;
+  - **ya antes de este cambio, una petición podía llevar el id de una cuenta y el token de otra** (`streams/followed`,
+    `channels/followed` y el chat), si la cuenta cambiaba entre las dos lecturas de credenciales o al renovar. Ahora se
+    arma con la cuenta de las credenciales con que sale.
+
+  Se sostuvo, según la revisión: guardar la cuenta con el token en la tele, sin bloqueo, no pisa una renovación; y esperar
+  a las fotos que faltan. Queda, sin arreglar: entre pestañas, guardar las fotos no es atómico (puede perderse alguna,
+  que se vuelve a pedir), y si la validación de al lado cierra la sesión antes de que la cuenta pregunte, sale «sin
+  cuenta» en vez de «caducada» (en la app la cuenta pregunta la primera).
 
 ## Cuenta sin red al abrir (EXT-4)
 
@@ -583,7 +662,7 @@ el chat a la vista.
 | --- | --- |
 | Decodificador | `VaapiVideoDecoder` (por hardware) en los 14 reproductores, H.264 High 1080p60. Chromium da `video_decode: enabled`, aunque `SystemInfo` no lista perfiles |
 | Primer fotograma | 990 ms de mediana (868-1105, 8 aperturas); avanza a los ~1,2 s. Dos aperturas más tardaron 6,4 y 6,9 s (abajo) |
-| Primer fragmento del CDN | 380 ms de mediana (307-531, 10 aperturas); probablemente, la espera de IPv6 de [REN-4](#el-primer-fragmento-más-lento-en-la-tele-ren-4) |
+| Primer fragmento del CDN | 380 ms de mediana (307-531, 10 aperturas): la espera de IPv6 de [REN-4](#el-primer-fragmento-más-lento-en-la-tele-ren-4), ya corregida |
 | Fotogramas perdidos | 1,5 % (321 de 21 842, sin los 5 primeros segundos de cada canal), a rachas (abajo) |
 | CPU, suma de los procesos | 29 % de un núcleo de media (p95 39 %): renderer 12 %, GPU 10 %, principal 4 %, red 3 %. Unos 2,4 % de los 12 hilos |
 | GPU | Motor de vídeo (VCN) al 8 %, gráficos al 7 % |
@@ -605,9 +684,9 @@ Dos cosas que no se explican todavía:
 ## El primer fragmento, más lento en la tele (REN-4)
 
 16 de octubre. Con el mismo código, la tele descargaba el primer fragmento ~200 ms más despacio que la extensión
-([La tele frente a la extensión](#rendimiento-del-reproductor-propio)). Lo más probable es que no sea Electron, sino la
-red: en una red sin IPv6 no hay diferencia, y en la de casa cada conexión nueva al CDN prueba antes IPv6, que no sale.
-Falta comprobarlo en la app, antes y después de arreglar la red.
+([La tele frente a la extensión](#rendimiento-del-reproductor-propio)). No era Electron, sino la red: en una red sin IPv6
+no hay diferencia, y en la de casa cada conexión nueva al CDN probaba antes IPv6, que no sale. Comprobado en la app,
+con y sin la ruta IPv6, y corregido en el mini PC (abajo).
 - **En una red sin IPv6 no hay diferencia.** Las tres versiones, a la vez, en tres Weston sin pantalla de una VM sin
   ruta IPv6, con 6 canales × 2 rondas, en modo adaptativo:
 
@@ -637,14 +716,30 @@ Falta comprobarlo en la app, antes y después de arreglar la red.
 - **El sobremesa** está en la misma red y ya mostró esa espera de ~300 ms con IPv6
   ([La tele frente a la extensión](#rendimiento-del-reproductor-propio)). Es lo más probable que la diferencia que
   quedaba allí sea esta misma, pero no se ha medido.
-- **El arreglo sería de la red,** no de GoodTTV: que el mini PC no acepte la ruta IPv6 por defecto que anuncia el
-  router, o que el router no la anuncie. No está hecho, y con él se comprobaría la causa: el primer fragmento en la app
-  antes y después, con conexiones nuevas.
+- **Con y sin la ruta, en el mini PC.** Se alternaron cuatro rondas, con la ruta y sin ella, quitándola solo en tiempo de
+  ejecución (`nmcli device modify … ipv6.never-default`). En cada ronda, 6 canales, cada uno en una GoodTTV 0.2.3 nueva
+  y sin pantalla (`--ozone-platform=headless`, perfil temporal), para que cada apertura usara conexiones nuevas
+  (`.lab/ren4/exp/`):
+
+  | Medianas, 12 aperturas por columna | Con la ruta IPv6 | Sin ella |
+  | --- | --- | --- |
+  | Espera de las sesiones (`info`) | 646 ms | 650 ms |
+  | Primer fragmento | 335 ms (305-631) | 86 ms (54-448) |
+  | El vídeo avanza | 1401 ms | 1139 ms |
+
+  Cada canal arranca ~0,26 s antes. `info` no cambia: lo pide el proceso principal, con el `fetch` de Node, y casi
+  todo va a servidores sin IPv6. Con `curl`, que usa también Kodi, cada conexión nueva a un servidor con IPv6 (YouTube,
+  Crunchyroll, TMDB, Flathub, el espejo de Kodi, BTTV, FFZ…) tardaba ~200 ms más con la ruta, y sin ella, lo mismo que
+  por IPv4.
+- **El arreglo es de la red,** no de GoodTTV: el mini PC ya no acepta la ruta IPv6 por defecto
+  (`ipv6.never-default` en NetworkManager); sigue con el IPv6 local y el de Tailscale. En otra red con IPv6 a medias
+  pasaría lo mismo: está entre los límites conocidos de la 0.2.3.
 
 ## Electron 44.8.0 (MAN-1)
 
 16 de octubre. La tele pasa de Electron 44.2.0 a 44.8.0, el último de la 44, con los parches de seguridad de Chromium
-152 (152.0.7977.167) y Node 24.22. Electron 45 (Chromium 156) aún está en beta.
+152 (152.0.7977.167) y Node 24.22. Electron 45 (Chromium 156) aún está en beta. Sale en la 0.2.3, instalada en la
+TV el mismo día: el usuario la probó con el mando (abrir, reproducir, cambiar de canal con ↑/↓, volver y salir).
 - **Pruebas:**
   - `bun run verify`: 303 pruebas, más 4 fallos esperados;
   - las 10 e2e de la tele, dos veces en un Weston sin pantalla (`E2E_WAYLAND`);
@@ -653,12 +748,140 @@ Falta comprobarlo en la app, antes y después de arreglar la red.
     de `after-pack.cjs`. Si se matan a la vez todos sus procesos (también el de la GPU), acaba con «GPU process isn't
     usable»: es por cómo se cierra, no por la versión.
 - **Con Xvfb y xdotool,** antes de las e2e nuevas de EXT-4, el recorrido crítico falló 2 de 7 veces con la 44.8.0: una
-  vez Escape no cerró el reproductor, otra se pasó un plazo de 10 s. Con la 44.2.0 pasó las 7. Alternando las dos
-  versiones, pasaron las 8 ejecuciones. No se sabe la causa: puede ser intermitente, pero no está descartado que sea
-  de Electron. Weston no lo descarta, porque allí las teclas se inyectan con `sendInputEvent`, sin pasar por la
-  entrada del sistema. Lo que cuenta es el mando en la tele, que llega por Wayland.
+  vez Escape no cerró el reproductor, otra se pasó un plazo de 10 s. Con la 44.2.0 pasó las 7. Los fallos
+  coincidieron en el tiempo con las e2e de otro hilo en la misma máquina y la misma pantalla `:96` (entre las 08:42 y
+  las 08:45 UTC), así que las teclas de una ejecución podían llegar a la ventana de la otra. Después, sin solaparse
+  y alternando las dos versiones, pasaron las 8 ejecuciones. La causa probable es ese choque, no Electron. Desde el
+  18 de octubre, cada ejecución usa una pantalla libre ([desarrollo.md](desarrollo.md#pruebas-e2e)).
 - **Revisión de Codex** (`gpt-6.1-sol`) de la 0.2.3, antes de publicar:
   - corrigió dos cifras: el primer fragmento, que se agrupaba mal por apertura, y los porcentajes de fotogramas
     perdidos;
   - rebajó REN-4 y REP-7 de causa a hipótesis;
   - aclaró que lo probado en el mini PC es la 0.2.2.
+
+## La hora de los trozos del VOD
+
+16 de octubre. Al arrancar desde el VOD (todas las sesiones con anuncio de entrada), el empalme no tenía hora (PDT)
+que dar a sus trozos: hls.js la deducía al volver al directo. Ahora se la da (`vodHour`, en `twitch-source.ts`): la que
+trae la lista del VOD o, si no la trae, la de cuándo empezó a grabarse más su posición.
+
+| Hora de un trozo del VOD, en 7 canales en directo | Error |
+| --- | --- |
+| La de su lista (`#EXT-X-PROGRAM-DATE-TIME`, en 5 de los 7) | 0,00 s |
+| Cuándo empezó a grabarse (`recordedAt`) más su posición | +1,6 a +2,4 s |
+| Cuándo empezó la emisión más su posición | −1,9 a −3,9 s |
+| Suponer que el VOD acaba ahora (va 11-48 s por detrás del directo) | +1,3 a +38 s |
+
+- **El error** es la diferencia con la hora de un fragmento en directo que tiene el mismo tiempo de vídeo.
+- **Comprobado** con `test:modos --escenario arranque` en jynxzi (con hora en su lista) y caedrel (sin ella), en
+  Chrome y Firefox: empieza en el VOD y vuelve con 0 s de salto, sin paradas.
+- **Rendimiento, con el código común que sube a `packages/`** (`createPageApi`, `installDirecto` y el `fetch` del
+  empalme como opción), frente a la versión anterior: dos tandas a la vez en dos Weston con GPU, cambiando de Weston
+  entre ellas (4 canales × 2 rondas, 35 s). Igual el primer fotograma (769 frente a 779-808 ms de mediana), la latencia,
+  el búfer, las esperas, la CPU y el hilo de la página, y sin paradas. Los fotogramas perdidos (0,16-0,25 % frente a
+  0,48-0,65 %) son ruido: la versión nueva contra sí misma dio 0,20 y 0,51 %.
+
+## Abrir un canal, precalentar al abrir y la calidad de reserva
+
+21 de octubre, en la extensión, en `mini-agentes` (Chrome for Testing en la sesión GNOME, con la GPU: ahí los
+fotogramas perdidos son fiables, 0,1-0,4 %; en un Weston 14 sin pantalla salían un 20-30 %).
+- **Un canal abierto por su dirección se abría dos veces** con un modo guardado distinto de Adaptativo: el reproductor
+  arrancaba con las preferencias por defecto y, al llegar las guardadas, volvía a abrir el canal. Pasa al abrir una
+  pestaña en un canal o con «Abrir en GoodTTV». Con *Sin paradas* guardado, `.lab/roadmap/abrir.mjs` contó 8 sesiones
+  abiertas antes y 4 ahora: el reproductor espera a las preferencias (`usePreferences` da `loaded`). En Android era el
+  doble arranque de una «ruta» de adb (notas de AND-3), arreglado igual. La tele no abre canales antes de tenerlas.
+- **REN-1:** al abrir GoodTTV en Inicio, se precalienta el último canal visto si emite (`useOpeningPrewarm`, con
+  pruebas). El arranque que se gana es el de precalentar (D16: ~0,5 s en vez de ~0,9 s si se abre tras medio segundo).
+  Solo en la extensión: la tele ya precalienta el canal con el foco al abrir, y Android aún no precalienta (no hay ratón).
+- **REP-1:** `/info` dice aparte la calidad que suena (`playing`), y el menú enseña esa. Pidiendo 720p60 a dos canales
+  pequeños en directo: `meromeruu` (solo 30 fps) sonaba en 1080p30 y el menú decía «Auto». Además, sin la pedida, el
+  empalme elige la misma resolución u otra que no pase de ella (`pickVariant`): ahora suena en 720p30. Con pruebas,
+  también para las dos dudas de REP-4 (sesiones con calidades distintas y un VOD con otra calidad que el directo).
+- **Sin cambios en la reproducción,** frente a la versión anterior, alternando 4 canales × 2 rondas de 25 s: primer
+  fotograma 731 frente a 727 ms de mediana, latencia 2,26 frente a 2,20 s, la misma CPU. Las paradas (3 s en la nueva)
+  fueron todas en `illojuan` (fMP4, sin carga progresiva), que en las dos versiones bajó el búfer a 0,08 s.
+
+## REP-6: rutas distintas tras un anuncio
+
+21 de octubre. El empalme descarta el fragmento de una sesión si otra ya dio otra ruta para el mismo índice
+(`url-distinta`), y la duda era si la primera podía estar desplazada en el tiempo. `.lab/roadmap/rutas.ts` arranca
+empalmes reales y, en cada conflicto, mide en ese momento el tiempo de vídeo de los dos fragmentos. En 8 canales durante
+40 min, con 13 anuncios y 10 cambios de numeración: 7 conflictos distintos (101 avisos, repetidos en cada consulta), y
+en los 7 los dos fragmentos empezaban en el mismo tiempo de vídeo (diferencia 0). Son el mismo trozo con otra ruta, así
+que quedarse con el primero no salta nada. Una primera versión de la sonda, que buscaba los fragmentos después del
+conflicto, dio diferencias de segundos cuando la numeración acababa de cambiar: eran de ella, no del empalme. El
+episodio de `alexelcapo` (16 oct) no se repitió.
+
+## EXT-5: varias pestañas
+
+21 de octubre, en la extensión, en `mini-agentes`: Chrome for Testing en la sesión GNOME (las pestañas ocultas lo están
+de verdad), dos pestañas con dos canales en directo (`.lab/roadmap/pestanas.mjs`, con las esperas acortadas por
+`?esperas=`). Desde que la pestaña pasa a estar a la vista hasta que el vídeo avanza con sonido:
+
+| Cuánto tiempo oculta | Cómo estaba | Hasta que suena |
+| --- | --- | --- |
+| 2 s | sin sonido, siguiendo el directo | 73-87 ms (5 veces) |
+| 9 s (parada a los 5 s, con `?esperas=`) | sin vídeo, con el empalme caliente | 104-112 ms (5) |
+| 60 s | sin vídeo, con el empalme caliente | 117-133 ms (2) |
+| pasado el plazo caliente (61 s con `?esperas=5,20`) | todo parado | 679-736 ms (3), como abrir el canal |
+
+Con el empalme caliente, el reproductor se crea de nuevo (comprobado: es otro `<video>`) y arranca con lo último del
+empalme, sin esperar a Twitch. Con las esperas de verdad: sin sonido el primer minuto, caliente los 5 siguientes.
+
+- **La segunda pestaña silencia a la primera** al abrir su canal, y la primera, oculta, se para pasado el plazo.
+- **La prueba de la interfaz** abre dos pestañas con el mismo canal, en Chrome y en Firefox: suena la última.
+- **Pruebas de los servicios:** dos sesiones que encuentran a la vez el token caducado renuevan una sola vez y usan el
+  mismo token; si otra pestaña cierra sesión mientras tanto, no se renueva con el viejo; dos pestañas que añaden un
+  reciente a la vez no pierden ninguno.
+- **Sin probar con una cuenta de verdad:** la renovación real con varias pestañas y el chat en más de tres ventanas.
+
+## Revisión independiente del 21 de octubre
+
+Codex (`gpt-6.1-sol`, razonamiento alto) revisó todo lo del día, de solo lectura, con preguntas concretas. Se aceptaron y
+corrigieron, con pruebas las que se pueden reproducir sin navegador:
+- **Una renovación podía resucitar una sesión que otra pestaña cerraba:** cerrar y abrir sesión van ahora en la misma
+  sección exclusiva que renovar.
+- **La identidad en caché de una pestaña servía para el token de otra cuenta** (otra pestaña cerró sesión y vinculó
+  otra): la caché va con su token.
+- **El chat del VOD repetía la misma petición sin fin** con un chat muy activo (50 mensajes en 5 s): sigue desde lo
+  recibido, y cada respuesta avanza.
+- **Dos pestañas que reclaman el sonido a la vez se callaban las dos:** gana la más reciente (y, a la misma hora, un
+  desempate común).
+- **Un VOD no participaba en «suena una sola»,** y **la rueda o el silencio de una pestaña silenciada** dejaban sonar
+  dos, o volvían a silenciarla: reclaman el sonido, y lo que elige la persona manda.
+- **Un mensaje enviado podía darse por fallido** si fallaba lo de después (el color, el nombre), y se reenviaría.
+- **Cerrar una pestaña con un VOD en pausa pisaba lo que otra había avanzado** con el mismo vídeo: solo se guarda si la
+  posición ha cambiado.
+- **El éxito de un envío borraba lo que se había escrito mientras tanto,** y **el eco tardío pisaba la copia de
+  EventSub** (con insignias y emotes de Twitch).
+- **Los trozos «-unmuted» del VOD,** que Twitch no sirve, se piden silenciados, como en el relleno.
+- **Dos pulsaciones del botón seguidas abrían dos pestañas.**
+- Además, `offset` y la URL de las miniaturas se validan en `window.api.vods`.
+
+No se cambió: **el desfase de DVR-1** (el segundo se calcula con cuándo empezó a grabarse el VOD, 1,6-2,4 s por
+detrás); para un salto hacia atrás no se nota. Corregirlo con la hora (PDT) de la lista del VOD queda en DVR-1.
+
+## VOD-1: el reproductor de VOD
+
+21 de octubre, en la extensión, en `mini-agentes` (Chrome for Testing sin ventana), con un VOD de 3 h 18 min de `ibai`
+(1080p60, trozos de 10 s de ~8 MB) y `.lab/roadmap/vod-prueba.mjs`, `vod-fresco.mjs` y `vod-twitch.mjs`:
+
+| | GoodTTV | twitch.tv |
+| --- | --- | --- |
+| Abrir en una pestaña nueva, en la hora 1, hasta que avanza | 1,01-1,06 s (3 veces) | 1,50-2,24 s (3 veces, sin anuncio) |
+| Abrir desde la lista del canal (la página ya abierta) | 1,1-1,2 s | |
+| Saltar a 1 h, 2 h 30 y 10 min, hasta que avanza | 0,39-0,66 s | |
+
+- **Empieza en 1080p60:** hls.js, por su cuenta, solo empezaba en una calidad cuyo primer trozo (10 s) bajara en 4 s, y
+  daba 720p60. Ahora empieza en la mejor que cabe en el ancho de banda medido la última vez (con un 20 % de margen),
+  y sigue el ABR. Con carga progresiva (salvo fMP4), se ve antes de llegar el trozo entero.
+- **El chat del vídeo** llega como invitado por posición, unos 50 mensajes cada vez; por cursor, Twitch exige
+  Client-Integrity (comprobado). Con emotes de Twitch, 7TV, BTTV y FFZ, y con insignias si hay cuenta.
+- **Por dónde va:** se guarda cada 5 s, al pausar, al saltar y al ocultarse; al volver, «Sigues donde lo dejaste»,
+  5 s antes, con «Desde el principio». Inicio enseña los que van a medias.
+- **Un VOD en curso** (la emisión que sigue en directo) se reproduce como un directo que empieza al principio (lista
+  `EVENT`), y se puede saltar por él.
+- **Sin probar:** un VOD solo para suscriptores (usher da 403 y se dice) y los trozos silenciados.
+- **La prueba de la interfaz** abre una emisión desde la ficha, salta con L y comprueba que guarda por dónde va, en
+  Chrome y en Firefox.
+

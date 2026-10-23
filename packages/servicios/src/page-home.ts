@@ -1,8 +1,8 @@
 import { type SavedHome, SavedHomeSchema } from "@goodttv/contratos"
 
-// Inicio de la última vez en la extensión: window.api.home (api.ts) y la plataforma (goodttv.tsx), que lo lee al
-// abrir. En localStorage y no en chrome.storage.local porque se lee sin esperar, así que sale ya en la primera imagen.
-// Sin tokens: solo lo que se ve (SavedHomeSchema).
+// Inicio de la última vez en una página (la extensión): window.api.home (page-api.ts) y la plataforma, que lo lee al
+// abrir (apps/navegador/src/goodttv.tsx). En localStorage y no en el almacén de la plataforma (chrome.storage.local)
+// porque se lee sin esperar, así que sale ya en la primera imagen. Sin tokens: solo lo que se ve (SavedHomeSchema).
 const KEY = "inicio"
 const VERSION = 1
 

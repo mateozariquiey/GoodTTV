@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- El blanco de la marca (la variable white de web/estilos.css). -->
+    <color name="fondo_icono">#f2f2f4</color>
+</resources>

@@ -234,10 +234,11 @@ describe("arranque", () => {
       "https://x/site-1080.m3u8",
       "https://x/embed-1080.m3u8",
     ])
-    expect(empalme.status().quality).toBe("1920x1080@60")
+    expect(empalme.status()).toMatchObject({ playing: "1920x1080@60", quality: "1920x1080@60" })
   })
 
-  // Como openVariant: la variante pedida o, si el canal no la tiene, la primera de su lista (la de reserva).
+  // Como openVariant (pickVariant): la variante pedida o, si el canal no la tiene, la misma resolución, la mejor que no
+  // pase de ella o la primera de su lista.
   const offering =
     (...variants: ReturnType<typeof variant>[]) =>
     async (
@@ -246,11 +247,46 @@ describe("arranque", () => {
       _device: string,
       want: { readonly fps: number; readonly resolution: string } | null,
     ) => {
+      const height = (resolution: string): number => Number(resolution.split("x")[1])
       const main =
-        variants.find((v) => v.resolution === want?.resolution && v.fps === want.fps) ?? variants[0]
+        want === null
+          ? variants[0]
+          : (variants.find((v) => v.resolution === want.resolution && v.fps === want.fps) ??
+            variants.find((v) => v.resolution === want.resolution) ??
+            variants.find((v) => height(v.resolution) <= height(want.resolution)) ??
+            variants[0])
       if (main === undefined) throw new Error("sin variantes")
       return opened(main, ...variants.filter((v) => v !== main))
     }
+
+  it("si una sesión no tiene la calidad que fijó otra, usa la más parecida; suena la de la primera (REP-4)", async () => {
+    let releaseEmbed = (): void => undefined
+    const empalme = new Empalme({
+      channel: "x",
+      fetchPlaylist: async () => playlist(100, 100, L(100, 104)),
+      openSession: async (...args) => {
+        if (args[1] === "site") {
+          return offering(
+            variant("1920x1080", "https://x/site-1080.m3u8"),
+            variant("1280x720", "https://x/site-720.m3u8"),
+          )(...args)
+        }
+        await new Promise<void>((done) => (releaseEmbed = done))
+        return offering(variant("1280x720", "https://x/embed-720.m3u8"))(...args)
+      },
+      sources: ["site", "embed"],
+    })
+    created.push(empalme)
+    const started = empalme.start()
+    await tick()
+    releaseEmbed()
+    await started
+    expect(empalme.sessionsForTests.map((s) => s.url)).toEqual([
+      "https://x/site-1080.m3u8",
+      "https://x/embed-720.m3u8",
+    ])
+    expect(empalme.status()).toMatchObject({ playing: "1920x1080@60", quality: "1920x1080@60" })
+  })
 
   it("si el canal no tiene la calidad pedida (elegida en otro canal), usa la de reserva", async () => {
     const empalme = new Empalme({
@@ -268,6 +304,8 @@ describe("arranque", () => {
       "https://x/1080.m3u8",
       "https://x/1080.m3u8",
     ])
+    // El menú enseña la que suena; la pedida sigue siendo con la que se compara una petición nueva (directo.ts).
+    expect(empalme.status()).toMatchObject({ playing: "1920x1080@60", quality: "1280x720@60" })
   })
 
   it("si la emisión nueva ya no tiene la calidad fijada, reinicia la línea de tiempo con la de reserva", async () => {
@@ -302,6 +340,7 @@ describe("arranque", () => {
     await vi.advanceTimersByTimeAsync(5000)
     expect(events.some((e) => e.ev === "nueva-emision")).toBe(true)
     expect(shape(empalme.publishedForTests)).toBe("5001 5002 5003 5004 0D 1 2 3")
+    expect(empalme.status()).toMatchObject({ playing: "1280x720@60", quality: "1920x1080@60" })
   })
 })
 
@@ -494,7 +533,10 @@ describe("relleno con el VOD", () => {
   })
 
   it("si todas las sesiones arrancan con anuncio, empieza en el VOD y vuelve al directo exacto", async () => {
+    // Con la hora que trae la lista del VOD: el trozo k empieza donde el índice 100 + 5k.
     const vod = vodOf(4)
+    for (const [k, segment] of vod.segments.entries())
+      vod.segments[k] = { ...segment, pdt: t(100 + 5 * k) }
     const { empalme, events, sessions } = make({
       probe: probeWith(0),
       sources: ["site", "embed"],
@@ -507,17 +549,35 @@ describe("relleno con el VOD", () => {
     expect(empalme.publishedForTests).toHaveLength(0) // embed aún no ha dado su lista
     empalme.receive(embed, playlist(70, null, A(5)))
     await tick()
-    // Dos trozos antes del final del VOD (1020-1040), sin hora: hls.js la deduce al volver.
+    // Dos trozos antes del final del VOD (1020-1040), con su hora.
     expect(shape(empalme.publishedForTests)).toBe("V V")
-    expect(empalme.publishedForTests.every((o) => o.pdt === null)).toBe(true)
+    expect(empalme.publishedForTests.map((o) => o.pdt)).toEqual([t(110), t(115)])
     expect(empalme.status().filling).toBe(true)
     // Acaba el anuncio de entrada de site: su directo llega al final de lo publicado (1040 = índice 120).
     empalme.receive(site, playlist(55, 110, [...A(5), ["D"], ...L(110, 125)]))
     await tick()
     expect(shape(empalme.publishedForTests)).toBe("V V 120 121 122 123 124 125")
-    expect(empalme.publishedForTests.at(2)?.pdt).not.toBeNull()
+    // La hora sigue sin saltos del VOD al directo.
+    expect(empalme.publishedForTests.at(2)?.pdt).toBe(t(120))
     expect(events.find((e) => e.ev === "relleno-fin")).toMatchObject({ saltoS: 0, seq: 120 })
     expect(events.some((e) => e.ev === "arranque-vod")).toBe(true)
+  })
+
+  it("al empezar en el VOD sin hora en su lista, la saca de cuándo empezó a grabarse; sin eso, sin hora", async () => {
+    const start = async (vodSource: VodSource) => {
+      const { empalme, sessions } = make({ probe: probeWith(0), sources: ["site"], vodSource })
+      const [site] = sessions
+      if (site === undefined) throw new Error("sin sesiones")
+      empalme.receive(site, playlist(50, null, A(5)))
+      await tick()
+      return empalme.publishedForTests.map((o) => o.pdt)
+    }
+    const grabado = Date.parse(t(100)) + 2000 // ~2 s por detrás, como en Twitch
+    expect(await start({ ...vodOf(4), recordedAt: grabado })).toEqual([
+      new Date(grabado + 20_000).toISOString(),
+      new Date(grabado + 30_000).toISOString(),
+    ])
+    expect(await start(vodOf(4))).toEqual([null, null])
   })
 
   it("si el directo vuelve antes de publicar ningún trozo del VOD, no cuenta como relleno", async () => {
@@ -542,25 +602,30 @@ describe("relleno con el VOD", () => {
   })
 
   it("si el VOD va tan atrasado que no alcanza el directo, acaba saltando a él", async () => {
+    // Con el reloj de verdad, un equipo lento agotaba el plazo antes del trozo nuevo del VOD (falló en la CI).
+    vi.useFakeTimers()
     const vod = vodOf(4)
     const { empalme, sessions } = make({
       probe: probeWith(0),
-      returnAheadMaxMs: 40,
+      returnAheadMaxMs: 1000,
       sources: ["site"],
       vodSource: vod,
     })
     const [site] = sessions
     if (site === undefined) throw new Error("sin sesiones")
     empalme.receive(site, playlist(50, null, A(5)))
-    await tick()
+    await vi.advanceTimersByTimeAsync(30)
     expect(shape(empalme.publishedForTests)).toBe("V V")
     // El directo que se conserva empieza mucho después del VOD (1400 frente a 1040).
     empalme.receive(site, playlist(55, 300, [...A(5), ["D"], ...L(300, 305)]))
-    await tick()
+    await vi.advanceTimersByTimeAsync(30)
+    // Dentro del plazo, publica el trozo que llega del VOD en vez de saltar.
     vod.segments.push({ duration: 10, elapsed: 40, map: null, url: "https://v/vod4.ts" })
-    await tick()
-    await tick()
-    expect(shape(empalme.publishedForTests)).toMatch(/^V V V 300D 301 302 303 304 305$/)
+    await vi.advanceTimersByTimeAsync(30)
+    expect(shape(empalme.publishedForTests)).toBe("V V V")
+    // Agotado el plazo, salta al directo.
+    await vi.advanceTimersByTimeAsync(1000)
+    expect(shape(empalme.publishedForTests)).toBe("V V V 300D 301 302 303 304 305")
   })
 
   it("sin VOD (modo directo), espera a que acabe el anuncio de entrada", async () => {

@@ -1,0 +1,9 @@
+{
+  "extends": "../../../tsconfig.base.json",
+  "compilerOptions": {
+    // Sin tipos de Node: todo esto corre en la WebView (también vite.config.ts, que solo usa URL).
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "types": ["vite/client"]
+  },
+  "include": [".", "../../../packages/interfaz/src/global.d.ts"]
+}

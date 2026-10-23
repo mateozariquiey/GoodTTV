@@ -19,6 +19,7 @@ type PendingAuthorization = {
 }
 
 export class TwitchAuth {
+  readonly #scopes: string
   readonly #session: TwitchSession
   readonly #settings: SettingsSource
   readonly #vault: TokenStore
@@ -26,7 +27,9 @@ export class TwitchAuth {
   #pending: PendingAuthorization | undefined
   #polling: Promise<AuthSnapshot> | undefined
 
-  public constructor(settings: SettingsSource, vault: TokenStore) {
+  // scopes: los que se piden al vincular (TWITCH_SCOPES, o TWITCH_CHAT_SCOPES para escribir en el chat).
+  public constructor(settings: SettingsSource, vault: TokenStore, scopes = TWITCH_SCOPES) {
+    this.#scopes = scopes
     this.#settings = settings
     this.#vault = vault
     this.#session = new TwitchSession(settings, vault)
@@ -38,7 +41,7 @@ export class TwitchAuth {
 
   public async begin(): Promise<DeviceChallenge> {
     const clientId = await this.#requireClientId()
-    const body = new URLSearchParams({ client_id: clientId, scopes: TWITCH_SCOPES })
+    const body = new URLSearchParams({ client_id: clientId, scopes: this.#scopes })
     const response = parseDeviceCodeResponse(
       await ky
         .post("https://id.twitch.tv/oauth2/device", { body, timeout: 15_000 })
@@ -69,9 +72,13 @@ export class TwitchAuth {
       if (flowVersion !== this.#flowVersion) {
         return retries > 0 ? this.#snapshot(retries - 1) : this.#currentAuthorizationState()
       }
-      return identity === undefined
-        ? { kind: "guest" }
-        : { displayName: identity.login, kind: "authenticated", login: identity.login }
+      if (identity === undefined) return { kind: "guest" }
+      return {
+        ...(identity.scopes.includes("user:write:chat") ? { canChat: true as const } : {}),
+        displayName: identity.login,
+        kind: "authenticated",
+        login: identity.login,
+      }
     } catch (error) {
       if (error instanceof SessionChangedError) {
         return retries > 0 ? this.#snapshot(retries - 1) : this.#currentAuthorizationState()
@@ -89,6 +96,11 @@ export class TwitchAuth {
 
   public credentials(): Promise<TwitchCredentials> {
     return this.#session.credentials()
+  }
+
+  // La cuenta guardada con el token, sin preguntar a Twitch (TwitchSession.storedLogin).
+  public storedLogin(): Promise<string | undefined> {
+    return this.#session.storedLogin()
   }
 
   public refreshCredentials(): Promise<TwitchCredentials> {
@@ -131,7 +143,7 @@ export class TwitchAuth {
     }
     pending.lastPollAt = now
     const response = await ky.post("https://id.twitch.tv/oauth2/token", {
-      body: createDeviceTokenBody(await this.#requireClientId(), pending.deviceCode),
+      body: createDeviceTokenBody(await this.#requireClientId(), pending.deviceCode, this.#scopes),
       throwHttpErrors: false,
       timeout: 15_000,
     })

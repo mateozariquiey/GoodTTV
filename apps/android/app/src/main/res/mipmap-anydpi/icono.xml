@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- La marca de GoodTTV como icono adaptable: el cuadrado blanco es el fondo (el lanzador lo recorta con su forma) y las
+     barras, el frente; con iconos temáticos, solo las barras. -->
+<adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
+    <background android:drawable="@color/fondo_icono" />
+    <foreground android:drawable="@drawable/icono_frente" />
+    <monochrome android:drawable="@drawable/icono_monocromo" />
+</adaptive-icon>

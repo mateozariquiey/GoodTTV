@@ -1,6 +1,6 @@
 // Directo sin anuncios para un reproductor hls.js, sin depender del transporte. Atiende las rutas /stream/ con
 // Response estándar: en la tele las sirve el servidor HTTPS local (apps/tele/src/main/stream/stream-service.ts) y en
-// la extensión, la propia página atiende con ellas sus fetch (apps/navegador/src/directo-fetch.ts).
+// la extensión, la propia página atiende con ellas sus fetch (directo-fetch.ts).
 //   /stream/<login>/live.m3u8?modo=…[&q=WxH@fps][&visita=…]  lista HLS (recarga bloqueante con _HLS_msn)
 //   /stream/<login>/info?…                 duración de los fragmentos, calidades y si el canal emite
 //   /stream/<login>/precalentar?modo=…     abre ya el empalme de un canal que probablemente se va a abrir
@@ -10,7 +10,7 @@
 import { Empalme, type EmpalmeEvent, type EmpalmeOptions } from "./empalme"
 import { type Bytes, firstVideoPts, fmp4FirstVideoTime, trimFmp4, trimTs } from "./media-time"
 import type { Want } from "./playlist"
-import { getBytes, HttpError, videoTrackOf } from "./twitch-source"
+import { type Fetch, getBytes, HttpError, videoTrackOf } from "./twitch-source"
 
 const LOGIN = /^[a-z0-9_]{1,25}$/
 // Modos de retraso (LatencyMode en los contratos de cada app) y lo que cambia en el empalme.
@@ -63,6 +63,9 @@ export const parseSimulatedPause = (text: string): SimulatedPause | null => {
 }
 
 export type DirectoOptions = {
+  // Por dónde se pide a Twitch: en la extensión, el fetch del navegador sin pasar por el directo; en Android, la red
+  // nativa. Si no, el fetch global.
+  readonly fetch?: Fetch
   readonly log?: (event: EmpalmeEvent) => void
   readonly simulatedPause?: SimulatedPause | null
   readonly createEmpalme?: (options: EmpalmeOptions) => DirectoEmpalme
@@ -107,6 +110,7 @@ const unref = (timer: ReturnType<typeof setTimeout>): void => {
 
 export const createDirecto = ({
   createEmpalme = (options) => new Empalme(options),
+  fetch: red = (input, init) => fetch(input, init),
   log = () => undefined,
   simulatedPause = null,
 }: DirectoOptions = {}): Directo => {
@@ -116,8 +120,8 @@ export const createDirecto = ({
 
   // Recorte comprobado: se descarga el trozo, se corta y se mide dónde empieza de verdad.
   const trimVod = async (url: string, from: number, map: string | null): Promise<number | null> => {
-    const bytes = await getBytes(url)
-    const track = map === null ? null : await videoTrackOf(map)
+    const bytes = await getBytes(url, false, red)
+    const track = map === null ? null : await videoTrackOf(map, red)
     const cut =
       map === null ? trimTs(bytes, from) : track === null ? null : trimFmp4(bytes, track, from)
     const start =
@@ -169,6 +173,7 @@ export const createDirecto = ({
     const settings = MODES[mode]
     const empalme = createEmpalme({
       channel: login,
+      fetch: red,
       fillSlack: settings.fillSlack,
       log: (event) => log({ ...event, canal: login }),
       simulatedPause,
@@ -250,7 +255,7 @@ export const createDirecto = ({
       return reply(200, map === null ? "video/mp2t" : "video/mp4", body)
     }
     const timeout = AbortSignal.timeout(20_000)
-    const upstream = await fetch(target, {
+    const upstream = await red(target, {
       headers: request.range == null ? {} : { Range: request.range },
       redirect: "error",
       signal: request.signal === undefined ? timeout : AbortSignal.any([timeout, request.signal]),

@@ -1,5 +1,13 @@
-import type { ChannelCard, ChatBadge, DeviceChallenge, Page, StreamCard } from "@goodttv/contratos"
+import type {
+  ChannelCard,
+  ChatBadge,
+  ChatEmote,
+  DeviceChallenge,
+  Page,
+  StreamCard,
+} from "@goodttv/contratos"
 import { z } from "zod"
+import { twitchEmote } from "./chat/tokenize"
 
 const PaginationSchema = z.object({ cursor: z.string().optional() })
 
@@ -194,6 +202,60 @@ export const parseBadgesResponse = (input: unknown): Map<string, ChatBadge> => {
   }
   return badges
 }
+
+// Send Chat Message: enviado con su id, o el motivo por el que Twitch no lo envió.
+export const parseSentChatMessage = (
+  input: unknown,
+):
+  | { readonly id: string; readonly sent: true }
+  | { readonly reason: string; readonly sent: false } => {
+  const [first] = z
+    .object({
+      data: z
+        .array(
+          z.object({
+            drop_reason: z.object({ code: z.string(), message: z.string() }).nullish(),
+            is_sent: z.boolean(),
+            message_id: z.string(),
+          }),
+        )
+        .min(1),
+    })
+    .parse(input).data
+  if (first?.is_sent === true && first.message_id !== "")
+    return { id: first.message_id, sent: true }
+  const reason =
+    first?.drop_reason?.message || first?.drop_reason?.code || "Twitch no lo ha enviado."
+  return { reason: reason.slice(0, 300), sent: false }
+}
+
+// Los emotes de Twitch de la cuenta (GET chat/emotes/user), sin los «smilies» (:) y compañía, que se escriben solos.
+export const parseUserEmotesResponse = (
+  input: unknown,
+): { readonly cursor: string | undefined; readonly emotes: ChatEmote[] } => {
+  const parsed = z
+    .object({
+      data: z.array(
+        z.object({ emote_type: z.string().default(""), id: z.string(), name: z.string() }),
+      ),
+      pagination: PaginationSchema.optional(),
+    })
+    .parse(input)
+  const emotes = parsed.data.flatMap((emote) => {
+    const parsedEmote =
+      emote.emote_type === "smilies" || emote.name === "" || emote.name.length > 100
+        ? undefined
+        : twitchEmote(emote.id, emote.name)
+    return parsedEmote === undefined ? [] : [parsedEmote]
+  })
+  return { cursor: parsed.pagination?.cursor || undefined, emotes }
+}
+
+export const parseChatColorResponse = (input: unknown): string =>
+  z
+    .object({ data: z.array(z.object({ color: z.string() })) })
+    .parse(input)
+    .data.at(0)?.color ?? ""
 
 export const parseSubscriptionResponse = (input: unknown): string =>
   z.object({ data: z.array(z.object({ id: z.string().min(1) })).min(1) }).parse(input).data[0]

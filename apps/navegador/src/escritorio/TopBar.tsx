@@ -8,21 +8,19 @@ export const TopBar = ({
   account,
   onOpen,
   searchRef,
-  signedIn,
 }: {
   readonly account:
     | { readonly displayName: string; readonly profileImageUrl?: string | undefined }
     | undefined
   readonly onOpen: (channel: Channel) => void
   readonly searchRef: RefObject<HTMLInputElement | null>
-  readonly signedIn: boolean
 }) => (
   <header className="topbar">
     <a aria-label="GoodTTV, Inicio" className="brand" href="#/">
       <span aria-hidden="true" className="brand__logo" />
       <span className="brand__name">GoodTTV</span>
     </a>
-    <Search inputRef={searchRef} onOpen={onOpen} signedIn={signedIn} />
+    <Search inputRef={searchRef} onOpen={onOpen} />
     <nav aria-label="Cuenta" className="topbar__end">
       <a aria-label="Ajustes" className="icon-button" href="#/ajustes" title="Ajustes">
         <GearSixIcon aria-hidden="true" />

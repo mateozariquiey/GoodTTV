@@ -183,6 +183,8 @@ const AccountGroup = ({
 
 const SHORTCUTS: readonly (readonly [readonly string[], string])[] = [
   [["Espacio"], "Pausa y reanuda"],
+  [["←", "→"], "Retrocede o avanza 10 s"],
+  [["Fin"], "Vuelve al directo, si has retrocedido"],
   [["M"], "Silencio"],
   [["T"], "Modo teatro: el vídeo y el chat ocupan la ventana"],
   [["F"], "Pantalla completa: solo el vídeo"],

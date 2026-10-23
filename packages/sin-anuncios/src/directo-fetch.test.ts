@@ -1,5 +1,5 @@
-import type { Directo } from "@goodttv/sin-anuncios"
 import { describe, expect, it, vi } from "vitest"
+import type { Directo } from "./directo"
 import { createDirectoFetch } from "./directo-fetch"
 
 const ORIGIN = "chrome-extension://abc"

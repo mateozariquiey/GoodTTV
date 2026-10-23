@@ -1,86 +1,77 @@
 import "@fontsource-variable/atkinson-hyperlegible-next"
 import { type Platform, PlatformContext } from "@goodttv/interfaz"
-import { createDirecto } from "@goodttv/sin-anuncios"
+import { pageStorage, readSavedHome } from "@goodttv/servicios"
+import { installDirecto } from "@goodttv/sin-anuncios"
 import { FetchLoader } from "hls.js"
-import { StrictMode, useEffect, useRef, useState } from "react"
+import { StrictMode } from "react"
 import { createRoot } from "react-dom/client"
 import { createExtensionApi } from "./api"
-import { installDirectoFetch } from "./directo-fetch"
 import { Desktop } from "./escritorio/Desktop"
-import { pageStorage, readSavedHome } from "./home-cache"
+import { parseRoute } from "./escritorio/routes"
 import { labApi, labOptions } from "./lab"
+import { isTabQuery, showsQuery, type TabFound } from "./pestanas"
+import { fakeTokens, fakeTwitchDelay, installFakeTwitch, seedFakeToken } from "./twitch-falso"
 import "./escritorio/desktop.css"
 
 // La página de GoodTTV en la extensión: las pantallas de escritorio (escritorio/), con su window.api (api.ts) y el
-// directo sin anuncios atendido en la propia página (directo-fetch.ts).
+// directo sin anuncios atendido en la propia página (installDirecto, de @goodttv/sin-anuncios).
+
+// ?twitchfalso: la cuenta y el Helix falsos del laboratorio, con lo guardado en sessionStorage (twitch-falso.ts).
+const fakeDelay = fakeTwitchDelay(location.search)
+const homeStorage = fakeDelay === undefined ? pageStorage() : sessionStorage
 
 // El reproductor de @goodttv/interfaz, con el FetchLoader de hls.js para que sus peticiones a /stream/ pasen por la
-// página, e Inicio de la última vez, que se lee sin esperar (home-cache.ts).
+// página, e Inicio de la última vez, que se lee sin esperar (page-home.ts, de @goodttv/servicios).
 const PLATFORM: Platform = {
   hls: { loader: FetchLoader },
-  savedHome: () => readSavedHome(pageStorage()),
+  savedHome: () => readSavedHome(homeStorage),
 }
 
 const element = document.querySelector("#root")
 if (element === null) throw new TypeError("Root element is missing")
 const root = createRoot(element)
 
-const start = (): void => {
-  installDirectoFetch(createDirecto(labOptions(location.search)))
-  Object.defineProperty(window, "api", { value: labApi(createExtensionApi(), location.search) })
-  root.render(
-    <StrictMode>
-      <PlatformContext value={PLATFORM}>
-        <Desktop />
-      </PlatformContext>
-    </StrictMode>,
-  )
-}
-
-const Busy = ({ onTake }: { readonly onTake: () => void }) => {
-  const [waiting, setWaiting] = useState(false)
-  const button = useRef<HTMLButtonElement>(null)
-  useEffect(() => button.current?.focus(), [])
-  if (waiting) return <main className="busy">Esperando a que la otra pestaña lo deje…</main>
-  return (
-    <main className="busy">
-      <p>GoodTTV ya está abierto en otra pestaña.</p>
-      <button
-        className="button button--primary"
-        onClick={() => {
-          setWaiting(true)
-          onTake()
-        }}
-        ref={button}
-        type="button"
-      >
-        Usarlo aquí
-      </button>
-    </main>
-  )
-}
-
-// Una sola GoodTTV a la vez: dos pestañas renovarían a la vez la misma sesión de Twitch (el token de renovación solo
-// vale una vez) y abrirían dos chats. La pestaña que la tiene conserva el bloqueo hasta cerrarse. Si otra la pide, se
-// pone a la cola y avisa; la primera se recarga (queda en espera) y suelta el bloqueo al descargarse, así que la nueva
-// no arranca hasta que la anterior ha parado.
-const LOCK = "goodttv"
-const channel = new BroadcastChannel(LOCK)
-
-const run = async (): Promise<void> => {
-  channel.onmessage = (event) => {
-    if (event.data === "cede") location.reload()
+// Varias pestañas a la vez, cada una con su canal (EXT-5). Comparten la sesión de Twitch, los recientes y las
+// preferencias (chrome.storage.local): lo que lee, cambia y escribe va en un bloqueo común (storage.ts), y lo que cambia
+// otra pestaña se avisa a esta con el evento «goodttv-cambio» (cuenta o preferencias), que atiende Desktop.
+chrome.storage.onChanged.addListener((changes, area) => {
+  if (area !== "local") return
+  const token = changes["twitch-token"]
+  // Renovar el token no cambia la cuenta: solo cuenta entrar o salir.
+  if (token !== undefined && (token.oldValue === undefined) !== (token.newValue === undefined)) {
+    dispatchEvent(new CustomEvent("goodttv-cambio", { detail: "cuenta" }))
   }
-  start()
-  await new Promise(() => undefined)
-}
-
-const take = (): void => {
-  void navigator.locks.request(LOCK, run)
-  channel.postMessage("cede")
-}
-
-void navigator.locks.request(LOCK, { ifAvailable: true }, async (lock) => {
-  if (lock === null) root.render(<Busy onTake={take} />)
-  else await run()
+  if (changes["local-data"] !== undefined) {
+    dispatchEvent(new CustomEvent("goodttv-cambio", { detail: "preferencias" }))
+  }
 })
+
+// El fondo busca la pestaña que ya muestra una vista (pestanas.ts): contesta esta si es la suya.
+chrome.runtime.onMessage.addListener((message: unknown, _sender, respond) => {
+  if (!isTabQuery(message) || !showsQuery(message, parseRoute(location.hash))) return false
+  void chrome.tabs
+    .getCurrent()
+    .then((tab) =>
+      respond(
+        tab?.id === undefined
+          ? null
+          : ({ tabId: tab.id, windowId: tab.windowId } satisfies TabFound),
+      ),
+    )
+  return true
+})
+
+installDirecto(labOptions(location.search))
+if (fakeDelay !== undefined) {
+  installFakeTwitch(fakeDelay)
+  seedFakeToken(sessionStorage)
+}
+const lab = fakeDelay === undefined ? {} : { homeStorage, tokens: fakeTokens(sessionStorage) }
+Object.defineProperty(window, "api", { value: labApi(createExtensionApi(lab), location.search) })
+root.render(
+  <StrictMode>
+    <PlatformContext value={PLATFORM}>
+      <Desktop />
+    </PlatformContext>
+  </StrictMode>,
+)

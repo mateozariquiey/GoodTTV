@@ -2,11 +2,15 @@ import {
   type Channel,
   formatViewers,
   type HomeData,
+  type HomeSketch,
   previewAt,
   type Resource,
+  unfinishedVods,
 } from "@goodttv/interfaz"
+import { useMemo } from "react"
 import { Avatar } from "./Avatar"
 import { RetryButton } from "./RetryButton"
+import { VideoTile } from "./Videos"
 
 type Open = (channel: Channel) => void
 
@@ -41,6 +45,27 @@ const Thumbnail = ({ channel, onOpen }: { readonly channel: Channel; readonly on
   </a>
 )
 
+// La forma de una lista mientras llega lo de ahora (lo guardado es de hace rato): los huecos de las miniaturas, vacíos,
+// para que nada salte al llegar.
+const Placeholders = ({ count }: { readonly count: number }) => (
+  <div aria-busy="true" className="grid">
+    {Array.from({ length: count }, (_, index) => (
+      // biome-ignore lint/suspicious/noArrayIndexKey: huecos iguales, sin nada propio
+      <span aria-hidden="true" className="thumb placeholder" key={index}>
+        <span className="thumb__image" />
+        <span className="thumb__meta">
+          <span className="avatar" />
+          <span>
+            <b className="thumb__title">&nbsp;</b>
+            <span className="thumb__line">&nbsp;</span>
+            <span className="thumb__line">&nbsp;</span>
+          </span>
+        </span>
+      </span>
+    ))}
+  </div>
+)
+
 const Grid = ({
   channels,
   onOpen,
@@ -55,15 +80,17 @@ const Grid = ({
   </div>
 )
 
-// Sin cuenta no se sabe si están en directo: entonces no se dice nada.
+// Sin cuenta no se sabe si están en directo: entonces no se dice nada. Mientras llega (pending), el hueco de la línea.
 const Recents = ({
   channels,
   known,
   onOpen,
+  pending,
 }: {
   readonly channels: readonly Channel[]
   readonly known: boolean
   readonly onOpen: Open
+  readonly pending: boolean
 }) => (
   <ul className="recents">
     {channels.map((channel) => (
@@ -72,7 +99,9 @@ const Recents = ({
           <Avatar name={channel.displayName} url={channel.profileImageUrl} />
           <span className="recent__text">
             <b>{channel.displayName}</b>
-            {known ? (
+            {pending ? (
+              <span className="recent__state placeholder">&nbsp;</span>
+            ) : known ? (
               <span
                 className={
                   channel.live === true ? "recent__state recent__state--live" : "recent__state"
@@ -104,6 +133,7 @@ export const HomeView = ({
   recents,
   resource,
   signedIn,
+  sketch,
   unreachable,
 }: {
   readonly following: readonly Channel[]
@@ -114,8 +144,14 @@ export const HomeView = ({
   readonly recents: readonly Channel[]
   readonly resource: Resource<HomeData>
   readonly signedIn: boolean
+  readonly sketch: HomeSketch | undefined // lo guardado es de hace rato: la forma de las listas, mientras llega lo de ahora
   readonly unreachable: string | undefined // no se pudo comprobar la cuenta: el motivo
 }) => {
+  // Los VOD a medias (VOD-1), para seguir donde se dejaron. Se leen al pintar Inicio, que se vuelve a montar al volver.
+  const vods = useMemo(
+    () => (window.api.vods === undefined ? [] : unfinishedVods().slice(0, 8)),
+    [],
+  )
   // Sin poder comprobar la cuenta no se pide nada a Twitch: lo que se ve, si hay algo, es lo de la última vez.
   const notice =
     unreachable === undefined ? null : (
@@ -151,7 +187,9 @@ export const HomeView = ({
       {signedIn ? (
         <>
           <h2 className="page__section">En directo de tus seguidos</h2>
-          {resource.kind === "loading" ? (
+          {resource.kind === "loading" && (sketch?.following ?? 0) > 0 ? (
+            <Placeholders count={sketch?.following ?? 0} />
+          ) : resource.kind === "loading" ? (
             <p className="page__note">Cargando…</p>
           ) : following.length === 0 ? (
             <p className="page__note">Ninguno de tus seguidos está en directo ahora.</p>
@@ -174,15 +212,35 @@ export const HomeView = ({
       {recents.length === 0 ? null : (
         <>
           <h2 className="page__section">Seguir viendo</h2>
-          <Recents channels={recents} known={signedIn} onOpen={onOpen} />
+          <Recents
+            channels={recents}
+            known={signedIn}
+            onOpen={onOpen}
+            pending={sketch !== undefined}
+          />
         </>
       )}
-      {popular.length === 0 ? null : (
+      {vods.length === 0 ? null : (
+        <>
+          <h2 className="page__section">Vídeos a medias</h2>
+          <div className="videos__grid">
+            {vods.map((entry) => (
+              <VideoTile channel={entry.displayName} key={entry.id} video={entry} />
+            ))}
+          </div>
+        </>
+      )}
+      {popular.length > 0 ? (
         <>
           <h2 className="page__section">Populares ahora</h2>
           <Grid channels={popular} onOpen={onOpen} />
         </>
-      )}
+      ) : (sketch?.popular ?? 0) > 0 ? (
+        <>
+          <h2 className="page__section">Populares ahora</h2>
+          <Placeholders count={sketch?.popular ?? 0} />
+        </>
+      ) : null}
     </div>
   )
 }

@@ -192,11 +192,31 @@ export const toSavedHome = (account: Account, home: HomeData, savedAt: number): 
   savedAt,
 })
 
-// Inicio en la tele y en la extensión. Comprobar la cuenta y pedir los directos a Twitch tarda alrededor de un segundo:
-// mientras tanto, lo que se vio la última vez con esa cuenta (window.api.home), que se sustituye en cuanto llega lo de
-// ahora. Deja de valer si la cuenta resulta ser otra, o ninguna, y se olvida al cerrar sesión. Sin nada guardado,
-// «cargando» hasta saber si hay cuenta: sin ella, Inicio enseñaría la bienvenida y los seguidos como desconectados.
-// Si no se puede comprobar (sin red), tampoco se sabe: lo guardado sigue, sin la bienvenida, y las pantallas avisan
+// Lo guardado de hace menos de esto se enseña tal cual al abrir (otra pestaña, o volver enseguida). Más viejo, sus canales
+// pueden no emitir ya: no se enseñan como si lo hicieran.
+export const SAVED_HOME_FRESH_MS = 5 * 60_000
+
+const LOADING: Resource<never> = { kind: "loading" }
+
+// La forma de Inicio mientras llega lo de ahora, cuando lo guardado es viejo: cuántos directos había en cada lista (para
+// pintar sus huecos vacíos; como mucho 24, más de lo que cabe a la vista) y los recientes, que son de este equipo, sin
+// decir si emiten.
+const SKETCH_LIMIT = 24
+export type HomeSketch = {
+  readonly following: number
+  readonly popular: number
+  readonly recents: readonly RecentChannel[]
+}
+
+// Inicio en la tele, la extensión y Android. Lo de ahora tarda unas décimas: los directos se piden ya al abrir, a la vez
+// que se comprueba la cuenta, si lo guardado dice que la había (la sesión guarda su id con el token y Helix no espera a
+// validarlo, TwitchSession). Mientras tanto:
+// - lo guardado de la última vez con esa cuenta (window.api.home), si es de hace menos de 5 min;
+// - si es más viejo, la forma de las listas, vacía (sketch), para que nada salte al llegar lo de ahora;
+// - sin nada guardado, «cargando» hasta saber si hay cuenta: sin ella, Inicio enseñaría la bienvenida y los seguidos
+//   como desconectados.
+// Lo guardado deja de valer si la cuenta resulta ser otra, o ninguna, y se olvida al cerrar sesión. Si no se puede
+// comprobar la cuenta (sin red), lo guardado sigue, sea de cuando sea, y las pantallas avisan de que es de la última vez,
 // con «Reintentar» (unreachable).
 export const useHome = (auth: AuthState | undefined) => {
   // undefined mientras se lee: la tele lo pide por IPC; la extensión lo lee sin esperar (la plataforma).
@@ -221,16 +241,39 @@ export const useHome = (auth: AuthState | undefined) => {
   const known = !unknownAccount(auth)
   const shown = known ? auth : (usable?.account ?? auth)
   const signedIn = shown?.kind === "authenticated"
-  const load = useMemo(() => (known ? () => loadHome(signedIn) : undefined), [known, signedIn])
+  // Con lo guardado de una cuenta, lo de ahora se pide sin esperar a comprobarla; sin red (unreachable), no se pide.
+  // Al llegar la cuenta, la misma carga sigue si es la misma (la función no cambia); si es otra (otra página ha vinculado
+  // otra mientras tanto), se pide otra vez, para no guardar lo de una como si fuera de la otra.
+  const canLoad = known || (auth === undefined && usable !== undefined)
+  const login = shown?.kind === "authenticated" ? shown.login : undefined
+  const load = useMemo(
+    () => (canLoad ? () => loadHome(login !== undefined) : undefined),
+    [canLoad, login],
+  )
   const home = useResource(load)
-  // Si falla la primera carga, como cuando falla un refresco: se sigue viendo lo último bueno (el refresco periódico
-  // lo reintenta).
-  const resource = useMemo(
-    (): Resource<HomeData> =>
-      home.resource.kind !== "ready" && usable !== undefined
-        ? { kind: "ready", updatedAt: usable.savedAt, value: toHomeData(usable) }
-        : home.resource,
-    [home.resource, usable],
+  const resource = useMemo((): Resource<HomeData> => {
+    const current = home.resource
+    // Lo pedido antes de saber la cuenta puede fallar porque la sesión ha caducado: eso lo dirá la cuenta.
+    const failedEarly = auth === undefined && current.kind === "error"
+    if (current.kind === "ready" || usable === undefined) return failedEarly ? LOADING : current
+    // Lo guardado, si es reciente, o si no se puede comprobar la cuenta (con el aviso). Si falla la primera carga, como
+    // cuando falla un refresco: se sigue viendo lo último bueno (el refresco periódico lo reintenta).
+    if (auth?.kind === "unreachable" || Date.now() - usable.savedAt < SAVED_HOME_FRESH_MS) {
+      return { kind: "ready", updatedAt: usable.savedAt, value: toHomeData(usable) }
+    }
+    // Viejo: su forma, vacía (sketch), hasta que llegue lo de ahora o falle.
+    return failedEarly ? LOADING : current
+  }, [auth, home.resource, usable])
+  const sketch = useMemo(
+    (): HomeSketch | undefined =>
+      resource.kind === "loading" && usable !== undefined
+        ? {
+            following: Math.min(usable.following.length, SKETCH_LIMIT),
+            popular: Math.min(usable.popular.length, SKETCH_LIMIT),
+            recents: usable.recents,
+          }
+        : undefined,
+    [resource, usable],
   )
   // Lo guardado, también en memoria: si luego no se puede comprobar la cuenta (al vincular otra, por ejemplo), vale lo
   // último de esta, nunca lo de una sesión ya cerrada.
@@ -249,7 +292,7 @@ export const useHome = (auth: AuthState | undefined) => {
   return {
     auth: shown,
     // Lo que se ve es lo guardado: aún no ha llegado lo de ahora.
-    fromSaved: resource !== home.resource,
+    fromSaved: resource !== home.resource && resource.kind === "ready",
     known,
     // Aún leyendo lo guardado (unos milisegundos en la tele): ni «cargando» ni la bienvenida.
     reading: saved === undefined,
@@ -257,6 +300,7 @@ export const useHome = (auth: AuthState | undefined) => {
     resource,
     retry: home.retry,
     signedIn,
+    sketch,
     // No se pudo comprobar la cuenta: el motivo, para el aviso con «Reintentar» (useAuth().reload).
     unreachable: auth?.kind === "unreachable" ? auth.message : undefined,
   }
@@ -267,20 +311,33 @@ export type Home = ReturnType<typeof useHome>
 export const searchChannels = async (query: string): Promise<readonly ChannelCard[]> =>
   (await window.api.catalog.search({ first: 20, query })).items
 
+// loaded: ya se han leído las guardadas. Hasta entonces, las de por defecto: un reproductor que se abre antes (un canal
+// abierto por su dirección) debe esperar, o empezaría en Adaptativo y volvería a abrir el canal en el modo guardado.
 export const usePreferences = () => {
   const [preferences, setPreferences] = useState<Preferences>({
     chatScale: "normal",
     chatVisible: true,
     latencyMode: "adaptativo",
   })
-  useEffect(() => {
-    void window.api.preferences.get().then(setPreferences)
+  const [loaded, setLoaded] = useState(false)
+  // reload: otra página las ha cambiado (otra pestaña de la extensión).
+  const reload = useCallback(() => {
+    void window.api.preferences
+      .get()
+      .then((next) =>
+        setPreferences((current) =>
+          JSON.stringify(current) === JSON.stringify(next) ? current : next,
+        ),
+      )
+      .catch(() => undefined)
+      .finally(() => setLoaded(true))
   }, [])
+  useEffect(reload, [reload])
   const update = useCallback((patch: PreferencesPatch) => {
     setPreferences((current) => ({ ...current, ...patch }) as Preferences)
     void window.api.preferences.update(patch).then(setPreferences)
   }, [])
-  return { preferences, update }
+  return { loaded, preferences, reload, update }
 }
 
 // Spanish formatting with a dot for thousands. Intl's "es-ES" leaves four-digit numbers ungrouped

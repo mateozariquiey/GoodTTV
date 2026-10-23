@@ -1,0 +1,5 @@
+# Lo que generan Gradle y Kotlin al compilar
+.gradle/
+.kotlin/
+build/
+local.properties

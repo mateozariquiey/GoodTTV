@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
-// useHlsPlayer (@goodttv/interfaz) con un hls.js falso: la recuperación de errores de medios, el salto del arranque y
-// el plazo de un canal que no arranca. Va aquí porque este paquete trae react-dom y jsdom.
+// useHlsPlayer (@goodttv/interfaz) con un hls.js falso: la recuperación de errores de medios, el salto del arranque,
+// retroceder dentro de la lista y el plazo de un canal que no arranca. Va aquí porque este paquete trae react-dom y jsdom.
 import { useHlsPlayer } from "@goodttv/interfaz"
 import { act, createElement, useRef } from "react"
 import { createRoot, type Root } from "react-dom/client"
@@ -22,11 +22,24 @@ const { FakeHls, players } = vi.hoisted(() => {
     readonly calls: string[] = []
     readonly handlers = new Map<string, Handler[]>()
     latency = 0
-    latestLevelDetails: { age: number } | null = { age: 0.5 }
+    // El objetivo (5 s del final de la lista, con su edad), en 32.
+    latestLevelDetails: { age: number; edge: number; fragmentStart: number } | null = {
+      age: 0.5,
+      edge: 36.5,
+      fragmentStart: 0,
+    }
     playingDate = null
     targetLatency: number | null = 5
-    readonly config: { progressive?: boolean }
-    constructor(config: { progressive?: boolean }) {
+    readonly config: {
+      liveMaxLatencyDuration?: number
+      liveSyncDuration?: number
+      progressive?: boolean
+    }
+    constructor(config: {
+      liveMaxLatencyDuration?: number
+      liveSyncDuration?: number
+      progressive?: boolean
+    }) {
       this.config = { ...config }
       players.push(this)
     }
@@ -65,9 +78,11 @@ Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true })
 let root: Root | undefined
 let paused = false
 let phase = ""
+let current: ReturnType<typeof useHlsPlayer> | undefined
 const Player = ({ channel }: { readonly channel: string }) => {
   const surface = useRef<HTMLDivElement>(null)
-  phase = useHlsPlayer(surface, channel, true, "adaptativo").state.phase
+  current = useHlsPlayer(surface, channel, true, "adaptativo")
+  phase = current.state.phase
   return createElement("div", { ref: surface })
 }
 // Otro canal en el mismo reproductor, como al cambiar de canal sin salir de él.
@@ -156,18 +171,20 @@ describe("error fatal de medios", () => {
 })
 
 describe("carga progresiva", () => {
-  it("con fMP4 (EXT-X-MAP) se quita antes de empezar a cargar; con MPEG-TS se queda", async () => {
+  it("con fMP4 (EXT-X-MAP) se quita antes de empezar a cargar, y el margen sube a 3 fragmentos; con MPEG-TS se queda", async () => {
     const { player: fmp4 } = await open()
     expect(fmp4.config.progressive).toBe(true)
     fmp4.emit("levelLoaded", { details: { edge: 30, fragments: [{ initSegment: {} }] } })
     expect(fmp4.config.progressive).toBe(false)
-    expect(fmp4.calls).toEqual(["startLoad 25"])
+    expect(fmp4.calls).toEqual(["startLoad 24"]) // 3 fragmentos de 2 s
+    expect(fmp4.config.liveSyncDuration).toBe(6)
 
     await show("b")
     const ts = players.at(-1)
     if (ts === undefined) throw new Error("sin reproductor")
     ts.emit("levelLoaded", { details: { edge: 30, fragments: [{ initSegment: null }] } })
     expect(ts.config.progressive).toBe(true)
+    expect(ts.calls).toEqual(["startLoad 25"]) // 2,5 fragmentos
   })
 })
 
@@ -196,10 +213,76 @@ describe("salto del arranque", () => {
   it("con la lista parada no salta: ese retraso no es margen que sobre", async () => {
     const { player, video } = await open()
     fire(video, "playing")
-    player.latestLevelDetails = { age: 8 }
+    player.latestLevelDetails = { age: 8, edge: 36.5, fragmentStart: 0 }
     player.latency = 8
     second()
     expect(video.currentTime).toBe(10)
+  })
+})
+
+describe("retroceder dentro de la lista", () => {
+  const seekBy = (seconds: number, orStart = false): boolean => {
+    let moved = false
+    act(() => {
+      moved = current?.seekBy(seconds, orStart) ?? false
+    })
+    return moved
+  }
+
+  it("lo retrocedido se conserva: no acelera, no salta el margen y hls.js no vuelve al directo", async () => {
+    const { player, video } = await open()
+    fire(video, "playing")
+    video.currentTime = 30 // el objetivo, en 32
+    expect(seekBy(-10)).toBe(true)
+    expect(video.currentTime).toBe(20)
+    expect(current?.rewound).toBe(true)
+    expect(player.config.liveMaxLatencyDuration).toBe(Number.POSITIVE_INFINITY)
+    player.latency = 17 // 12 s por encima del objetivo, en el arranque
+    second()
+    expect(video.currentTime).toBe(20)
+    expect(video.playbackRate).toBe(1)
+  })
+
+  it("hacia delante, como mucho hasta el objetivo; al llegar, todo como antes", async () => {
+    const { player, video } = await open()
+    video.currentTime = 30
+    seekBy(-10)
+    expect(seekBy(10)).toBe(true)
+    expect(video.currentTime).toBe(30)
+    expect(current?.rewound).toBe(true)
+    expect(seekBy(Number.POSITIVE_INFINITY)).toBe(true)
+    expect(video.currentTime).toBe(32)
+    expect(current?.rewound).toBe(false)
+    expect(player.config.liveMaxLatencyDuration).toBe(65) // objetivo + 60
+  })
+
+  it("más atrás de la lista no se mueve, salvo que se pida su principio (3 fragmentos dentro)", async () => {
+    const { video } = await open()
+    video.currentTime = 30
+    expect(seekBy(-40)).toBe(false)
+    expect(video.currentTime).toBe(30)
+    expect(seekBy(-40, true)).toBe(true)
+    expect(video.currentTime).toBe(6)
+  })
+
+  it("con la lista aún corta, retroceder no adelanta aunque su principio quede por delante", async () => {
+    const { player, video } = await open()
+    player.latestLevelDetails = { age: 0.5, edge: 8, fragmentStart: 0 } // el objetivo, en 3,5; el principio, en 6
+    video.currentTime = 3.5
+    expect(seekBy(-10)).toBe(false)
+    expect(seekBy(-10, true)).toBe(true)
+    expect(video.currentTime).toBe(3.5)
+    expect(current?.rewound).toBe(false)
+  })
+
+  it("si hls.js vuelve al directo por su cuenta, deja de contar como retrocedido", async () => {
+    const { player, video } = await open()
+    fire(video, "playing")
+    video.currentTime = 30
+    seekBy(-10)
+    player.latency = 5.5
+    second()
+    expect(current?.rewound).toBe(false)
   })
 })
 

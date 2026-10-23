@@ -6,6 +6,7 @@ import { unwrap } from "./media-time"
 import { type MediaSegment, parseMedia, type Want } from "./playlist"
 import {
   deviceId,
+  type Fetch,
   getText,
   type OpenedVariant,
   openVariant,
@@ -13,6 +14,7 @@ import {
   Vod,
   type VodSegment,
   type VodSource,
+  vodHour,
 } from "./twitch-source"
 
 const POLL_MS = 2000
@@ -83,6 +85,8 @@ export type EmpalmeOptions = {
   readonly channel: string
   readonly sources?: readonly string[]
   readonly want?: Want | null
+  // Por dónde se pide a Twitch (en Android, la red nativa); si no, el fetch global.
+  readonly fetch?: Fetch
   // Red, sustituible en las pruebas.
   readonly fetchPlaylist?: (url: string) => Promise<string>
   readonly openSession?: (
@@ -123,7 +127,10 @@ export type EmpalmeStatus = {
   readonly offline: boolean
   readonly published: number
   readonly qualities: readonly { readonly id: string; readonly label: string }[]
+  // La pedida (o la que fijó la primera sesión): con ella se compara una petición nueva, para no recrear el empalme.
   readonly quality: string | null
+  // La que suena: otra si el canal no tiene la pedida (la de reserva de openVariant). La que enseña el menú.
+  readonly playing: string | null
   // Publicando trozos del VOD (pausa global o arranque con todas las sesiones en anuncio): quien empiece a leer
   // ahora necesita más margen, porque el VOD crece a saltos de ~10 s.
   readonly filling: boolean
@@ -141,6 +148,7 @@ const sleep = (ms: number): Promise<void> => new Promise((done) => setTimeout(do
 export class Empalme {
   readonly channel: string
   private readonly sessions: Session[]
+  private readonly red: Fetch | undefined
   private readonly fetchPlaylist: (url: string) => Promise<string>
   private readonly openSession: NonNullable<EmpalmeOptions["openSession"]>
   private readonly probe: (url: string, map: string | null) => Promise<number>
@@ -152,6 +160,7 @@ export class Empalme {
   private readonly returnAheadMaxMs: number
   private readonly log: (event: EmpalmeEvent) => void
   private want: Want | null
+  private playing: Want | null = null
   private qualities: readonly { readonly id: string; readonly label: string }[] = []
   private vodSource: VodSource | null
   private vodOpening = false
@@ -213,9 +222,13 @@ export class Empalme {
       url: null,
     }))
     this.want = options.want ?? null
-    this.fetchPlaylist = options.fetchPlaylist ?? ((url) => getText(url))
-    this.openSession = options.openSession ?? openVariant
-    this.probe = options.probe ?? probeTime
+    const red = options.fetch
+    this.red = red
+    this.fetchPlaylist = options.fetchPlaylist ?? ((url) => getText(url, {}, red))
+    this.openSession =
+      options.openSession ??
+      ((channel, playerType, device, want) => openVariant(channel, playerType, device, want, red))
+    this.probe = options.probe ?? ((url, map) => probeTime(url, map, red))
     this.vodSource = options.vodSource ?? null
     this.vodInjected = options.vodSource != null
     this.vodWanted = options.vod === true || this.vodInjected
@@ -275,6 +288,7 @@ export class Empalme {
       published: this.out.length,
       qualities: this.qualities,
       quality: this.want === null ? null : wantId(this.want),
+      playing: this.playing === null ? null : wantId(this.playing),
       filling: this.filling !== null,
       vodFills: this.vodFills,
     }
@@ -378,9 +392,6 @@ export class Empalme {
         if (same !== undefined) variant = { ...variant, ...same }
       }
       this.want ??= { fps: variant.fps, resolution: variant.resolution }
-      if (this.qualities.length === 0) {
-        this.qualities = variant.variants.map((v) => ({ id: wantId(v), label: v.name }))
-      }
       Object.assign(session, { backoff: 0, state: "abierta", url: variant.url })
       this.failedOpens.clear()
       this.log({ broadcastId: variant.broadcastId, ev: "abierta", type: session.type })
@@ -394,6 +405,12 @@ export class Empalme {
           throw new Error(`emisión anterior ${variant.broadcastId}`)
         }
         this.resetTimeline(`BROADCAST-ID ${variant.broadcastId}`, session)
+      }
+      // La que suena y las que hay, de la primera sesión que abre en esta emisión. Si otra no tiene la misma (no se ha
+      // visto en Twitch), usa la más parecida (pickVariant) y lo que publique esa sesión irá en otra calidad.
+      if (this.playing === null) {
+        this.playing = { fps: variant.fps, resolution: variant.resolution }
+        this.qualities = variant.variants.map((v) => ({ id: wantId(v), label: v.name }))
       }
       if (variant.broadcastId !== null) this.broadcastId = variant.broadcastId
       this.openVod() // ya con la calidad fijada
@@ -483,6 +500,7 @@ export class Empalme {
     this.clockRef = null
     this.filling = null
     this.pendingDiscontinuity = true
+    this.playing = null // la emisión nueva puede venir con otras calidades
     if (!this.vodInjected) {
       this.vodSource = null
       this.vodRetryAt = 0
@@ -496,7 +514,7 @@ export class Empalme {
     if (Date.now() < this.vodRetryAt || this.stopped) return
     this.vodOpening = true
     const generation = this.generation
-    const vod = new Vod(this.channel, this.want)
+    const vod = new Vod(this.channel, this.want, this.red)
     vod
       .open()
       .then(
@@ -756,8 +774,9 @@ export class Empalme {
   }
 
   // Arranque desde el VOD: dos trozos antes de su final (~20 s), lo que ya cubre la holgura del primer relleno. Sin
-  // fragmento en directo no hay hora (PDT) que seguir: esos trozos van sin ella y hls.js la deduce hacia atrás desde
-  // el primer fragmento en directo.
+  // fragmento en directo que seguir, la hora (PDT) de los trozos sale de la del VOD (vodHour): Media3 la necesita en la
+  // primera lista, y la latencia y el chat salen bien desde el principio. Si no se sabe, van sin ella y hls.js la
+  // deduce hacia atrás desde el primer fragmento en directo.
   private async startFromVod(fill: Fill): Promise<void> {
     const source = this.vodSource
     if (source === null) throw new Error("sin VOD")
@@ -769,6 +788,7 @@ export class Empalme {
     if (!fill.alive()) return
     fill.cursor = time
     fill.vodOffset = time - start.elapsed
+    fill.anchor = { pdtMs: vodHour(source, start) ?? Number.NaN, time }
   }
 
   private async fillFromVod(fill: Fill): Promise<void> {

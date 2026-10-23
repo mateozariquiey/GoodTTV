@@ -15,7 +15,9 @@ const KEYS = {
   ArrowUp: { code: "ArrowUp", keyCode: 38 },
   Backspace: { code: "Backspace", keyCode: 8 },
   Enter: { code: "Enter", keyCode: 13, text: "\r" },
+  End: { code: "End", keyCode: 35 },
   Escape: { code: "Escape", keyCode: 27 },
+  Tab: { code: "Tab", keyCode: 9 },
 }
 
 // wayland: en vez de sin ventana, en el compositor del laboratorio con ese socket (GPU y decodificación por hardware).

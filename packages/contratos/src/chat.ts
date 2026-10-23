@@ -83,3 +83,30 @@ export const ChatOpenInputSchema = z.strictObject({
   broadcasterId: z.string().regex(/^[0-9]{1,20}$/),
 })
 export type ChatOpenInput = z.infer<typeof ChatOpenInputSchema>
+
+// Escribir en el chat (CHAT-1; la extensión y Android, D24). Twitch admite hasta 500 caracteres.
+export const CHAT_MESSAGE_MAX = 500
+export const ChatSendInputSchema = z.strictObject({
+  broadcasterId: z.string().regex(/^[0-9]{1,20}$/),
+  message: z.string().trim().min(1).max(CHAT_MESSAGE_MAX),
+})
+export type ChatSendInput = z.infer<typeof ChatSendInputSchema>
+
+// Enviado: el mensaje tal como se enseña ya, sin esperar a que llegue por EventSub (que lo sustituye al llegar, con sus
+// insignias y emotes de Twitch). No enviado: el motivo, para enseñarlo.
+export const ChatSendResultSchema = z.discriminatedUnion("sent", [
+  z.strictObject({ message: ChatMessageSchema, sent: z.literal(true) }),
+  z.strictObject({ reason: z.string().min(1).max(300), sent: z.literal(false) }),
+])
+export type ChatSendResult = z.infer<typeof ChatSendResultSchema>
+
+// Los emotes que se pueden escribir en un canal, para elegirlos o completarlos al escribir (CHAT-1). Los de 7TV, BTTV y
+// FFZ se envían como texto: los ve como imagen quien tenga su extensión, o GoodTTV.
+export type ChatEmoteGroups = {
+  readonly channel: readonly ChatEmote[] // 7TV, BTTV y FFZ del canal
+  readonly twitch: readonly ChatEmote[] // los de Twitch de la cuenta: suscripciones, de seguidor y globales
+  readonly global: readonly ChatEmote[] // 7TV, BTTV y FFZ globales
+}
+
+// Un mensaje del chat de un VOD (VOD-1): el mismo que en directo, con su segundo en el vídeo.
+export type ReplayMessage = ChatMessage & { readonly offset: number }

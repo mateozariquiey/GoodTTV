@@ -1,8 +1,9 @@
 // @vitest-environment jsdom
 
-// useHome (@goodttv/interfaz), el Inicio de la tele y de la extensión: lo guardado sale mientras se comprueba la cuenta,
-// se sustituye por lo de ahora y deja de valer con otra cuenta. Sin poder comprobarla (sin red, EXT-4), sigue lo
-// guardado y no sale la bienvenida; useAuth lo distingue de la sesión caducada y vuelve a comprobar. Va aquí porque
+// useHome (@goodttv/interfaz), el Inicio de las tres versiones: con lo guardado de una cuenta, lo de ahora se pide ya,
+// sin esperar a comprobarla; mientras llega, lo guardado si es de hace menos de 5 min, y si no, la forma de las listas
+// (sketch). Se sustituye por lo de ahora y deja de valer con otra cuenta. Sin poder comprobarla (sin red, EXT-4), sigue
+// lo guardado y no sale la bienvenida; useAuth lo distingue de la sesión caducada y vuelve a comprobar. Va aquí porque
 // este paquete trae react-dom y jsdom.
 import type { SavedHome, StreamCard } from "@goodttv/contratos"
 import {
@@ -35,14 +36,17 @@ const stream = (login: string): StreamCard => ({
 const MATEO = { displayName: "Mateo", kind: "authenticated", login: "mateo" } as const
 const OFFLINE = { kind: "unreachable", message: "fetch failed" } as const
 const EXPIRED = { kind: "error", message: "Your Twitch session expired. Sign in again" } as const
+// Lo guardado hace horas, y lo de hace un minuto (otra pestaña).
 const SAVED: SavedHome = {
   account: MATEO,
   following: [stream("illojuan")],
-  popular: [],
+  popular: [stream("ibai"), stream("auronplay")],
   recentLive: [],
-  recents: [],
+  recents: [{ displayName: "Illojuan", login: "illojuan", watchedAt: 1 }],
   savedAt: 1,
 }
+const recent = (): SavedHome => ({ ...SAVED, savedAt: Date.now() - 60_000 })
+const never = () => new Promise<never>(() => undefined)
 
 let home: Home | undefined
 const Probe = ({ auth }: { readonly auth: AuthState | undefined }) => {
@@ -92,12 +96,44 @@ afterEach(() => {
 })
 
 describe("Inicio al abrir", () => {
-  it("enseña lo guardado mientras se comprueba la cuenta, sin pedir nada a Twitch", async () => {
+  it("con lo guardado de hace un momento, lo enseña mientras pide ya lo de ahora, sin esperar a la cuenta", async () => {
+    api.home.saved.mockImplementation(async () => recent())
+    api.catalog.followed.mockImplementationOnce(never)
     await show(undefined)
     expect(home).toMatchObject({ fromSaved: true, known: false, reading: false, signedIn: true })
     expect(home?.auth).toEqual(MATEO)
+    expect(home?.sketch).toBeUndefined()
     expect(following()).toEqual(["illojuan"])
-    expect(api.catalog.followed).not.toHaveBeenCalled()
+    expect(api.catalog.followed).toHaveBeenCalledTimes(1)
+  })
+
+  it("lo guardado de hace rato no se enseña: la forma de las listas, vacía, hasta lo de ahora", async () => {
+    api.catalog.followed.mockImplementationOnce(never)
+    await show(undefined)
+    expect(home).toMatchObject({ fromSaved: false, known: false, signedIn: true })
+    expect(home?.resource.kind).toBe("loading")
+    expect(home?.sketch).toEqual({ following: 1, popular: 2, recents: SAVED.recents })
+    await show(MATEO)
+    expect(home?.sketch).toEqual({ following: 1, popular: 2, recents: SAVED.recents })
+  })
+
+  it("la carga empezada antes de saber la cuenta sigue al llegar: no se pide dos veces", async () => {
+    await show(undefined)
+    await show(MATEO)
+    expect(following()).toEqual(["carola"])
+    expect(home?.sketch).toBeUndefined()
+    expect(api.catalog.followed).toHaveBeenCalledTimes(1)
+  })
+
+  it("si lo pedido antes de saber la cuenta falla, no es un error hasta que la cuenta lo diga", async () => {
+    api.catalog.followed.mockImplementationOnce(async () => {
+      throw new Error("Your Twitch session expired. Sign in again")
+    })
+    await show(undefined)
+    expect(home?.resource.kind).toBe("loading")
+    await show(EXPIRED)
+    expect(home).toMatchObject({ known: true, signedIn: false })
+    expect(home?.resource.kind).not.toBe("error")
   })
 
   it("con la misma cuenta, lo sustituye por lo de ahora y lo guarda", async () => {
@@ -111,11 +147,28 @@ describe("Inicio al abrir", () => {
   })
 
   it("con otra cuenta no vale: «cargando» hasta lo de ahora, nunca lo de la otra", async () => {
+    api.home.saved.mockImplementation(async () => recent())
+    api.catalog.followed.mockImplementationOnce(never)
     await show(undefined)
-    api.catalog.followed.mockImplementationOnce(() => new Promise(() => undefined))
+    api.catalog.followed.mockImplementationOnce(never)
     await show({ displayName: "Otra", kind: "authenticated", login: "otra" })
     expect(home?.resource.kind).toBe("loading")
-    expect(home?.fromSaved).toBe(false)
+    expect(home).toMatchObject({ fromSaved: false, sketch: undefined })
+  })
+
+  it("si la cuenta resulta ser otra, lo pedido al abrir no vale: se pide otra vez y no se guarda como suyo", async () => {
+    api.home.saved.mockImplementation(async () => recent())
+    let first: (page: { cursor: undefined; items: StreamCard[] }) => void = () => undefined
+    api.catalog.followed.mockImplementationOnce(() => new Promise((done) => (first = done)))
+    await show(undefined)
+    const OTRA = { displayName: "Otra", kind: "authenticated", login: "otra" } as const
+    await show(OTRA)
+    expect(api.catalog.followed).toHaveBeenCalledTimes(2)
+    await act(async () => first({ cursor: undefined, items: [stream("de-la-primera")] }))
+    expect(following()).toEqual(["carola"])
+    expect(api.home.save).not.toHaveBeenCalledWith(
+      expect.objectContaining({ following: [stream("de-la-primera")] }),
+    )
   })
 
   it("sin cuenta lo olvida, y no hay bienvenida hasta saberlo", async () => {
@@ -129,7 +182,10 @@ describe("Inicio al abrir", () => {
     expect(api.home.forget).toHaveBeenCalled()
   })
 
-  it("sin poder comprobar la cuenta, sigue lo guardado: ni lo olvida ni pide nada a Twitch", async () => {
+  it("sin poder comprobar la cuenta, sigue lo guardado, aunque sea viejo: ni lo olvida ni pide más a Twitch", async () => {
+    api.catalog.followed.mockImplementationOnce(async () => {
+      throw new TypeError("fetch failed")
+    })
     await show(undefined)
     await show(OFFLINE)
     expect(home).toMatchObject({
@@ -141,7 +197,8 @@ describe("Inicio al abrir", () => {
     expect(home?.auth).toEqual(MATEO)
     expect(following()).toEqual(["illojuan"])
     expect(api.home.forget).not.toHaveBeenCalled()
-    expect(api.catalog.followed).not.toHaveBeenCalled()
+    // Solo lo de al abrir, antes de saber que no había red.
+    expect(api.catalog.followed).toHaveBeenCalledTimes(1)
   })
 
   it("sin poder comprobarla y sin nada guardado, no se sabe si hay cuenta: nada de bienvenida", async () => {
@@ -211,7 +268,8 @@ describe("Inicio al abrir", () => {
     expect(following()).toEqual(["carola"])
   })
 
-  it("si falla la primera carga, se sigue viendo lo guardado", async () => {
+  it("si falla la primera carga, se sigue viendo lo guardado de hace un momento", async () => {
+    api.home.saved.mockImplementation(async () => recent())
     api.catalog.followed.mockImplementationOnce(async () => {
       throw new Error("Helix no contesta")
     })
@@ -221,8 +279,18 @@ describe("Inicio al abrir", () => {
     expect(following()).toEqual(["illojuan"])
   })
 
+  it("si falla con lo guardado de hace rato, el fallo, con «Reintentar»", async () => {
+    api.catalog.followed.mockImplementationOnce(async () => {
+      throw new Error("Helix no contesta")
+    })
+    await show(undefined)
+    await show(MATEO)
+    expect(home?.resource).toEqual({ kind: "error", message: "Helix no contesta" })
+    expect(home?.sketch).toBeUndefined()
+  })
+
   it("si la versión lo lee sin esperar, sale ya en la primera imagen", async () => {
-    platform = { hls: {}, savedHome: () => SAVED }
+    platform = { hls: {}, savedHome: recent }
     let first: Home | undefined
     const First = () => {
       const value = useHome(undefined)

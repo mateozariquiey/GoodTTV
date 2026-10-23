@@ -1,5 +1,13 @@
 import { z } from "zod"
-import type { ChatBatch, ChatOpenInput } from "./chat"
+import type {
+  ChatBatch,
+  ChatEmoteGroups,
+  ChatOpenInput,
+  ChatSendInput,
+  ChatSendResult,
+  ReplayMessage,
+} from "./chat"
+import type { LiveArchive, ReplayInput, Storyboard, VideoDetail, VideoList } from "./vods"
 
 export const ClientIdSchema = z
   .string()
@@ -49,11 +57,14 @@ export const StreamCardSchema = z.object({
 export const ChannelCardSchema = z.object({
   category: z.string(),
   displayName: z.string(),
+  // Con la búsqueda de invitado (la extensión y Android): seguidores y, en directo, espectadores.
+  followers: z.number().int().nonnegative().optional(),
   id: z.string(),
   isLive: z.boolean(),
   login: z.string(),
   thumbnailUrl: z.url(),
   title: z.string(),
+  viewerCount: z.number().int().nonnegative().optional(),
 })
 
 export const PageSchema = <Item extends z.ZodType>(item: Item) =>
@@ -78,6 +89,8 @@ const AuthorizingAuthSchema = z.object({
   kind: z.literal("authorizing"),
 })
 const AuthenticatedAuthSchema = z.object({
+  // Con permiso para escribir en el chat (user:write:chat); solo lo piden la extensión y Android.
+  canChat: z.literal(true).optional(),
   displayName: z.string(),
   kind: z.literal("authenticated"),
   login: z.string(),
@@ -192,11 +205,19 @@ export interface AppApi {
     readonly live: (input: LiveInput) => Promise<Page<StreamCard>>
     readonly search: (input: SearchInput) => Promise<Page<ChannelCard>>
     readonly streamsByLogin: (logins: readonly string[]) => Promise<readonly StreamCard[]>
+    // Si la cuenta sigue a ese canal (SEG-1, con user:read:follows); solo la extensión y Android lo enseñan.
+    readonly follows?: (broadcasterId: string) => Promise<boolean>
+    // Un canal por su nombre, sin cuenta (la extensión y Android): para completar uno abierto por la dirección. null
+    // si no existe.
+    readonly channel?: (login: string) => Promise<ChannelCard | null>
   }
   readonly chat: {
     readonly close: () => Promise<void>
     readonly onBatch: (listener: (batch: ChatBatch) => void) => () => void
     readonly open: (input: ChatOpenInput) => Promise<number>
+    // Solo donde se puede escribir (no en la tele, D24).
+    readonly send?: (input: ChatSendInput) => Promise<ChatSendResult>
+    readonly emotes?: (input: ChatOpenInput) => Promise<ChatEmoteGroups>
   }
   // Inicio de la última vez (SavedHomeSchema); null si no hay nada guardado.
   readonly home: {
@@ -225,5 +246,15 @@ export interface AppApi {
   readonly recents: {
     readonly add: (channel: RecentChannel) => Promise<readonly RecentChannel[]>
     readonly list: () => Promise<readonly RecentChannel[]>
+  }
+  // Los VOD (VOD-1): solo la extensión y Android (D24). playback: la lista maestra para el reproductor.
+  readonly vods?: {
+    // La emisión en curso y su VOD, para retroceder el directo (DVR-1).
+    readonly archive: (login: string) => Promise<LiveArchive | null>
+    readonly comments: (input: ReplayInput) => Promise<readonly ReplayMessage[]>
+    readonly get: (id: string) => Promise<VideoDetail | null>
+    readonly list: (login: string) => Promise<VideoList | null>
+    readonly playback: (id: string) => Promise<string>
+    readonly storyboard: (url: string) => Promise<Storyboard | null>
   }
 }

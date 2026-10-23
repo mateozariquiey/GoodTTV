@@ -1,9 +1,8 @@
 // Página de prueba del hito 1: reproductor.html#canal[?modo=…&pausa=cada,duración[,arranque]] reproduce el directo
 // sin anuncios con el empalme en la propia página y muestra su estado, que también leen las pruebas de humo
 // (window.estadoPrueba). La interfaz de GoodTTV la sustituirá como página principal.
-import { createDirecto, type EmpalmeEvent, parseSimulatedPause } from "@goodttv/sin-anuncios"
+import { type EmpalmeEvent, installDirecto, parseSimulatedPause } from "@goodttv/sin-anuncios"
 import Hls, { FetchLoader } from "hls.js"
-import { installDirectoFetch } from "./directo-fetch"
 import { safeEvent } from "./lab"
 
 type Estado = {
@@ -52,9 +51,7 @@ const log = (event: EmpalmeEvent): void => {
   if (estado.registro.length > 40) estado.registro.shift()
 }
 
-installDirectoFetch(
-  createDirecto({ log, simulatedPause: parseSimulatedPause(params.get("pausa") ?? "") }),
-)
+installDirecto({ log, simulatedPause: parseSimulatedPause(params.get("pausa") ?? "") })
 
 const form = document.querySelector<HTMLFormElement>("#canal")
 form?.addEventListener("submit", (event) => {

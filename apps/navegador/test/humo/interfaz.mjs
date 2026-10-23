@@ -2,7 +2,8 @@
 // cuenta: buscar con / y abrir con Enter, que reproduzca, pausar con Espacio y con un clic en el vídeo, modo teatro (T,
 // Esc), chat (C), silencio (M), volver a Inicio con el canal en «Seguir viendo», pedir y cancelar el código de la
 // cuenta, un modo de retraso que se conserva al recargar, Inicio sin poder comprobar la cuenta y cerrar sesión así
-// (?sinred, EXT-4) y una sola GoodTTV abierta.
+// (?sinred, EXT-4), un VOD de las emisiones del canal (VOD-1) y dos pestañas a la vez, con sonido solo en la última
+// (EXT-5).
 // En Chrome, teclas, texto y clics son de verdad (CDP); en Firefox se simulan en la página (BiDi no los admite en las
 // páginas de una extensión).
 // Uso, desde la raíz y con la extensión compilada (bun run build:navegador):
@@ -24,7 +25,7 @@ const extension = resolve(import.meta.dirname, "../../dist")
 const out = (event) => console.log(JSON.stringify({ t: +(Date.now() / 1000).toFixed(1), ...event }))
 const sleep = (ms) => new Promise((done) => setTimeout(done, ms))
 
-// Inicio de la última vez con una cuenta ficticia (home-cache.ts), para abrir sin poder comprobarla.
+// Inicio de la última vez con una cuenta ficticia (page-home.ts, de @goodttv/servicios), para abrir sin poder comprobarla.
 const stream = (login) => ({
   category: "Just Chatting",
   id: `s-${login}`,
@@ -151,7 +152,8 @@ const run = async (name, launch) => {
     step(
       "con el canal en «Seguir viendo»",
       await waitFor(
-        `[...document.querySelectorAll(".recent")].some((e) => e.textContent.includes(${JSON.stringify(channel)}))`,
+        // Con su nombre de verdad (xQc), que la búsqueda ya trae: sin distinguir mayúsculas.
+        `[...document.querySelectorAll(".recent")].some((e) => e.textContent.toLowerCase().includes(${JSON.stringify(channel)}))`,
       ),
     )
 
@@ -239,23 +241,61 @@ const run = async (name, launch) => {
       ),
     )
 
-    // Una sola GoodTTV a la vez: la segunda pestaña avisa y puede quedársela; la primera pasa a esperar.
-    const other = await browser.openTab("goodttv.html")
-    const BUSY = `document.body.innerText.includes("ya está abierto en otra pestaña")`
-    const waitIn = async (page, expression) => {
-      for (let i = 0; i < 40; i++) {
+    // VOD-1: debajo de la ficha, las emisiones del canal; abrir una la reproduce, L salta 10 s y se guarda por dónde va.
+    await browser.open(`goodttv.html#/canal/${channel}`)
+    step(
+      "debajo de la ficha, sus emisiones anteriores",
+      await waitFor(`document.querySelectorAll(".videos .video-tile").length > 0`, 20_000),
+    )
+    // Está debajo del vídeo: a la vista antes del clic (en Chrome el clic es de verdad, en sus coordenadas). La marca
+    // dice si la página se ha recargado entre medias.
+    await browser.evaluate(
+      `(document.querySelector(".videos .video-tile").scrollIntoView({ block: "center" }), globalThis.marcaPrueba = true, 0)`,
+    )
+    await browser.click(".videos .video-tile")
+    step(
+      "abrir una la reproduce",
+      await waitFor(
+        `location.hash.startsWith("#/vod/") && document.querySelector(".controls--vod") !== null && (${VIDEO})?.tiempo > 1 && (${VIDEO})?.pausado === false`,
+        30_000,
+      ),
+    )
+    const before = await browser.evaluate(`(${VIDEO}).tiempo`)
+    await press("l")
+    step("L salta 10 s", await waitFor(`(${VIDEO}).tiempo >= ${before} + 9`), {
+      antes: before,
+      ahora: await browser.evaluate(`(${VIDEO}).tiempo`),
+      recargada: await browser.evaluate(`globalThis.marcaPrueba !== true`),
+    })
+    step(
+      "y guarda por dónde va",
+      await waitFor(
+        `Object.keys(JSON.parse(localStorage.getItem("vods-vistos") ?? "{}")).length > 0`,
+        15_000,
+      ),
+    )
+
+    // Varias GoodTTV a la vez (EXT-5): cada pestaña con su canal, y suena una sola, la última que se abrió a la vista.
+    await browser.open(`goodttv.html#/canal/${channel}`)
+    step(
+      "la primera pestaña vuelve a su canal, con sonido",
+      await waitFor(`(${VIDEO})?.tiempo > 3 && (${VIDEO})?.silencio === false`, 40_000),
+    )
+    const other = await browser.openTab(`goodttv.html#/canal/${channel}`)
+    const waitIn = async (page, expression, ms = 40_000) => {
+      const until = Date.now() + ms
+      while (Date.now() < until) {
         if (await page.evaluate(expression).catch(() => false)) return true
         await sleep(250)
       }
       return false
     }
-    step("otra pestaña avisa de que ya está abierto", await waitIn(other, BUSY))
-    await other.evaluate(`(document.querySelector(".busy button").click(), 0)`)
+    step("otra pestaña abre el canal y reproduce", await waitIn(other, `(${VIDEO})?.tiempo > 3`))
+    step("con sonido", await waitIn(other, `(${VIDEO})?.silencio === false`))
     step(
-      "«Usarlo aquí» se la queda",
-      await waitIn(other, `document.querySelector(".topbar") !== null`),
+      "y la primera sigue, sin sonido",
+      await waitFor(`(${VIDEO})?.silencio === true && (${VIDEO})?.pausado === false`),
     )
-    step("y la primera pasa a esperar", await waitFor(BUSY))
     await other.close()
     return { navegador: name, ok: true, pasos: steps.length }
   } catch (error) {

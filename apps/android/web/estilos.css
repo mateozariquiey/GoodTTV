@@ -1,0 +1,1792 @@
+/* GoodTTV en el teléfono. La misma esencia que la tele y la extensión (apps/navegador/src/escritorio/desktop.css): fondo
+ * casi negro, Atkinson Hyperlegible, el blanco como única marca de selección y el rojo solo para «en directo». A escala
+ * de dedo: objetivos de 44 px como mínimo, respuesta al tocar y nada que dependa de pasar el ratón. Maqueta de
+ * referencia: investigacion/android/interfaz/propuesta-and3.html (la B, «lista con miniatura»).
+ * La página es transparente: el fondo lo pone la app (MainActivity.kt), y en el canal, donde va el vídeo, se ve Media3,
+ * que está debajo. Por eso cada pantalla pinta su fondo, salvo el sitio del vídeo. */
+
+/* Cifras (y separadores) en Inter, como en la tele: el cero y el 6/9 de Atkinson leen raro en cifras y horas. */
+@font-face {
+  font-family: "GoodTTV Digits";
+  font-style: normal;
+  font-display: swap;
+  font-weight: 100 900;
+  src: url("@fontsource-variable/inter/files/inter-latin-wght-normal.woff2")
+    format("woff2-variations");
+  unicode-range: U+0030-0039, U+002C, U+002E, U+003A;
+}
+
+:root {
+  --bg: #0c0c0e;
+  --surface: #17171b;
+  --surface-2: #202026;
+  --hover: #29292f;
+  --rule: #232329;
+  --text: #ececef;
+  --muted: #a6a6b0;
+  --dim: #8a8a95;
+  --white: #f2f2f4;
+  --live: #e5484d;
+  --warning: #f0b45b;
+  --radius: 10px;
+
+  color-scheme: dark;
+  color: var(--text);
+  font:
+    15px / 1.45 "GoodTTV Digits",
+    "Atkinson Hyperlegible Next Variable",
+    system-ui,
+    sans-serif;
+  font-variant-numeric: tabular-nums;
+  -webkit-font-smoothing: antialiased;
+  -webkit-tap-highlight-color: transparent;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root,
+.app {
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+}
+
+.app {
+  position: relative;
+}
+
+/* Tocar no selecciona texto, salvo lo que se lee (el chat y la ficha). */
+body {
+  user-select: none;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+button,
+input {
+  font: inherit;
+  color: inherit;
+}
+
+button {
+  padding: 0;
+  background: none;
+  border: 0;
+}
+
+img {
+  display: block;
+}
+
+:focus-visible {
+  outline: 2px solid var(--white);
+  outline-offset: 2px;
+}
+
+.oculto {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* Cada pantalla ocupa toda la página y se desplaza ella sola. Inicio sigue debajo de las demás, invisible, para volver
+ * donde estaba. */
+.pantalla {
+  position: absolute;
+  inset: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  background: var(--bg);
+}
+
+.pantalla--debajo {
+  visibility: hidden;
+}
+
+/* Botones. */
+.boton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 0 18px;
+  border-radius: var(--radius);
+  background: var(--surface-2);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.boton:active {
+  background: var(--hover);
+}
+
+.boton:disabled {
+  opacity: 0.5;
+}
+
+.boton--principal {
+  background: var(--white);
+  color: var(--bg);
+}
+
+.boton--principal:active {
+  background: #d4d4d9;
+}
+
+.boton--ancho {
+  width: 100%;
+}
+
+/* Los iconos (Phosphor) miden 1em: el tamaño de letra del botón. */
+.boton-icono {
+  display: inline-grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  color: var(--text);
+  font-size: 24px;
+  flex: none;
+}
+
+.boton-icono:active {
+  background: var(--hover);
+}
+
+.boton-icono--claro {
+  color: #fff;
+}
+
+.boton-icono--claro:active {
+  background: rgb(255 255 255 / 0.16);
+}
+
+/* Fotos de canal. */
+.avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  object-fit: cover;
+  flex: none;
+}
+
+.avatar--iniciales {
+  display: grid;
+  place-items: center;
+  background: var(--surface-2);
+  color: var(--muted);
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.avatar--vivo {
+  box-shadow:
+    0 0 0 2px var(--bg),
+    0 0 0 4px var(--live);
+}
+
+.en-directo {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+.en-directo i,
+.directo__espectadores i {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--live);
+  flex: none;
+}
+
+.en-directo--claro {
+  color: #fff;
+  font-weight: 600;
+}
+
+/* La barra de arriba: en Inicio, el logo, la búsqueda y el avatar; en las demás, la flecha y lo suyo. */
+.barra {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  height: 56px;
+  padding: 0 8px;
+  background: var(--bg);
+  border-bottom: 1px solid var(--rule);
+}
+
+.barra--inicio {
+  gap: 10px;
+  padding-left: 16px;
+}
+
+.barra--inicio .boton-icono:last-child {
+  margin-left: -6px;
+}
+
+.logo {
+  position: relative;
+  width: 26px;
+  height: 26px;
+  border-radius: 7px;
+  background: var(--white);
+  flex: none;
+}
+
+.logo::before,
+.logo::after {
+  content: "";
+  position: absolute;
+  top: 7px;
+  width: 3.5px;
+  height: 12px;
+  border-radius: 1px;
+  background: var(--bg);
+}
+
+.logo::before {
+  left: 8px;
+}
+
+.logo::after {
+  right: 8px;
+}
+
+.marca {
+  flex: 1;
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.barra__titulo {
+  margin: 0 0 0 4px;
+  font-size: 18px;
+}
+
+.avatar--barra {
+  width: 30px;
+  height: 30px;
+  font-size: 12px;
+}
+
+/* Inicio. */
+.inicio__cuerpo {
+  padding-bottom: 16px;
+}
+
+.seccion {
+  margin: 0;
+  padding: 20px 16px 8px;
+  font-size: 16px;
+}
+
+.nota {
+  margin: 0;
+  padding: 8px 16px;
+  color: var(--muted);
+}
+
+/* Un título de sección con un botón a la derecha (el orden de tus seguidos). */
+.seccion--con-boton {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding-top: 12px;
+  padding-bottom: 0;
+}
+
+.seccion--con-boton h2 {
+  margin: 0;
+  font-size: inherit;
+}
+
+.orden {
+  position: relative;
+  margin-right: -8px;
+}
+
+.orden__boton {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 44px;
+  padding: 0 8px;
+  border-radius: var(--radius);
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.orden__boton:active,
+.orden__boton[aria-expanded="true"] {
+  background: var(--surface);
+}
+
+.orden__menu {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  z-index: 5;
+  width: max-content;
+  max-width: 280px;
+  padding: 4px 0;
+  border-radius: var(--radius);
+  background: var(--surface-2);
+  box-shadow: 0 6px 24px rgb(0 0 0 / 0.5);
+}
+
+.orden__titulo,
+.orden__nota {
+  margin: 0;
+  padding: 8px 20px 4px;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 400;
+}
+
+.aviso {
+  display: grid;
+  justify-items: start;
+  gap: 10px;
+  margin: 12px 16px 0;
+  padding: 12px 14px;
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+
+.aviso p {
+  margin: 0;
+}
+
+.aviso--alerta {
+  border-left: 3px solid var(--warning);
+}
+
+.bienvenida {
+  display: grid;
+  justify-items: start;
+  gap: 12px;
+  padding: 32px 16px 8px;
+}
+
+.bienvenida h1 {
+  margin: 0;
+  font-size: 26px;
+}
+
+.bienvenida p {
+  margin: 0;
+  color: var(--muted);
+}
+
+/* Un directo: la miniatura pequeña con los espectadores, y el nombre, la categoría y el título. */
+.directos {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.directo {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 8px 16px;
+}
+
+.directo:active {
+  background: var(--surface);
+}
+
+.directo__miniatura {
+  position: relative;
+  width: clamp(128px, 38vw, 200px);
+  aspect-ratio: 16 / 9;
+  border-radius: 8px;
+  overflow: hidden;
+  background: var(--surface-2);
+  flex: none;
+}
+
+.directo__miniatura img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.directo__espectadores {
+  position: absolute;
+  left: 5px;
+  bottom: 5px;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: rgb(12 12 14 / 0.82);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.directo__texto {
+  display: grid;
+  gap: 1px;
+  min-width: 0;
+}
+
+.directo__nombre,
+.directo__categoria,
+.reciente__nombre,
+.resultado__texto > *,
+.ficha h1 {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.directo__nombre {
+  font-size: 15px;
+}
+
+.directo__categoria {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.directo__titulo,
+.ficha__titulo {
+  display: -webkit-box;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.directo__titulo {
+  font-size: 13px;
+  opacity: 0.85;
+}
+
+/* La forma de una lista mientras llega lo de ahora (lo guardado es de hace rato): los mismos huecos, vacíos. Cada línea
+ * de texto, una barra algo más baja que la línea (scaleY no cambia lo que ocupa). */
+.hueco {
+  pointer-events: none;
+}
+
+/* Sin texto, la columna mediría lo que un espacio: ocupa lo que queda, como la de un título largo. */
+.hueco .directo__texto {
+  flex: 1;
+}
+
+.hueco .directo__nombre,
+.hueco .directo__categoria,
+.hueco .directo__titulo {
+  width: 45%;
+  border-radius: 4px;
+  background: var(--surface-2);
+  color: transparent;
+  transform: scaleY(0.7);
+}
+
+.hueco .directo__nombre {
+  width: 60%;
+}
+
+.hueco .directo__titulo {
+  width: 85%;
+}
+
+/* En horizontal (o en una pantalla ancha), dos columnas. */
+@media (min-width: 720px) {
+  .directos {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+  }
+}
+
+/* Un vídeo (VOD-1), como un directo de la lista: la duración, si ya lo viste (o lo estás viendo) y por dónde ibas, en
+ * blanco, la marca de la familia. */
+.video--actual {
+  background: var(--surface);
+}
+
+.video__duracion,
+.video__visto {
+  position: absolute;
+  bottom: 5px;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: rgb(12 12 14 / 0.82);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.video__duracion {
+  right: 5px;
+}
+
+.video__vacio {
+  position: absolute;
+  inset: 0;
+  width: 32px;
+  height: 32px;
+  margin: auto;
+  color: var(--dim);
+}
+
+.video__visto {
+  left: 5px;
+}
+
+.video__progreso {
+  position: absolute;
+  inset: auto 0 0;
+  height: 3px;
+  background: rgb(255 255 255 / 0.25);
+}
+
+.video__progreso i {
+  display: block;
+  height: 100%;
+  background: var(--white);
+}
+
+.video__titulo {
+  font-size: 14px;
+  opacity: 1;
+}
+
+/* «Seguir viendo»: una fila de fotos que se desliza, con el aro rojo si están en directo. */
+.recientes {
+  display: flex;
+  gap: 8px;
+  margin: 0;
+  padding: 6px 12px 8px;
+  list-style: none;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.reciente {
+  display: grid;
+  justify-items: center;
+  gap: 8px;
+  width: 72px;
+  padding: 4px 0;
+  border-radius: var(--radius);
+}
+
+.reciente:active {
+  background: var(--surface);
+}
+
+.reciente .avatar {
+  width: 56px;
+  height: 56px;
+  font-size: 18px;
+}
+
+.reciente--vivo .avatar {
+  box-shadow:
+    0 0 0 2px var(--bg),
+    0 0 0 4px var(--live);
+}
+
+.reciente--fuera .avatar {
+  opacity: 0.45;
+}
+
+.reciente__nombre {
+  max-width: 100%;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.reciente--vivo .reciente__nombre {
+  color: var(--text);
+}
+
+/* La búsqueda. */
+.buscador {
+  display: flex;
+  align-items: center;
+  flex: 1;
+  min-width: 0;
+  height: 44px;
+  margin-right: 4px;
+  padding-left: 16px;
+  border-radius: 22px;
+  background: var(--surface-2);
+}
+
+.buscador input {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  border: 0;
+  background: none;
+  outline: none;
+  font-size: 16px;
+}
+
+.buscador input::-webkit-search-cancel-button {
+  display: none;
+}
+
+.buscador .boton-icono {
+  width: 40px;
+  height: 40px;
+  font-size: 20px;
+}
+
+.resultados {
+  margin: 0;
+  padding: 4px 0;
+  list-style: none;
+}
+
+.resultado {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  min-height: 60px;
+  padding: 8px 16px;
+  text-align: left;
+}
+
+.resultado:active {
+  background: var(--surface);
+}
+
+.resultado__icono {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: var(--surface-2);
+  font-size: 20px;
+  flex: none;
+}
+
+.resultado__texto {
+  display: grid;
+  flex: 1;
+  min-width: 0;
+}
+
+.resultado__detalle {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+/* El canal. En vertical, el vídeo arriba y debajo la ficha y el chat; en horizontal, el vídeo y el chat al lado. El
+ * escenario es transparente: debajo está Media3. */
+.canal {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: transparent;
+}
+
+/* Deslizar hacia abajo sobre el vídeo es volver (useDeslizarParaVolver): el navegador no se queda el gesto. */
+.escenario {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  overflow: hidden;
+  flex: none;
+  touch-action: none;
+}
+
+.canal__lado {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  background: var(--bg);
+}
+
+.canal__sin-chat {
+  display: grid;
+  place-items: center;
+  flex: 1;
+}
+
+@media (orientation: landscape) {
+  .canal {
+    flex-direction: row;
+  }
+
+  .escenario {
+    width: auto;
+    height: 100%;
+    aspect-ratio: auto;
+    flex: 1;
+    min-width: 0;
+  }
+
+  .canal__lado {
+    flex: 0 0 clamp(280px, 34%, 400px);
+    border-left: 1px solid var(--rule);
+  }
+
+  .canal--sin-chat .canal__lado {
+    display: none;
+  }
+
+  .ficha {
+    padding: 10px 12px;
+  }
+}
+
+.controles {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: 4px 4px 2px;
+  background: linear-gradient(
+    rgb(0 0 0 / 0.55),
+    transparent 32%,
+    transparent 50%,
+    rgb(0 0 0 / 0.8)
+  );
+  text-shadow: 0 1px 3px rgb(0 0 0 / 0.6);
+  transition: opacity 0.2s ease;
+}
+
+/* La capa deja pasar los toques salvo en sus botones: debajo están el vídeo (mostrar u ocultar los controles) y los
+ * botones del aviso (Reintentar, Volver). */
+.controles,
+.controles__fila {
+  pointer-events: none;
+}
+
+.controles button {
+  pointer-events: auto;
+}
+
+.controles--ocultos {
+  opacity: 0;
+}
+
+.controles__fila {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+/* En horizontal, la ficha del canal junto a la flecha. */
+.encima {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 1;
+  min-width: 0;
+  padding-right: 12px;
+  color: #fff;
+}
+
+.avatar--encima {
+  width: 36px;
+  height: 36px;
+  font-size: 13px;
+}
+
+.encima__texto {
+  display: grid;
+  min-width: 0;
+}
+
+.encima__texto p {
+  margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.encima__datos,
+.encima__titulo {
+  color: rgb(255 255 255 / 0.8);
+  font-size: 13px;
+}
+
+/* A media altura: las flechas para cambiar de canal, a los lados, y en el centro pausa con 10 s a cada lado, donde cae
+ * el pulgar (como en la app de Twitch y en YouTube). */
+.controles__fila--centro {
+  justify-content: space-between;
+  padding: 0 4px;
+}
+
+.boton-icono--lado,
+.controles__lado {
+  width: 52px;
+  height: 52px;
+  flex: none;
+}
+
+.boton-icono--lado {
+  background: rgb(0 0 0 / 0.35);
+  font-size: 26px;
+}
+
+.centro {
+  display: flex;
+  align-items: center;
+  gap: clamp(12px, 6vw, 36px);
+  margin: 0 auto;
+  pointer-events: none;
+}
+
+.centro__pausa {
+  width: 64px;
+  height: 64px;
+  background: rgb(0 0 0 / 0.35);
+  font-size: 34px;
+}
+
+/* Retroceder y avanzar: los segundos, dentro de la flecha en círculo, como en la extensión. */
+.saltar {
+  font-size: 30px;
+}
+
+.saltar > * {
+  grid-area: 1 / 1;
+}
+
+.saltar__segundos {
+  padding-top: 1px;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.saltar:disabled {
+  opacity: 0.35;
+}
+
+/* Abajo: la barra del tiempo (en un VOD, y en un directo con su VOD) y la fila de controles. */
+.controles__pie {
+  display: grid;
+  pointer-events: none;
+}
+
+.reloj {
+  padding: 0 6px;
+  color: #fff;
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+/* Retrocedido: vuelve al directo; el punto, gris, porque no es lo que se ve en directo. */
+.al-directo {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 32px;
+  margin: 0 4px;
+  padding: 0 12px;
+  border: 1px solid rgb(255 255 255 / 0.6);
+  border-radius: 999px;
+  color: #fff;
+  font-size: 13px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.al-directo:active {
+  background: rgb(255 255 255 / 0.16);
+}
+
+.al-directo i {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--dim);
+}
+
+/* La velocidad y la calidad de un VOD: abren su hoja. */
+.ajuste-video {
+  min-width: 44px;
+  min-height: 44px;
+  padding: 0 6px;
+  color: #fff;
+  font-size: 13px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+/* La barra del tiempo: se toca en 28 px de alto, aunque se vean 3; al arrastrar, más gruesa, y encima del dedo el
+ * momento con su miniatura. Lo visto, en blanco, la marca de la familia. */
+.barra-tiempo {
+  position: relative;
+  height: 28px;
+  margin: 0 14px;
+  pointer-events: auto;
+  touch-action: none;
+}
+
+.barra-tiempo__pista {
+  position: absolute;
+  inset: 12px 0 auto;
+  height: 3px;
+  border-radius: 2px;
+  background: rgb(255 255 255 / 0.25);
+  overflow: hidden;
+}
+
+.barra-tiempo--arrastrando .barra-tiempo__pista {
+  top: 11px;
+  height: 5px;
+}
+
+.barra-tiempo__cargado,
+.barra-tiempo__visto {
+  position: absolute;
+  inset: 0 auto 0 0;
+}
+
+.barra-tiempo__cargado {
+  background: rgb(255 255 255 / 0.35);
+}
+
+.barra-tiempo__visto {
+  background: var(--white);
+}
+
+.barra-tiempo__bola {
+  position: absolute;
+  top: 13.5px;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--white);
+  transform: translate(-50%, -50%);
+}
+
+.barra-tiempo--arrastrando .barra-tiempo__bola {
+  width: 18px;
+  height: 18px;
+}
+
+.barra-tiempo__momento {
+  position: absolute;
+  bottom: 30px;
+  display: grid;
+  justify-items: center;
+  gap: 4px;
+  transform: translateX(-50%);
+  pointer-events: none;
+}
+
+.barra-tiempo__miniatura {
+  display: block;
+  border: 2px solid var(--white);
+  border-radius: 6px;
+  background-color: #000;
+  background-repeat: no-repeat;
+  box-sizing: content-box;
+}
+
+.barra-tiempo__hora {
+  padding: 2px 8px;
+  border-radius: 6px;
+  background: rgb(12 12 14 / 0.85);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+/* Reanudado donde se dejó: lo dice arriba, sobre el vídeo, unos segundos. */
+.reanudado {
+  position: absolute;
+  top: 50px;
+  left: 50%;
+  z-index: 1;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 4px 10px;
+  width: max-content;
+  max-width: calc(100% - 24px);
+  padding: 6px 6px 6px 12px;
+  border-radius: var(--radius);
+  background: rgb(12 12 14 / 0.88);
+  color: #fff;
+  font-size: 13px;
+  transform: translateX(-50%);
+}
+
+.reanudado__principio {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 32px;
+  padding: 0 10px;
+  border: 1px solid #3a3a42;
+  border-radius: 6px;
+  font-weight: 700;
+}
+
+.reanudado__principio:active {
+  border-color: var(--white);
+}
+
+.controles__hueco {
+  flex: 1;
+}
+
+.por-detras {
+  margin-left: 6px;
+  color: rgb(255 255 255 / 0.8);
+  font-size: 13px;
+}
+
+.calidad {
+  padding: 0 6px;
+  color: #fff;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.escenario__aviso {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: 12px;
+  padding: 16px;
+  text-align: center;
+  background: rgb(0 0 0 / 0.6);
+}
+
+.escenario__aviso p {
+  margin: 0;
+}
+
+.girando {
+  position: absolute;
+  top: calc(50% - 20px);
+  left: calc(50% - 20px);
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  border: 3px solid rgb(255 255 255 / 0.2);
+  border-top-color: #fff;
+  animation: girar 0.9s linear infinite;
+}
+
+/* Esperando datos, en el botón de pausa. */
+.girando--centro {
+  position: static;
+  width: 30px;
+  height: 30px;
+}
+
+@keyframes girar {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Sin directo, en vertical: el vídeo deja sitio a una franja con el aviso, y debajo salen sus emisiones (COL-2). */
+.escenario--franja {
+  aspect-ratio: auto;
+  background: var(--bg);
+  border-bottom: 1px solid var(--rule);
+}
+
+.franja {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 16px 6px 4px;
+}
+
+.franja p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 14px;
+}
+
+/* Debajo de la ficha, en vertical: el chat o los vídeos del canal. */
+.pestanas {
+  display: flex;
+  border-bottom: 1px solid var(--rule);
+  flex: none;
+}
+
+.pestana {
+  flex: 1;
+  min-height: 44px;
+  border-bottom: 2px solid transparent;
+  color: var(--muted);
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.pestana[aria-selected="true"] {
+  border-bottom-color: var(--white);
+  color: var(--text);
+}
+
+.canal__videos {
+  flex: 1;
+  min-height: 0;
+  padding: 4px 0 12px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+/* Escribiendo en vertical, el teclado se come media pantalla: la ficha y las pestañas se apartan para el chat. */
+@media (orientation: portrait) {
+  .canal:has(.chat input:focus) .ficha,
+  .canal:has(.chat input:focus) .pestanas {
+    display: none;
+  }
+}
+
+/* Una hoja que sube desde abajo para elegir (la velocidad, la calidad, un emote). */
+.hoja {
+  position: fixed;
+  inset: 0;
+  z-index: 10;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  background: rgb(0 0 0 / 0.5);
+}
+
+.hoja__panel {
+  width: 100%;
+  max-width: 520px;
+  max-height: 75%;
+  padding: 4px 0 calc(12px + env(safe-area-inset-bottom));
+  overflow-y: auto;
+  border-radius: 16px 16px 0 0;
+  background: var(--surface);
+}
+
+.hoja__titulo {
+  margin: 0;
+  padding: 14px 20px 8px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.hoja__botones {
+  padding: 4px 20px 0;
+}
+
+.opciones {
+  display: grid;
+}
+
+.opcion {
+  display: flex;
+  align-items: center;
+  min-height: 48px;
+  padding: 0 20px;
+  font-size: 16px;
+  text-align: left;
+}
+
+.opcion:active {
+  background: var(--hover);
+}
+
+/* La elegida, con el punto blanco. */
+.opcion[aria-checked="true"] {
+  font-weight: 700;
+}
+
+.opcion[aria-checked="true"]::after {
+  content: "";
+  width: 8px;
+  height: 8px;
+  margin-left: auto;
+  border-radius: 50%;
+  background: var(--white);
+}
+
+/* La ficha del canal. */
+.ficha {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--rule);
+  user-select: text;
+}
+
+.avatar--ficha {
+  width: 40px;
+  height: 40px;
+  margin-top: 4px;
+}
+
+.ficha__texto {
+  display: grid;
+  gap: 2px;
+  flex: 1;
+  min-width: 0;
+}
+
+.ficha h1 {
+  margin: 0;
+  font-size: 17px;
+}
+
+.ficha__titulo {
+  margin: 0;
+  font-size: 14px;
+}
+
+.ficha__datos {
+  display: flex;
+  flex-wrap: wrap;
+  column-gap: 12px;
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.ficha__espectadores {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+/* El chat. */
+.chat {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+
+.chat__estado {
+  margin: 10px 16px 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.chat__lista {
+  contain: strict; /* su tamaño lo da la columna: los mensajes nuevos no recolocan el resto de la página */
+  flex: 1;
+  min-height: 0;
+  margin: 0;
+  padding: 8px 16px;
+  list-style: none;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  font-size: 14px;
+  overflow-wrap: anywhere;
+  user-select: text;
+}
+
+.chat--large .chat__lista {
+  font-size: 17px;
+}
+
+/* Encima del pie del chat (la caja para escribir), no del todo: una franja sin alto con el botón asomando hacia arriba. */
+.chat__ultimos {
+  position: relative;
+  height: 0;
+  flex: none;
+}
+
+.chat__ultimos button {
+  position: absolute;
+  left: 50%;
+  bottom: 12px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 36px;
+  padding: 0 14px;
+  border-radius: 999px;
+  background: var(--white);
+  color: var(--bg);
+  font-size: 13px;
+  font-weight: 700;
+  box-shadow: 0 2px 10px rgb(0 0 0 / 0.5);
+  transform: translateX(-50%);
+}
+
+/* CHAT-1: escribir, al pie del chat. */
+.chat__escribir {
+  display: grid;
+  gap: 6px;
+  padding: 8px 12px calc(8px + env(safe-area-inset-bottom));
+  border-top: 1px solid var(--rule);
+}
+
+.chat__caja {
+  display: flex;
+  align-items: center;
+  height: 44px;
+  padding-left: 16px;
+  border-radius: 22px;
+  background: var(--surface-2);
+}
+
+.chat__caja input {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  border: 0;
+  background: none;
+  outline: none;
+  font-size: 16px;
+}
+
+.chat__caja:has(input:focus) {
+  outline: 2px solid var(--white);
+}
+
+.chat__caja .boton-icono {
+  width: 44px;
+  height: 44px;
+  font-size: 20px;
+}
+
+.chat__caja .boton-icono:disabled {
+  opacity: 0.4;
+}
+
+.chat__error {
+  margin: 0;
+  color: var(--warning);
+  font-size: 13px;
+}
+
+.chat__nota {
+  margin: 0;
+  padding: 10px 16px;
+  border-top: 1px solid var(--rule);
+  color: var(--dim);
+  font-size: 13px;
+}
+
+/* Los emotes al escribir: «:» y dos letras, encima de la caja (encima del teclado), en una fila que se desliza. */
+.sugerencias {
+  display: flex;
+  gap: 6px;
+  margin: 0 -12px;
+  padding: 0 12px 2px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.sugerencia {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 40px;
+  padding: 0 12px 0 6px;
+  border-radius: 20px;
+  background: var(--surface-2);
+  flex: none;
+}
+
+.sugerencia:active {
+  background: var(--hover);
+}
+
+.sugerencia img {
+  width: auto;
+  height: 28px;
+}
+
+.sugerencia span {
+  font-size: 14px;
+  font-weight: 700;
+}
+
+/* La lista entera, en el sitio de los mensajes (que se ocultan mientras). */
+.chat:has(> .lista-emotes) > .chat__lista,
+.chat:has(> .lista-emotes) > .chat__ultimos,
+.chat:has(> .lista-emotes) > .chat__estado {
+  display: none;
+}
+
+.lista-emotes {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  padding: 8px 12px 0;
+}
+
+.lista-emotes__buscar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 40px;
+  padding: 0 14px;
+  border-radius: 20px;
+  background: var(--surface-2);
+  color: var(--muted);
+  font-size: 18px;
+  flex: none;
+}
+
+.lista-emotes__buscar input {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  border: 0;
+  background: none;
+  outline: none;
+  color: var(--text);
+  font-size: 16px;
+}
+
+.lista-emotes__buscar input::-webkit-search-cancel-button {
+  display: none;
+}
+
+.lista-emotes__cuerpo {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.lista-emotes__titulo {
+  margin: 12px 0 6px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.lista-emotes__rejilla {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(48px, 1fr));
+  gap: 2px;
+}
+
+.lista-emotes__emote {
+  display: grid;
+  place-items: center;
+  height: 48px;
+  border-radius: 8px;
+}
+
+.lista-emotes__emote:active {
+  background: var(--hover);
+}
+
+.lista-emotes__emote img {
+  max-width: 40px;
+  max-height: 32px;
+}
+
+.lista-emotes__ultimo {
+  margin: 0;
+  padding: 8px 0;
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 13px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: none;
+}
+
+.lista-emotes__ultimo strong {
+  color: var(--text);
+}
+
+/* Mantener pulsado un emote del chat abre su ficha: sin el menú ni la selección del navegador. */
+.emote {
+  -webkit-touch-callout: none;
+  user-select: none;
+}
+
+.ficha-emote {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 4px 20px 16px;
+}
+
+.ficha-emote img {
+  width: auto;
+  height: 56px;
+}
+
+.ficha-emote__nombre {
+  display: block;
+  font-size: 18px;
+  overflow-wrap: anywhere;
+}
+
+.ficha-emote__datos {
+  color: var(--muted);
+  font-size: 14px;
+}
+
+/* SEG-1: si sigues el canal; lleva a twitch.tv. Sin seguirlo, en blanco; siguiéndolo, solo el borde. */
+.seguir {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 6px;
+  min-height: 36px;
+  padding: 0 12px;
+  border: 1px solid var(--white);
+  border-radius: 999px;
+  background: var(--white);
+  color: var(--bg);
+  font-size: 14px;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.seguir--si {
+  border-color: #3a3a42;
+  background: transparent;
+  color: var(--text);
+}
+
+/* Los mensajes (Message, de @goodttv/interfaz). */
+.message {
+  padding: 3px 0;
+}
+
+.message--action .message__text {
+  font-style: italic;
+}
+
+.message__reply {
+  display: block;
+  color: var(--dim);
+  font-size: 0.9em;
+}
+
+.message__name {
+  font-weight: 700;
+}
+
+.badge {
+  display: inline-block;
+  width: 18px;
+  height: 18px;
+  margin-right: 3px;
+  vertical-align: -3px;
+}
+
+.mention {
+  font-weight: 700;
+}
+
+.emote {
+  position: relative;
+  display: inline-grid;
+  vertical-align: middle;
+}
+
+.emote__image,
+.emote__overlay {
+  grid-area: 1 / 1;
+  height: 1.9em;
+  width: auto;
+}
+
+/* La cuenta y los ajustes. */
+.ajustes {
+  padding: 0 16px 24px;
+}
+
+.grupo {
+  display: grid;
+  gap: 12px;
+  padding: 20px 0;
+  border-bottom: 1px solid var(--rule);
+}
+
+.grupo:last-child {
+  border-bottom: 0;
+}
+
+.grupo .nota {
+  padding: 0;
+}
+
+.grupo__titulo {
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.ajuste {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  min-height: 48px;
+}
+
+.ajuste__pista {
+  margin: 0;
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.ajuste__alerta {
+  margin: 0;
+  color: var(--warning);
+  font-size: 14px;
+}
+
+.botones {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.conectado {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.conectado__nombre {
+  flex: 1;
+  min-width: 0;
+}
+
+.avatar--cuenta {
+  width: 44px;
+  height: 44px;
+}
+
+.codigo {
+  display: grid;
+  gap: 12px;
+}
+
+.codigo p {
+  margin: 0;
+}
+
+.codigo__letras {
+  padding: 4px 0;
+  font-size: 34px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-align: center;
+}
+
+.segmentos {
+  display: flex;
+  min-width: 0;
+  margin: 0;
+  padding: 3px;
+  border: 1px solid var(--rule);
+  border-radius: 12px;
+  background: var(--surface);
+}
+
+.segmentos label {
+  position: relative;
+  flex: 1;
+}
+
+.segmentos input {
+  position: absolute;
+  inset: 0;
+  margin: 0;
+  opacity: 0;
+}
+
+.segmentos__opcion {
+  display: block;
+  padding: 9px 12px;
+  border-radius: 9px;
+  color: var(--muted);
+  font-size: 14px;
+  text-align: center;
+  white-space: nowrap;
+}
+
+.segmentos input:checked + .segmentos__opcion {
+  background: var(--white);
+  color: var(--bg);
+  font-weight: 700;
+}
+
+.segmentos input:focus-visible + .segmentos__opcion {
+  outline: 2px solid var(--white);
+  outline-offset: 2px;
+}
+
+.interruptor {
+  position: relative;
+  width: 52px;
+  height: 32px;
+  border-radius: 999px;
+  background: var(--surface-2);
+  flex: none;
+}
+
+.interruptor::after {
+  content: "";
+  position: absolute;
+  top: 4px;
+  left: 4px;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: var(--muted);
+  transition: transform 0.15s ease;
+}
+
+.interruptor[aria-checked="true"] {
+  background: var(--white);
+}
+
+.interruptor[aria-checked="true"]::after {
+  transform: translateX(20px);
+  background: var(--bg);
+}
+
+/* B, para medir (medir-b.tsx): el vídeo de hls.js a todo el ancho. */
+.medir-b .stage__surface {
+  aspect-ratio: 16 / 9;
+  background: #000;
+}
+
+.player__media {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.medir-b p {
+  margin: 12px;
+}

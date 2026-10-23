@@ -4,7 +4,7 @@ import { useHlsPlayer } from "@goodttv/interfaz"
 import { act, createElement, useRef } from "react"
 import { createRoot, type Root } from "react-dom/client"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
-import { PREWARM_MS, usePointerPrewarm } from "./prewarm"
+import { OPENING_PREWARM_MS, PREWARM_MS, useOpeningPrewarm, usePointerPrewarm } from "./prewarm"
 
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true })
 
@@ -133,5 +133,60 @@ describe("precalentar con una calidad elegida a mano", () => {
     act(() => root?.render(createElement(Prewarm)))
     pointer("pointerdown", link("b"))
     expect(prewarmed()).toEqual(["/stream/b/precalentar?modo=adaptativo"])
+  })
+})
+
+describe("precalentar al abrir (REN-1)", () => {
+  type Props = {
+    readonly atHome?: boolean
+    readonly live?: boolean | null // null: aún no hay último canal visto
+    readonly login?: string
+    readonly ready?: boolean
+  }
+  const Opening = ({ atHome = true, live = true, login = "ultimo", ready = true }: Props) => {
+    useOpeningPrewarm(
+      atHome,
+      live === null ? undefined : { displayName: login, live, login },
+      "sin-paradas",
+      ready,
+    )
+    return null
+  }
+  const update = (props: Props): void => {
+    act(() => root?.render(createElement(Opening, props)))
+  }
+
+  it("precalienta el último canal visto si emite, con el modo guardado", () => {
+    render(createElement(Opening))
+    expect(prewarmed()).toEqual(["/stream/ultimo/precalentar?modo=sin-paradas"])
+  })
+
+  it("espera al modo guardado y no repite", () => {
+    render(createElement(Opening, { ready: false }))
+    expect(prewarmed()).toEqual([])
+    update({ ready: true })
+    update({ login: "otro" })
+    expect(prewarmed()).toEqual(["/stream/ultimo/precalentar?modo=sin-paradas"])
+  })
+
+  it("si lo guardado no dice que emite, espera a lo de ahora unos segundos", () => {
+    render(createElement(Opening, { live: false }))
+    update({ live: null })
+    expect(prewarmed()).toEqual([])
+    update({ live: true })
+    expect(prewarmed()).toEqual(["/stream/ultimo/precalentar?modo=sin-paradas"])
+  })
+
+  it("pasado el plazo, ya no", () => {
+    render(createElement(Opening, { live: false }))
+    wait(OPENING_PREWARM_MS + 1)
+    update({ live: true })
+    expect(prewarmed()).toEqual([])
+  })
+
+  it("ni si se abrió en otra vista", () => {
+    render(createElement(Opening, { atHome: false }))
+    update({ atHome: true })
+    expect(prewarmed()).toEqual([])
   })
 })
