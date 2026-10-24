@@ -134,30 +134,34 @@ export const ChatPanel = ({
     <aside aria-label="Chat" className={`chat chat--${scale}`} ref={panel}>
       <header className="chat__head">{replay ? "Chat del vídeo" : "Chat del directo"}</header>
       {status === undefined ? null : <p className="chat__status">{status}</p>}
-      {/* biome-ignore lint/a11y/useKeyWithClickEvents: el clic en un emote es un atajo del ratón; con el teclado, Tab completa al escribir. */}
-      <ol
-        aria-live="off"
-        className="chat__list"
-        onClick={onEmoteClick}
-        onPointerDown={onListPointerDown}
-        onPointerLeave={hideTip}
-        onPointerOver={showTip}
-        onScroll={(event) => {
-          // La ficha sigue a su emote (al quitarse los mensajes de arriba, el navegador recoloca la lista).
-          if (tip !== null && (panel.current === null || !tip.element.isConnected)) hideTip()
-          else if (tip !== null && panel.current !== null)
-            setTip({ ...tip, ...placeTip(tip.element, panel.current) })
-          if (holding.current) return
-          const element = event.currentTarget
-          stick.current = element.scrollHeight - element.scrollTop - element.clientHeight < STICK_PX
-        }}
-        onWheel={stopHolding}
-        ref={list}
-      >
-        {chat.messages.map((message) => (
-          <Message key={message.id} message={message} />
-        ))}
-      </ol>
+      {/* En un bloque propio, para que la lista se maquete aparte del resto de la página (desktop.css). */}
+      <div className="chat__scroller">
+        {/* biome-ignore lint/a11y/useKeyWithClickEvents: el clic en un emote es un atajo del ratón; con el teclado, Tab completa al escribir. */}
+        <ol
+          aria-live="off"
+          className="chat__list"
+          onClick={onEmoteClick}
+          onPointerDown={onListPointerDown}
+          onPointerLeave={hideTip}
+          onPointerOver={showTip}
+          onScroll={(event) => {
+            // La ficha sigue a su emote (al quitarse los mensajes de arriba, el navegador recoloca la lista).
+            if (tip !== null && (panel.current === null || !tip.element.isConnected)) hideTip()
+            else if (tip !== null && panel.current !== null)
+              setTip({ ...tip, ...placeTip(tip.element, panel.current) })
+            if (holding.current) return
+            const element = event.currentTarget
+            stick.current =
+              element.scrollHeight - element.scrollTop - element.clientHeight < STICK_PX
+          }}
+          onWheel={stopHolding}
+          ref={list}
+        >
+          {chat.messages.map((message) => (
+            <Message key={message.id} message={message} />
+          ))}
+        </ol>
+      </div>
       {tip === null ? null : (
         <div
           className={`emote-tip${tip.below ? " emote-tip--below" : ""}`}

@@ -1,3 +1,4 @@
+import type { LatencyMode } from "@goodttv/contratos"
 import {
   type Channel,
   fromRecent,
@@ -7,9 +8,11 @@ import {
   useAuth,
   useFollowedOrder,
   useHome,
+  useOpeningPrewarm,
   usePreferences,
 } from "@goodttv/interfaz"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { android } from "../api"
 import { Busqueda } from "./Busqueda"
 import { Canal } from "./Canal"
 import { Cuenta } from "./Cuenta"
@@ -30,6 +33,9 @@ type Mini =
   | { readonly accion: "cerrar" }
 
 const REFRESH_MS = 120_000 // como Inicio en la tele y la extensión
+
+const prewarmInApp = (login: string, mode: LatencyMode): void =>
+  android.canalPrecalentar(login, mode)
 
 export const App = () => {
   const route = useRoute()
@@ -72,6 +78,10 @@ export const App = () => {
       [],
     [data, sketch],
   )
+
+  // Al abrir en Inicio, se precalienta el último canal visto si emite (REN-1, como en la extensión), en el motor de la
+  // app: al tocarlo, Media3 arranca con el empalme ya abierto.
+  useOpeningPrewarm(atHome, recents[0], preferences.latencyMode, preferencesLoaded, prewarmInApp)
 
   // El último canal abierto desde una lista o la búsqueda, con lo que se sabía de él; si se llega por la dirección,
   // lo que digan las listas.

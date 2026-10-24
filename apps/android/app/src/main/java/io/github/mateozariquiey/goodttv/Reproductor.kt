@@ -55,6 +55,17 @@ private const val SUELO_FRAGMENTOS = 3
 private const val ATRAS_MS = 30_000
 // Por debajo de esto, lo que se ha quedado por detrás del directo tras retroceder o pausar no cuenta como retrocedido.
 private const val RETROCEDIDO_MS = 1500L
+// Con la app sin verse (la pantalla apagada, o en segundo plano sin PiP), el directo va en solo audio: Twitch lo da a
+// ~160 kbit/s, frente a los varios Mbit/s del vídeo (unos 70 MB por hora en vez de ~4 GB de datos). Para el motor es una
+// calidad más (q=audio_only@0, en @goodttv/sin-anuncios).
+private const val SOLO_AUDIO = "audio_only@0"
+// El relevo al pasar a solo audio o volver al vídeo (relevar): el nuevo se coloca esto por delante de lo que suena (lo que
+// tarda en tener sus datos). Si aun así el de antes llega antes, se vuelve a colocar; a la tercera, o si en este plazo no
+// está, se cambia como antes, volviendo a abrir (un corte de ~1 s).
+private const val ADELANTO_MS = 1500L
+private const val RELEVO_INTENTOS = 3
+private const val RELEVO_MAX_MS = 12_000L
+private const val TIC_RELEVO_MS = 40L
 // Un VOD dice por dónde va cuatro veces por segundo (el chat del vídeo y la barra); el directo, una.
 private const val TIC_VOD_MS = 250L
 // Para empezar un VOD en buena calidad: el ancho de banda medido la última vez o, la primera, uno que da 1080p60, como
@@ -118,7 +129,9 @@ class Reproductor(
     // Una pausa del directo (DVR-1): desde cuándo y qué momento se veía (ms, en hora real), para que la página, al
     // reanudar tras más de un minuto, siga donde se pausó en el VOD de la emisión. Aquí y no en la página: también se
     // pausa desde la esquina o el PiP, y la pantalla del canal se desmonta al dejarlo.
-    private class Pausa(val desde: Long, val imagen: Long)
+    // «fuera»: lo que se veía al pausar ya no está en la ventana de este reproductor (se volvió a abrir en pausa): al
+    // reanudar, la página lo abre en el VOD de la emisión, como tras una pausa larga.
+    private class Pausa(val desde: Long, val imagen: Long, val fuera: Boolean = false)
 
     // Lo que se pidió, para volver a abrirlo (reintentar, o si una pausa larga deja atrás la ventana del directo). Con
     // «pausa», se abre en pausa (la que había).
@@ -134,6 +147,7 @@ class Reproductor(
         var decodificador: String? = null
         var trozosVod = 0
         var fragmentoMs = 2000L
+        var ajusteDePausa = false // saltar() movió en pausa lo que se veía: falta el ajuste al fotograma clave
         // Tras retroceder o pausar el directo: el desfase (ms) al que vuelve «Ir al directo», el de antes. null si no.
         var directoMs: Long? = null
         // Un VOD: sus calidades (las mejores primero) y la elegida (null: automática).
@@ -215,8 +229,185 @@ class Reproductor(
     fun reabrir(pausado: Boolean = false) {
         val antes = abierto ?: return
         val que = antes.que as? Directo ?: return
-        val pausa = if (pausado) antes.pausa ?: Pausa(System.currentTimeMillis(), System.currentTimeMillis()) else null
+        val pausa = if (pausado) enOtroReproductor(antes.pausa) else null
         abrirDirecto(que, antes.fondo, SystemClock.elapsedRealtime(), pausa)
+    }
+
+    // La pausa de un reproductor que se vuelve a abrir: lo que se veía queda fuera de la ventana del nuevo.
+    private fun enOtroReproductor(pausa: Pausa?): Pausa {
+        val ahora = System.currentTimeMillis()
+        return Pausa(pausa?.desde ?: ahora, pausa?.imagen ?: ahora, fuera = true)
+    }
+
+    // La calidad con vídeo que había antes de pasar a solo audio, para volver a ella.
+    private var calidadConVideo: String? = null
+    // La app no se ve (MainActivity.onStop, sin el PiP a la vista): el directo, en solo audio.
+    private var sinVerse = false
+
+    // Un relevo en marcha (relevar): la visita y el reproductor nuevos, callados hasta que el de antes llega a donde están.
+    private class Relevo(val visita: Abierto) {
+        var player: ExoPlayer? = null
+        var colocado = false
+        var intentos = 0
+    }
+    private var relevo: Relevo? = null
+
+    // Con la app sin verse, el directo en solo audio; al volver a verse, con vídeo otra vez, sin corte (relevar). Se
+    // vuelve a mirar al empezar a sonar y al reanudar (ajustarAudio): si se dejó de ver mientras se abría o en pausa,
+    // también.
+    fun soloAudio(activo: Boolean) {
+        sinVerse = activo
+        ajustarAudio()
+    }
+
+    private fun ajustarAudio() {
+        val visita = abierto ?: return
+        val que = visita.que as? Directo ?: return
+        // Ya está como toca: si iba hacia lo otro (se volvió a ver, o dejó de verse, mientras), ya no.
+        if (sinVerse == (que.calidad == SOLO_AUDIO)) return cancelarRelevo()
+        if (relevo != null) return
+        val p = player
+        if (sinVerse) {
+            // Solo si suena en el directo, sin pausa ni retroceder: en pausa no gasta, y lo retrocedido puede no estar en
+            // la lista del nuevo.
+            if (p == null || !p.playWhenReady || visita.directoMs != null || visita.fase != "reproduciendo") return
+            calidadConVideo = que.calidad
+            relevar(visita, Directo(que.canal, que.modo, que.motor, SOLO_AUDIO))
+            return
+        }
+        // Con vídeo otra vez. Si suena, con relevo. Si aún se estaba abriendo, volviendo a abrir. En pausa (los mandos
+        // del sistema pueden pausarlo mientras), en pausa: lo que se veía no está en la lista del nuevo, y al reanudar la
+        // página lo abre en el VOD de la emisión, como tras una pausa larga.
+        val nuevo = Directo(que.canal, que.modo, que.motor, calidadConVideo)
+        val pausado = p != null && !p.playWhenReady && visita.fase == "reproduciendo"
+        if (p != null && !pausado && visita.fase == "reproduciendo") return relevar(visita, nuevo)
+        val pausa = if (pausado) enOtroReproductor(visita.pausa) else null
+        registrar(JSONObject().put("relevo", "reabrir").put("pausado", pausado).put("fuera", pausa?.fuera == true))
+        abrirDirecto(nuevo, visita.fondo, SystemClock.elapsedRealtime(), pausa)
+    }
+
+    // El relevo: pasar a solo audio o volver al vídeo sin corte. El nuevo se abre al lado, callado, mientras el de antes
+    // sigue sonando (el motor le sigue sirviendo su lista: directo.ts), y se coloca en la misma hora de los fragmentos,
+    // ADELANTO_MS por delante; cuando el de antes llega ahí, suena el nuevo y se suelta el de antes. Lo retrocedido sigue
+    // retrocedido. Si algo falla o tarda, se cambia como antes, volviendo a abrir.
+    private fun relevar(antes: Abierto, que: Directo) {
+        val r = Relevo(Abierto(que, antes.fondo, SystemClock.elapsedRealtime(), null))
+        relevo = r
+        registrar(JSONObject().put("relevo", "empieza").put("audio", que.calidad == SOLO_AUDIO))
+        val ruta = "/stream/${que.canal}/info?modo=${que.modo}&visita=${r.visita.visita}" + (que.calidad?.let { "&q=$it" } ?: "")
+        thread {
+            val info = try {
+                JSONObject(leer(que.motor, ruta))
+            } catch (error: IOException) {
+                null
+            }
+            handler.post { if (relevo === r) prepararRelevo(r, info) }
+        }
+        handler.postDelayed({ if (relevo === r) sinRelevo(r, "plazo") }, RELEVO_MAX_MS)
+    }
+
+    private fun prepararRelevo(r: Relevo, info: JSONObject?) {
+        if (info == null || info.optBoolean("offline")) return sinRelevo(r, "info")
+        val visita = r.visita
+        val que = visita.que as Directo
+        val lista = leerInfo(visita, info)
+        val nuevo = crearDirecto(que)
+        r.player = nuevo
+        nuevo.addListener(object : Player.Listener {
+            override fun onPlayerError(error: PlaybackException) {
+                if (relevo === r) sinRelevo(r, error.errorCodeName)
+            }
+        })
+        nuevo.setMediaItem(sinAcelerar(lista))
+        nuevo.playWhenReady = false
+        nuevo.prepare()
+        vigilarRelevo(r)
+    }
+
+    // Cada TIC_RELEVO_MS: en cuanto el nuevo tiene lista, se coloca; cuando tiene datos, espera a que el de antes llegue.
+    private fun vigilarRelevo(r: Relevo) {
+        if (relevo !== r) return
+        val nuevo = r.player ?: return
+        val antes = player ?: return sinRelevo(r, "sin reproductor")
+        if (!r.colocado) {
+            if (ventana(nuevo) != null && !colocarRelevo(r, nuevo, antes)) return
+        } else if (nuevo.playbackState == Player.STATE_READY) {
+            val hora = horaDe(nuevo)
+            val ahora = horaDe(antes)
+            if (hora == null || ahora == null) return sinRelevo(r, "sin hora")
+            val falta = hora - ahora
+            when {
+                falta < -TIC_RELEVO_MS * 2 -> if (r.intentos < RELEVO_INTENTOS) {
+                    if (!colocarRelevo(r, nuevo, antes)) return
+                } else return sinRelevo(r, "tarde")
+                falta <= TIC_RELEVO_MS -> {
+                    handler.postDelayed({ if (relevo === r) entregar(r, hora - (horaDe(antes) ?: hora)) }, maxOf(0, falta))
+                    return
+                }
+            }
+        }
+        handler.postDelayed({ vigilarRelevo(r) }, TIC_RELEVO_MS)
+    }
+
+    // El nuevo, ADELANTO_MS por delante de la hora del de antes, sin acercarse al final de su lista. false si no cabe.
+    private fun colocarRelevo(r: Relevo, nuevo: ExoPlayer, antes: ExoPlayer): Boolean {
+        val ventana = ventana(nuevo)
+        val ahora = horaDe(antes)
+        if (ventana == null || ventana.windowStartTimeMs == C.TIME_UNSET || ahora == null) {
+            sinRelevo(r, "sin hora")
+            return false
+        }
+        val posicion = minOf(ahora + ADELANTO_MS - ventana.windowStartTimeMs, ventana.durationMs - 1000)
+        if (posicion < r.visita.fragmentoMs) {
+            sinRelevo(r, "fuera de la lista")
+            return false
+        }
+        r.colocado = true
+        r.intentos++
+        nuevo.seekTo(posicion)
+        return true
+    }
+
+    // La hora (ms, la de los fragmentos) de lo que se ve.
+    private fun horaDe(p: ExoPlayer): Long? {
+        val ventana = ventana(p) ?: return null
+        if (ventana.windowStartTimeMs == C.TIME_UNSET) return null
+        return ventana.windowStartTimeMs + p.currentPosition
+    }
+
+    // El nuevo suena y el de antes se suelta. «desfase»: lo que el de antes aún no había llegado (+) o se había pasado (-).
+    private fun entregar(r: Relevo, desfase: Long) {
+        val nuevo = r.player ?: return
+        val antes = abierto ?: return
+        relevo = null
+        val viejo = player
+        r.visita.directoMs = antes.directoMs
+        r.visita.fase = "reproduciendo"
+        abierto = r.visita
+        // Conectado antes de sonar: Media3 avisa de que suena al darle, y lo que avisa (la pantalla encendida, la página)
+        // es del nuevo.
+        conectar(r.visita, nuevo)
+        nuevo.playWhenReady = true
+        viejo?.release()
+        registrar(
+            JSONObject().put("relevo", "entregado").put("desfaseMs", desfase).put("intentos", r.intentos)
+                .put("ms", SystemClock.elapsedRealtime() - r.visita.inicio),
+        )
+        cambio()
+    }
+
+    // No se pudo: como antes, volviendo a abrir (un corte de ~1 s).
+    private fun sinRelevo(r: Relevo, causa: String) {
+        if (relevo !== r) return
+        cancelarRelevo()
+        val antes = abierto ?: return
+        registrar(JSONObject().put("relevo", "sin").put("causa", causa))
+        abrirDirecto(r.visita.que as Directo, antes.fondo, SystemClock.elapsedRealtime(), null)
+    }
+
+    private fun cancelarRelevo() {
+        relevo?.player?.release()
+        relevo = null
     }
 
     // Si ese canal ya está abierto con ese modo y sin fallos: al volver a él desde el minirreproductor no se reabre.
@@ -240,6 +431,7 @@ class Reproductor(
     fun pausar(pausa: Boolean) {
         val p = player ?: return
         val visita = abierto ?: return
+        cancelarRelevo() // al reanudar, se vuelve a mirar (ajustarAudio)
         if (pausa && visita.que is Directo) {
             if (visita.directoMs == null) visita.directoMs = desfase(p)
             if (visita.pausa == null) {
@@ -251,6 +443,7 @@ class Reproductor(
         if (!pausa && p.playbackState == Player.STATE_ENDED) p.seekTo(0)
         p.playWhenReady = !pausa
         cambio()
+        if (!pausa) handler.post { if (abierto === visita) ajustarAudio() }
     }
 
     // Mueve la imagen «segundos». En directo (DVR-1), dentro de la ventana (la lista del empalme), en el mismo
@@ -262,12 +455,27 @@ class Reproductor(
         val visita = abierto ?: return
         if (visita.que is Vod) return irA(p.currentPosition / 1000.0 + segundos)
         val ventana = ventana(p) ?: return
+        if (relevo != null) {
+            // El relevo se coloca por donde iba: se vuelve a empezar desde donde se queda.
+            cancelarRelevo()
+            handler.post { if (abierto === visita) ajustarAudio() }
+        }
         val desde = p.currentPosition
         if (segundos < 0 && visita.directoMs == null) visita.directoMs = desfase(p)
         val directo = posicionDelDirecto(visita, ventana) ?: desde
         val destino = minOf(desde + (segundos * 1000).toLong(), directo)
             .coerceAtLeast(minOf(desde, suelo(visita)))
         if (destino >= directo - RETROCEDIDO_MS) visita.directoMs = null
+        // En pausa, lo que se veía se mueve con la imagen: al reanudar tras más de un minuto, el VOD abre donde se dejó, no
+        // donde se pausó. Media3 cae en el fotograma clave anterior (PREVIOUS_SYNC): ese ajuste llega después
+        // (onPositionDiscontinuity). Si lo pausado estaba «fuera» (reabierto en pausa), lo que se ve es de este
+        // reproductor: su hora.
+        visita.pausa?.let {
+            val movido = destino - desde
+            val imagen = if (it.fuera) System.currentTimeMillis() - (desfase(p) - movido) else it.imagen + movido
+            visita.pausa = Pausa(it.desde, imagen)
+            visita.ajusteDePausa = true
+        }
         irHacia(p, destino, SeekParameters.PREVIOUS_SYNC)
         cambio()
     }
@@ -278,10 +486,15 @@ class Reproductor(
         val visita = abierto ?: return
         val ventana = ventana(p) ?: return
         val directo = posicionDelDirecto(visita, ventana) ?: return
+        cancelarRelevo() // ídem: se vuelve a mirar abajo
         visita.directoMs = null
+        // Sigue en el directo: sin la pausa de antes, que si no seguía contando y, al pausar otra vez y reanudar, abría el
+        // VOD donde se pausó la primera vez.
+        visita.pausa = null
         irHacia(p, directo, SeekParameters.PREVIOUS_SYNC)
         p.playWhenReady = true
         cambio()
+        handler.post { if (abierto === visita) ajustarAudio() }
     }
 
     // Un VOD: a ese segundo (sin pasar del final).
@@ -367,6 +580,10 @@ class Reproductor(
         pararServicio()
     }
 
+    // Deja de verse lo abierto, sin soltar el servicio ni los mandos: lo que se abre después (el VOD al retroceder) los
+    // sigue usando, como entre un canal y otro.
+    fun parar() = soltarReproductor()
+
     private fun soltarMandos() {
         sesion?.release()
         sesion = null
@@ -374,6 +591,7 @@ class Reproductor(
     }
 
     private fun soltarReproductor() {
+        cancelarRelevo()
         arranque?.interrupt()
         arranque = null
         handler.removeCallbacksAndMessages(null)
@@ -425,6 +643,7 @@ class Reproductor(
                     .put("retrocedido", p != null && directo != null && p.currentPosition < directo - RETROCEDIDO_MS)
                     .put("pausadoDesde", visita.pausa?.desde ?: JSONObject.NULL)
                     .put("imagenPausada", visita.pausa?.imagen ?: JSONObject.NULL)
+                    .put("pausaFuera", visita.pausa?.fuera == true)
             }
             is Vod -> estado
                 .put("vod", que.id)
@@ -472,6 +691,19 @@ class Reproductor(
             return fase(visita, "sin-directo")
         }
         val que = visita.que as Directo
+        val lista = leerInfo(visita, info)
+        val fragmento = visita.fragmentoMs / 1000.0
+        val desdeElFinal = when {
+            que.modo == "sin-paradas" -> maxOf(24.0, 2.5 * fragmento)
+            info.optBoolean("filling") -> maxOf(16.0, 2.5 * fragmento)
+            else -> null
+        }
+        reproducir(visita, que, lista, desdeElFinal?.let { (it * 1000).toLong() })
+    }
+
+    // De la info del motor: la calidad que suena y lo que dura un fragmento. Devuelve la lista del directo.
+    private fun leerInfo(visita: Abierto, info: JSONObject): String {
+        val que = visita.que as Directo
         val calidad = info.optString("quality").takeIf { it.isNotEmpty() && it != "null" }
         val calidades = info.optJSONArray("qualities")
         visita.etiqueta = (0 until (calidades?.length() ?: 0))
@@ -480,20 +712,24 @@ class Reproductor(
             ?.optString("label")
         val fragmento = info.optDouble("segmentDuration", 2.0).takeIf { !it.isNaN() } ?: 2.0
         visita.fragmentoMs = (fragmento * 1000).toLong()
-        val desdeElFinal = when {
-            que.modo == "sin-paradas" -> maxOf(24.0, 2.5 * fragmento)
-            info.optBoolean("filling") -> maxOf(16.0, 2.5 * fragmento)
-            else -> null
-        }
-        val lista = "$ORIGEN/stream/${que.canal}/live.m3u8?modo=${que.modo}&visita=${visita.visita}" +
+        return "$ORIGEN/stream/${que.canal}/live.m3u8?modo=${que.modo}&visita=${visita.visita}" +
             (calidad?.let { "&q=$it" } ?: "")
-        reproducir(visita, que, lista, desdeElFinal?.let { (it * 1000).toLong() })
     }
 
     private fun reproducir(visita: Abierto, que: Directo, lista: String, desdeElFinalMs: Long?) {
+        val nuevo = crearDirecto(que)
+        nuevo.addListener(object : Player.Listener {
+            override fun onTimelineChanged(timeline: Timeline, reason: Int) =
+                colocar(visita, nuevo, timeline, desdeElFinalMs)
+        })
+        montar(visita, nuevo, sinAcelerar(lista), C.TIME_UNSET)
+    }
+
+    // Un reproductor del directo: la lista, del motor; los fragmentos, de Twitch (EnrutadoDataSource).
+    private fun crearDirecto(que: Directo): ExoPlayer {
         val http = DefaultHttpDataSource.Factory()
         val fuentes = DataSource.Factory { EnrutadoDataSource(que.motor, http.createDataSource()) }
-        val nuevo = ExoPlayer.Builder(contexto)
+        return ExoPlayer.Builder(contexto)
             .setMediaSourceFactory(HlsMediaSource.Factory(fuentes))
             .setLoadControl(
                 DefaultLoadControl.Builder()
@@ -507,11 +743,6 @@ class Reproductor(
                     .build(),
             )
             .build()
-        nuevo.addListener(object : Player.Listener {
-            override fun onTimelineChanged(timeline: Timeline, reason: Int) =
-                colocar(visita, nuevo, timeline, desdeElFinalMs)
-        })
-        montar(visita, nuevo, sinAcelerar(lista), C.TIME_UNSET)
     }
 
     private fun reproducirVod(visita: Abierto, lista: String, desdeMs: Long) {
@@ -560,6 +791,16 @@ class Reproductor(
 
     // Lo común del directo y del VOD: el estado para la página, las marcas y lo que se registra al medir.
     private fun montar(visita: Abierto, nuevo: ExoPlayer, item: MediaItem, desdeMs: Long) {
+        conectar(visita, nuevo)
+        if (desdeMs == C.TIME_UNSET) nuevo.setMediaItem(item) else nuevo.setMediaItem(item, desdeMs)
+        nuevo.playWhenReady = !visita.pausado
+        nuevo.prepare()
+        marca(visita, "reproductor")
+    }
+
+    // El reproductor de lo que se ve (al montarlo, o al entregar un relevo): en la vista, en los mandos, y con lo que
+    // avisa a la página y lo que se registra.
+    private fun conectar(visita: Abierto, nuevo: ExoPlayer) {
         player = nuevo
         vista.player = nuevo
         if (visita.fondo) conectarMandos(visita, nuevo)
@@ -587,6 +828,8 @@ class Reproductor(
                 if (isPlaying) {
                     marca(visita, "reproduciendo")
                     visita.fase = "reproduciendo"
+                    // Si mientras se abría se dejó de ver la app (o volvió a verse), ahora toca.
+                    handler.post { if (abierto === visita) ajustarAudio() }
                 }
                 cambio()
             }
@@ -649,22 +892,29 @@ class Reproductor(
                     .put("motor", loadEventInfo.uri.host == HOST),
             )
 
+            // El ajuste al fotograma clave de un salto en pausa (saltar): lo que se veía, adonde de verdad cae. Solo ese:
+            // colocarse al abrir también salta, y no es moverse.
             override fun onPositionDiscontinuity(
                 eventTime: AnalyticsListener.EventTime,
                 oldPosition: Player.PositionInfo,
                 newPosition: Player.PositionInfo,
                 reason: Int,
-            ) = registrar(
-                JSONObject().put("salto", reason).put("deMs", oldPosition.positionMs).put("aMs", newPosition.positionMs),
-            )
+            ) {
+                if (abierto === visita && reason == Player.DISCONTINUITY_REASON_SEEK_ADJUSTMENT && visita.ajusteDePausa) {
+                    visita.ajusteDePausa = false
+                    visita.pausa?.let {
+                        visita.pausa = Pausa(it.desde, it.imagen + (newPosition.positionMs - oldPosition.positionMs))
+                    }
+                }
+                registrar(
+                    JSONObject().put("salto", reason).put("deMs", oldPosition.positionMs).put("aMs", newPosition.positionMs),
+                )
+            }
         })
-        if (desdeMs == C.TIME_UNSET) nuevo.setMediaItem(item) else nuevo.setMediaItem(item, desdeMs)
-        nuevo.playWhenReady = !visita.pausado
-        nuevo.prepare()
-        marca(visita, "reproductor")
         val vod = visita.que is Vod
         handler.post(object : Runnable {
             override fun run() {
+                if (abierto !== visita) return // tras un relevo, el del nuevo
                 if (!vod) muestra(visita)
                 cambio()
                 handler.postDelayed(this, if (vod) TIC_VOD_MS else 1000)

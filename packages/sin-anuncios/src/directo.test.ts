@@ -124,6 +124,29 @@ describe("createDirecto", () => {
     expect(empalmes[1]?.options).toMatchObject({ fillSlack: 2, startBackSeconds: null, vod: true })
   })
 
+  it("en solo audio, sin el relleno con el VOD", async () => {
+    const { directo, empalmes } = open()
+    await directo.handle(url("/stream/canal/live.m3u8?modo=adaptativo&q=audio_only@0"))
+    expect(empalmes[0]?.options).toMatchObject({
+      vod: false,
+      want: { fps: 0, resolution: "audio_only" },
+    })
+  })
+
+  it("sin calidad (la automática) no reutiliza uno abierto con otra pedida, pero pedir la que eligió sí", async () => {
+    const { directo, empalmes } = open()
+    await directo.handle(url("/stream/canal/live.m3u8?modo=directo&q=1280x720@60"))
+    await directo.handle(url("/stream/canal/live.m3u8?modo=directo"))
+    expect(empalmes[0]?.stopped).toBe(true)
+    expect(empalmes[1]?.options.want).toBeNull()
+    const auto = empalmes[1]
+    if (auto === undefined) throw new Error("sin empalme")
+    auto.status_ = { ...auto.status_, quality: "1920x1080@60" }
+    await directo.handle(url("/stream/canal/live.m3u8?modo=directo&q=1920x1080@60"))
+    await directo.handle(url("/stream/canal/live.m3u8?modo=directo"))
+    expect(empalmes).toHaveLength(2)
+  })
+
   it("reutiliza el empalme del mismo canal y modo, y avisa de cada visita nueva", async () => {
     const { directo, empalmes } = open()
     await directo.handle(url("/stream/canal/live.m3u8?modo=directo&visita=a1"))
@@ -134,6 +157,40 @@ describe("createDirecto", () => {
     await directo.handle(url("/stream/otro/live.m3u8?modo=directo"))
     expect(empalmes).toHaveLength(2)
     expect(empalmes[0]?.stopped).toBe(true)
+  })
+
+  it("otra calidad del mismo canal para otro reproductor: el de antes sigue con el suyo hasta que deja de pedir", async () => {
+    vi.useFakeTimers()
+    const { directo, empalmes } = open()
+    const video = "/stream/canal/live.m3u8?modo=directo&visita=a1"
+    await directo.handle(url(video))
+    await directo.handle(url("/stream/canal/live.m3u8?modo=directo&q=audio_only@0&visita=b2"))
+    expect(empalmes.map((e) => [e.options.want?.resolution ?? null, e.stopped])).toEqual([
+      [null, false],
+      ["audio_only", false],
+    ])
+    // El reproductor de antes pide su lista: el suyo, sin volver a cambiar el activo.
+    await directo.handle(url(video))
+    await directo.handle(url("/stream/canal/live.m3u8?modo=directo&q=audio_only@0&visita=b2"))
+    expect(empalmes).toHaveLength(2)
+    expect(empalmes.map((e) => e.stopped)).toEqual([false, false])
+    // Sin peticiones suyas, se para; el nuevo sigue.
+    await vi.advanceTimersByTimeAsync(16_000)
+    expect(empalmes.map((e) => e.stopped)).toEqual([true, false])
+  })
+
+  it("al cambiar de calidad, el de antes se para si es el mismo reproductor, sin visita u otro canal", async () => {
+    const { directo, empalmes } = open()
+    await directo.handle(url("/stream/canal/live.m3u8?visita=a1"))
+    await directo.handle(url("/stream/canal/live.m3u8?q=audio_only@0&visita=a1"))
+    expect(empalmes.map((e) => e.stopped)).toEqual([true, false])
+    await directo.handle(url("/stream/canal/live.m3u8?q=1280x720@60"))
+    expect(empalmes.map((e) => e.stopped)).toEqual([true, true, false])
+    await directo.handle(url("/stream/canal/live.m3u8?visita=c3"))
+    await directo.handle(url("/stream/canal/live.m3u8?q=audio_only@0&visita=d4"))
+    expect(empalmes.map((e) => e.stopped)).toEqual([true, true, true, false, false])
+    await directo.handle(url("/stream/otro/live.m3u8?visita=e5"))
+    expect(empalmes.map((e) => e.stopped)).toEqual([true, true, true, true, true, false])
   })
 
   it("la lista espera al fragmento pedido y responde según lo publicado", async () => {
@@ -284,6 +341,11 @@ describe("createDirecto", () => {
     expect(response.headers.get("content-range")).toBe("bytes 0-2/10")
     expect(response.headers.get("x-otra")).toBeNull()
     expect(new Uint8Array(await response.arrayBuffer())).toEqual(new Uint8Array([1, 2, 3]))
+    // Tras cambiar de calidad, lo que publicó el de antes sigue valiendo para su reproductor.
+    await directo.handle(url("/stream/canal/live.m3u8?visita=a1"))
+    await directo.handle(url("/stream/canal/live.m3u8?q=audio_only@0&visita=b2"))
+    expect(empalmes.map((e) => e.stopped)).toEqual([false, false])
+    expect((await directo.handle(url(path))).status).toBe(206)
   })
 
   it("pide a Twitch por el fetch que se le da, no por el global, y se lo pasa al empalme", async () => {

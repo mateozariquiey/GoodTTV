@@ -103,7 +103,7 @@ la cuenta, el mismo código que en la tele.
 
 ```bash
 bun run build:navegador   # apps/navegador/dist
-bun run pack:navegador    # compila y empaqueta: apps/navegador/out/goodttv-<versión>.xpi
+bun run pack:navegador    # compila y empaqueta: apps/navegador/out/goodttv-<versión>.xpi y …-chrome.zip
 ```
 
 ### Instalarla
@@ -140,13 +140,16 @@ Recorre la interfaz de escritorio en Chrome for Testing y en Firefox, sin ventan
 cuenta:
 - buscar con / y abrir con Enter un canal que reproduce;
 - pausar con Espacio y con un clic en el vídeo;
-- modo teatro (T, Esc), chat (C) y silencio (M);
+- modo teatro (T, Esc) y, solo en Chrome, a pantalla completa con el chat (F); chat (C) y silencio (M);
 - volver a Inicio con el canal en «Seguir viendo»;
 - pedir el código de la cuenta y cancelarlo;
 - un modo de retraso que se conserva al recargar;
 - Inicio sin poder comprobar la cuenta (`?sinred`): lo guardado con el aviso, sin la bienvenida, «Reintentar» con
   red y «Cerrar sesión» sin ella;
-- dos pestañas a la vez, con sonido solo en la última que se abrió (EXT-5).
+- un VOD de las emisiones del canal: lo reproduce, L salta 10 s y se guarda por dónde va. El volumen que se elige en el
+  directo sigue en el VOD y al volver al directo;
+- dos pestañas a la vez, con sonido solo en la última que se abrió (EXT-5), y la nueva con el volumen elegido en la
+  otra.
 
 ```bash
 bun run build:navegador

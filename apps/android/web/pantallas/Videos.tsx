@@ -9,7 +9,7 @@ import {
   vodProgress,
 } from "@goodttv/interfaz"
 import { FilmStripIcon } from "@phosphor-icons/react"
-import { useEffect, useMemo, useState } from "react"
+import { memo, useEffect, useMemo, useState } from "react"
 
 // Los vídeos de un canal (VOD-1 y COL-2), como la extensión (Videos.tsx) pero en la «lista con miniatura» de Inicio:
 // debajo de la ficha del canal (en su pestaña) y, debajo de un VOD, los demás del canal, con el que se ve marcado.
@@ -43,6 +43,9 @@ export const VideoItem = ({
         aria-current={current ? "page" : undefined}
         className={`directo video${current ? " video--actual" : ""}`}
         href={`#/vod/${video.id}`}
+        // El que se está viendo no se vuelve a abrir: su dirección no lleva el segundo ni el directo del que se vino al
+        // retroceder, y se perdía «Ir al directo».
+        onClick={current ? (event) => event.preventDefault() : undefined}
         onPointerDown={() => prefetchVod(video.id)}
       >
         <span className="directo__miniatura">
@@ -78,13 +81,15 @@ type Loaded =
   | { readonly kind: "error" }
   | { readonly kind: "ready"; readonly list: VideoList | null }
 
-export const ChannelVideos = ({
+// Memoizado: el canal y el VOD se vuelven a pintar a menudo (la hora, el chat, la posición del vídeo), y la lista no
+// cambia con eso.
+export const ChannelVideos = memo(function ChannelVideos({
   current,
   login,
 }: {
   readonly current?: string // el VOD que se está viendo
   readonly login: string
-}) => {
+}) {
   const [loaded, setLoaded] = useState<Loaded>({ kind: "loading" })
   useEffect(() => {
     const vods = window.api.vods
@@ -137,4 +142,4 @@ export const ChannelVideos = ({
       )}
     </section>
   )
-}
+})

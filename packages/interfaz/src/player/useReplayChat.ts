@@ -1,6 +1,6 @@
 import type { ReplayMessage } from "@goodttv/contratos"
 import { useEffect, useMemo, useRef, useState } from "react"
-import { CHAT_HISTORY, type ChatView } from "./useChat"
+import { type ChatView, chatWindowStart } from "./useChat"
 
 // El chat de un VOD a la par de la imagen (VOD-1). Twitch solo lo da como invitado por posición (unos 50 mensajes desde
 // un segundo, vods.ts): se piden por delante de lo que se ve y, al saltar fuera de lo pedido, desde el sitio nuevo. Se
@@ -86,11 +86,11 @@ export const useReplayChat = (
       })
   }, [channelId, enabled, loaded, second, videoId])
 
-  // Los que ya han pasado, los últimos CHAT_HISTORY.
+  // Los que ya han pasado, los últimos CHAT_HISTORY, quitando los de arriba por tandas, como en el directo (useChat).
   const messages = useMemo(() => {
     let end = 0
     while (end < loaded.messages.length && (loaded.messages[end]?.offset ?? 0) <= time) end++
-    return loaded.messages.slice(Math.max(0, end - CHAT_HISTORY), end)
+    return loaded.messages.slice(chatWindowStart(end), end)
   }, [loaded, time])
 
   return { delay: null, messages, status: enabled ? status : "off" }

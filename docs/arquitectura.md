@@ -63,6 +63,7 @@ src/goodttv.tsx        monta las pantallas de escritorio; avisa de lo que cambia
 │   ├── Sidebar.tsx    tus seguidos en directo; plegable (solo avatares)
 │   ├── HomeView.tsx   miniaturas de tus seguidos y populares, y «Seguir viendo»
 │   ├── ChannelView.tsx  el vídeo con controles encima, ficha del canal (con «Siguiendo») y chat; modo teatro
+│   ├── fullscreen.ts  la pantalla completa del canal y del VOD, con su propio chat al lado (D33)
 │   ├── ChatPanel.tsx  el chat; un emote dice su nombre al pasar el ratón, y un clic lo pone en la caja
 │   ├── ChatCompose.tsx  la caja para escribir (CHAT-1): Tab y «:» completan emotes, y la lista de emotes
 │   ├── sonido.ts      con varias pestañas, suena una sola (EXT-5)
@@ -93,7 +94,9 @@ src/fondo.ts           abre GoodTTV o trae al frente la pestaña con esa vista; 
 
   Con esos permisos, las páginas de la extensión no están sujetas a CORS. Vite compila `dist/` sin
   minificar, y `empaquetar.mjs` lo mete en `out/goodttv-<versión>.xpi` (un ZIP con `manifest.json`
-  en la raíz) para instalarlo en Zen o firmarlo en AMO (D15).
+  en la raíz) para instalarlo en Zen o firmarlo en AMO (D15, D30), y en `out/goodttv-<versión>-chrome.zip`, el mismo
+  sin lo que solo usa Firefox en el manifiesto, para Chrome. El mismo código da los mismos archivos, también en arm64.
+  Firefox busca versiones nuevas en `updates.json` del repo público (`gecko.update_url`).
 - **El fondo apenas hace nada** (`src/fondo.ts`): abre GoodTTV, y pone «Abrir en GoodTTV» en el menú
   contextual de los enlaces y las páginas de twitch.tv. El canal lo saca de la dirección
   (`twitch-links.ts`): si una pestaña ya lo muestra, la trae al frente; si no, abre otra con
@@ -129,11 +132,24 @@ src/fondo.ts           abre GoodTTV o trae al frente la pestaña con esa vista; 
   segundos por detrás del directo), la barra del canal va desde que empezó. Lo que cubre la lista del empalme (~100 s,
   menos el margen del modo), ← y la barra lo recorren en el mismo reproductor (`seekBy` de `useHlsPlayer`): lo
   retrocedido se conserva, sin acelerar ni que hls.js vuelva solo al directo, hasta avanzar a él o pulsar «Ir al
-  directo» (Fin). Más atrás, o al reanudar tras más de un minuto en pausa, se abre ese VOD en ese momento
+  directo» (Fin), que también reanuda y olvida la pausa. Moverse en pausa mueve también el momento en que se pausó.
+  Más atrás, o al reanudar tras más de un minuto en pausa, se abre ese VOD en ese momento
   (`#/vod/<id>?t=…&directo=<canal>`): la hora del directo menos la de cuando empezó a grabarse; avanzar más allá de lo
-  grabado vuelve al canal, cuyo empalme se ha mantenido caliente. El camino del directo no cambia: mientras no se
-  retrocede, es el de siempre. En Android (D25), lo que cabe en la lista lo recorre Media3 dentro de su ventana del
+  grabado vuelve al canal, cuyo empalme se ha mantenido caliente. El directo y el VOD son pantallas distintas, cada una
+  con su `<video>`: cada reproductor nuevo empieza con el volumen y el silencio que eligió la persona en esa pestaña
+  (`volume.ts`, en `@goodttv/interfaz`), y el del directo, con la calidad elegida (`chosenLiveQuality`, en
+  `useHlsPlayer`; «Auto», la mejor), que se guarda como el volumen. El VOD al que se retrocede empieza en ella
+  (`levelFor`, en `useVodPlayer`). Como en twitch.tv, se guardan en `localStorage`: una pestaña nueva, o GoodTTV
+  al volver a abrirlo, empieza con lo último que se eligió. El camino del directo no cambia: mientras no se retrocede, es el de siempre. En Android (D25), lo que cabe en la lista lo recorre Media3 dentro de su ventana del
   directo (`saltar` y `alDirecto` en `Reproductor.kt`), al fotograma clave; lo de más atrás, igual que en la extensión.
+- **Solo audio con la pantalla apagada (Android, D32 y D33):** al dejar de verse la app sin el PiP a la vista
+  (`MainActivity.onStop`), el canal pasa a la calidad `audio_only@0` (`Reproductor.soloAudio`), que el empalme admite
+  como una más (`pickVariant`, sin relleno con el VOD), y al volver a verse (o al encenderse la pantalla, aún
+  bloqueada), a la de antes. Solo si suena en el directo, sin pausa ni retroceder. Sin corte: un relevo
+  (`Reproductor.relevar`) prepara el reproductor nuevo callado, lo coloca en la hora (PDT) del de antes y cambia cuando
+  este llega; mientras, el motor sigue sirviendo al de antes su empalme (`outgoing`, en `directo.ts`).
+- **Imagen en imagen (la extensión, D32):** `togglePictureInPicture` de `useHlsPlayer` y `useVodPlayer` sobre su
+  `<video>`, con el botón donde el navegador tiene la API (`PictureInPictureButton.tsx`).
 - **Si sigues el canal (SEG-1):** la ficha lo dice (`GET /helix/channels/followed`, con el permiso que ya había). Seguir
   y dejar de seguir no tiene API oficial desde 2021 (D24): el botón abre el canal en twitch.tv.
 - **Sin embed oficial de respaldo:** Manifest V3 no admite código remoto, y el SDK de Twitch lo es.
@@ -334,12 +350,20 @@ funciona como se describe a continuación.
   - **Solo con MPEG-TS.** Los canales con fMP4 (`EXT-X-MAP`; p. ej. con *Enhanced Broadcasting*, como `illojuan`) se
     cargan fragmento a fragmento: hls.js 1.7 sitúa cada trozo que llega respecto al principio del fragmento y, a partir
     de 1 s, lo da por desfasado (`isInvalidInitPts`) y lo pone encima de lo anterior. Se decide con la primera lista,
-    antes de cargar nada (`useHlsPlayer`, `LEVEL_LOADED`); el VOD va en el mismo formato que el directo
+    antes de cargar nada (`useHlsPlayer`, `LEVEL_LOADED`; en el VOD, `LEVEL_UPDATED`, porque allí hls.js ya ha pedido el
+    primer trozo al llegar `LEVEL_LOADED`); el VOD va en el mismo formato que el directo
     ([verificacion.md](verificacion.md#fmp4-saltos-con-la-carga-progresiva)). Sin carga progresiva, el último
     fragmento solo cuenta al llegar entero, como antes de D16: el margen sube a 3 fragmentos (con 2,5 se paraba,
     [verificacion.md](verificacion.md#fmp4-paradas-con-el-margen-de-25-fragmentos)).
 - **El chat, barato de pintar:** cada lote solo pinta los mensajes nuevos (`Message` memoizado) y la
-  lista lleva `contain: strict`, así que los mensajes que entran no recolocan el resto de la pantalla.
+  lista lleva `contain: strict`, así que los mensajes que entran no recolocan el resto de la pantalla. En la extensión
+  y en Android, además (D31):
+  - la lista va dentro de un bloque (`chat__scroller`, `chat__marco`): Chrome no maqueta aparte a una hija de una
+    rejilla o de un flex, aunque lleve `contain: strict`. La de la tele aún lo es;
+  - el chat va en su propio componente (`ChannelChat`, `CanalChat`): un lote no vuelve a pintar el canal;
+  - los mensajes más antiguos se quitan por tandas (`CHAT_TRIM`, en `useChat`): la lista guarda entre 150 y 200;
+  - en la extensión, la lista tiene fondo opaco: así Chrome compone su desplazamiento sin perder los subpíxeles del
+    texto (en pantallas a 1x, sin fondo, no lo hacía).
 
 `useTwitchPlayer` crea un `Twitch.Player` oficial por visita y usa `setChannel` para cambiar de
 canal. Separa tres hechos que los eventos de Twitch mezclan:

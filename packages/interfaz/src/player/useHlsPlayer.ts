@@ -3,6 +3,7 @@ import Hls from "hls.js"
 import { useCallback, useEffect, useRef, useState } from "react"
 import { usePlatform } from "../platform"
 import type { PlayerState } from "./useTwitchPlayer"
+import { chooseVolume, chosenVolume } from "./volume"
 
 // Reproductor propio: un <video> con hls.js que lee el directo sin anuncios que prepara el proceso principal en
 // /stream/<canal>/ (src/main/stream). Mismo contrato que useTwitchPlayer, para que PlayerScreen no dependa de cuál
@@ -75,16 +76,49 @@ const streamQuery = (quality: string | null, mode: LatencyMode, visit: string): 
   return `?${query}`
 }
 
-// Calidad elegida a mano en el reproductor abierto (null: automática, o no hay ninguno). Si se cambia de canal sin
-// cerrarlo, como en la extensión, el canal siguiente se pide con ella.
-let chosenQuality: string | null = null
+// Calidad elegida a mano (null: automática, la mejor que dé el canal). Se queda hasta que se elija otra: el canal
+// siguiente se pide con ella, también tras retroceder al VOD y volver al directo (otro reproductor) o abrirlo desde
+// Inicio, y se precalienta con ella. Como el volumen (volume.ts) y en twitch.tv, se guarda en el localStorage de la
+// página: una pestaña nueva, o GoodTTV al volver a abrirlo, empieza con la última que se eligió. Una pestaña abierta
+// sigue con la suya aunque se elija otra en otra.
+const QUALITY_KEY = "calidad-directo"
+const QUALITY_ID = /^\d+x\d+@\d+$/ // como la pide el directo: resolución@fps
+
+const qualityStorage = (): Storage | undefined => {
+  try {
+    return globalThis.localStorage
+  } catch {
+    return undefined
+  }
+}
+
+let chosenQuality: string | null | undefined // la de esta pestaña; undefined hasta leerla
+
+export const chosenLiveQuality = (storage = qualityStorage()): string | null => {
+  if (chosenQuality === undefined) {
+    const saved = storage?.getItem(QUALITY_KEY) ?? null
+    chosenQuality = saved !== null && QUALITY_ID.test(saved) ? saved : null
+  }
+  return chosenQuality
+}
+
+const chooseQuality = (quality: string | null, storage = qualityStorage()): void => {
+  chosenQuality = quality
+  try {
+    if (quality === null) storage?.removeItem(QUALITY_KEY)
+    else storage?.setItem(QUALITY_KEY, quality)
+  } catch {
+    // Sin sitio: vale para esta pestaña.
+  }
+}
 
 // Precalentar: pide al directo que abra ya el empalme de un canal que probablemente se va a abrir, sin parar el que
 // suena. Al abrirlo, el arranque lleva ya ese adelanto (abrir las sesiones de Twitch, a veces el directo publicado).
 // Con la calidad que se va a pedir: con otra, el directo abriría el canal otra vez.
 export const prewarmStream = (login: string, mode: LatencyMode): void => {
   const query = new URLSearchParams({ modo: mode })
-  if (chosenQuality !== null) query.set("q", chosenQuality)
+  const quality = chosenLiveQuality()
+  if (quality !== null) query.set("q", quality)
   void fetch(`/stream/${login}/precalentar?${query}`).catch(() => undefined)
 }
 
@@ -121,12 +155,13 @@ export const useHlsPlayer = (
 ) => {
   const [state, setState] = useState<PlayerState>(INITIAL)
   const [attempt, setAttempt] = useState(0)
-  const [quality, setQualityState] = useState<string | null>(null)
+  const [quality, setQualityState] = useState<string | null>(() => chosenLiveQuality())
   const videoRef = useRef<HTMLVideoElement | undefined>(undefined)
   const userPaused = useRef(false)
   const latency = useRef<number | null>(null)
-  const seeker = useRef<((seconds: number, orStart: boolean) => boolean) | null>(null)
+  const seeker = useRef<((seconds: number, orStart: boolean) => number | null) | null>(null)
   const [rewound, setRewound] = useState(false)
+  const [pictureInPicture, setPictureInPicture] = useState(false)
   const { hls: platformHls } = usePlatform()
 
   const patch = useCallback((next: Partial<PlayerState>) => {
@@ -139,8 +174,11 @@ export const useHlsPlayer = (
     if (!enabled || element === null) return undefined
     let active = true
     const abort = new AbortController()
-    setState({ ...INITIAL, muted: videoRef.current?.muted ?? false })
+    // Como el anterior (un reintento, otro canal) o, el primero, con lo que eligió la persona en otra pantalla.
+    const sound = videoRef.current ?? chosenVolume()
+    setState({ ...INITIAL, muted: sound.muted })
     setRewound(false)
+    setPictureInPicture(false) // un <video> nuevo: el de antes, si estaba en imagen en imagen, ya no está
     // Un canal que nunca arranca se informa en vez de girar para siempre. El plazo es de cada visita: con otro canal
     // que también carga, la fase no cambia y un efecto aparte seguiría con el plazo del anterior.
     const stall = setTimeout(() => {
@@ -155,8 +193,8 @@ export const useHlsPlayer = (
     video.dataset["attempt"] = String(attempt) // un reintento crea un <video> nuevo
     video.autoplay = true
     video.playsInline = true
-    video.muted = videoRef.current?.muted ?? false
-    video.volume = videoRef.current?.volume ?? 1
+    video.muted = sound.muted
+    video.volume = sound.volume
     videoRef.current = video
     element.replaceChildren(video)
     let hls: Hls | undefined
@@ -176,6 +214,8 @@ export const useHlsPlayer = (
     )
     video.addEventListener("pause", () => active && patch({ playing: false }))
     video.addEventListener("volumechange", () => active && patch({ muted: video.muted }))
+    video.addEventListener("enterpictureinpicture", () => active && setPictureInPicture(true))
+    video.addEventListener("leavepictureinpicture", () => active && setPictureInPicture(false))
 
     latency.current = null
     const visit = crypto.randomUUID().replaceAll("-", "")
@@ -298,7 +338,7 @@ export const useHlsPlayer = (
         seeker.current = (seconds, orStart) => {
           const details = player.latestLevelDetails
           const targetLatency = player.targetLatency
-          if (details === null || targetLatency === null || video.readyState === 0) return false
+          if (details === null || targetLatency === null || video.readyState === 0) return null
           // El objetivo, a mano: liveSyncPosition no se acerca al final más que TARGETDURATION (13 s con relleno), como
           // al arrancar (LEVEL_LOADED).
           const live = details.edge + details.age - targetLatency
@@ -307,13 +347,14 @@ export const useHlsPlayer = (
           // Más atrás que el principio de la lista, solo hasta él, y sin adelantar: con la lista aún corta (al abrir el
           // canal), ese principio puede quedar por delante de lo que se ve.
           if (to < floor && to < video.currentTime) {
-            if (!orStart) return false
+            if (!orStart) return null
             to = Math.min(floor, video.currentTime)
           }
+          const moved = to - video.currentTime
           setBack(to < live - 1)
           video.playbackRate = 1
           video.currentTime = to
-          return true
+          return moved
         }
         catchup = setInterval(() => {
           const playing = player.playingDate
@@ -368,14 +409,6 @@ export const useHlsPlayer = (
     }
   }, [attempt, channel, container, enabled, mode, patch, platformHls, quality])
 
-  useEffect(() => {
-    if (!enabled) return undefined
-    chosenQuality = quality
-    return () => {
-      chosenQuality = null
-    }
-  }, [enabled, quality])
-
   // Al volver a ser visible (tras apagarse la pantalla), sigue salvo que la persona hubiera pausado.
   useEffect(() => {
     if (!enabled) return undefined
@@ -410,6 +443,7 @@ export const useHlsPlayer = (
     const video = videoRef.current
     if (video === undefined) return
     video.muted = !video.muted
+    chooseVolume(video)
     patch({ muted: video.muted })
   }, [patch])
   const setMuted = useCallback(
@@ -428,26 +462,43 @@ export const useHlsPlayer = (
       if (video === undefined) return
       video.volume = Math.min(1, Math.max(0, volume))
       if (volume > 0 && video.muted) video.muted = false
+      chooseVolume(video)
       patch({ muted: video.muted })
     },
     [patch],
   )
-  // Otra calidad = otro empalme en el proceso principal; el reproductor se recrea con ella.
-  const setQuality = useCallback((next: string) => setQualityState(next), [])
+  // Otra calidad = otro empalme en el proceso principal; el reproductor se recrea con ella. null: automática.
+  const setQuality = useCallback((next: string | null) => {
+    chooseQuality(next)
+    setQualityState(next)
+  }, [])
   const retry = useCallback(() => setAttempt((value) => value + 1), [])
+  // Imagen en imagen (el navegador saca el vídeo a una ventana pequeña), donde el navegador lo admite. El vídeo es el
+  // mismo: no cuesta nada mientras no se usa. Al cambiar de canal o retroceder al VOD hay otro <video>, y se cierra.
+  const togglePictureInPicture = useCallback(() => {
+    const video = videoRef.current
+    if (video === undefined) return
+    if (document.pictureInPictureElement === video)
+      void document.exitPictureInPicture().catch(() => undefined)
+    else void video.requestPictureInPicture?.().catch(() => undefined)
+  }, [])
   const syncIntent = useCallback(() => undefined, [])
   // Mueve la imagen «seconds» dentro de la lista del directo; hacia delante, como mucho hasta el objetivo del modo.
-  // false si no llega tan atrás: no se mueve, salvo con orStart, que la deja al principio de la lista.
+  // Devuelve lo que se ha movido (s), o null si no llega tan atrás: no se mueve, salvo con orStart, que la deja al
+  // principio de la lista.
   const seekBy = useCallback(
-    (seconds: number, orStart = false): boolean => seeker.current?.(seconds, orStart) ?? false,
+    (seconds: number, orStart = false): number | null => seeker.current?.(seconds, orStart) ?? null,
     [],
   )
 
   return {
+    // La calidad elegida (null: automática); la que suena está en state.quality.
+    chosenQuality: quality,
     latency,
     pause,
     play,
     retry,
+    pictureInPicture,
     rewound,
     seekBy,
     setMuted,
@@ -457,5 +508,6 @@ export const useHlsPlayer = (
     syncIntent,
     toggle,
     toggleMuted,
+    togglePictureInPicture,
   }
 }

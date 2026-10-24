@@ -18,6 +18,7 @@ import {
   Opciones,
   type Pestana,
   Pestanas,
+  useChatHorizontal,
   useDespierto,
   useHorizontal,
 } from "./controles"
@@ -126,7 +127,7 @@ export const Vod = ({ at, id, live, preferences }: Props) => {
   }, [latencyMode, live])
 
   const horizontal = useHorizontal()
-  const [chatHorizontal, setChatHorizontal] = useState(false)
+  const [chatHorizontal, setChatHorizontal] = useChatHorizontal()
   const [pestana, setPestana] = useState<Pestana>(preferences.chatVisible ? "chat" : "videos")
   const chatVisible = horizontal ? chatHorizontal : pestana === "chat"
   const chat = useReplayChat(video?.id, video?.owner.id, estado.posicion, chatVisible)

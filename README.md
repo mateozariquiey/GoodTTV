@@ -11,24 +11,28 @@ that removes the ads, the account and the chat.
 
 | App | For | Status |
 | --- | --- | --- |
-| [Browser](#browser) (`apps/navegador`) | Chrome, Chromium, Firefox and Zen, with mouse and keyboard | 0.3.0 |
-| [Android](#android) (`apps/android`) | Phones with Android 13 or later | 0.3.0, experimental |
-| [TV](#tv) (`apps/tele`) | A Linux mini PC connected to the TV, with a remote | 0.3.0, no longer tested on a real TV |
+| [Browser](#browser) (`apps/navegador`) | Chrome, Chromium, Firefox and Zen, with mouse and keyboard | 0.4.0 |
+| [Android](#android) (`apps/android`) | Phones with Android 13 or later | 0.4.0, experimental |
+| [TV](#tv) (`apps/tele`) | A Linux mini PC connected to the TV, with a remote | 0.4.0, no longer tested on a real TV |
 
 The interfaces are in Spanish for now.
 
 ![Extension: a channel with its controls on top of the video, its card and chat; on the left, followed channels that are live](docs/media/escritorio-canal.jpg)
 
-## New in 0.3.0
+## New in 0.4.0
 
-- **VODs**, in the extension and on Android: a seek bar with previews, speed, the chat as it was written live, and
-  they pick up where you left off.
-- **Rewind a live stream** back to its start, and return with "Ir al directo". ← and → move 10 s.
-- **Write in chat**, with 7TV, BTTV, FFZ and your Twitch emotes. You need to link your account again to allow it.
-- **Search like twitch.tv**, by relevance and forgiving typos, with no account.
-- **Several tabs at once**, each with its own channel. Only the last one you looked at plays sound.
-- **Home opens faster**, and it no longer shows channels from a past session as if they were live.
-- **The first Android version**, experimental.
+- **Audio only with the screen off,** on Android: the channel switches to Twitch's audio-only stream without a gap, and
+  the picture is back by the time you unlock. About 0.4 Mbit/s instead of 8: some 175 MB an hour instead of 3.7 GB.
+- **Chat takes less work to draw:** with a busy chat, the extension's page thread goes from 10.5 % to 7.6 % of a core,
+  and Android's web view from 30 % to 24 %.
+- **Android opens the last channel you watched sooner,** in about 0.5 s instead of 1.6 s: it gets it ready when the app
+  opens.
+- **The quality is remembered,** like the volume, with "Auto" in the menu, and rewinding to the VOD keeps it.
+- **Full screen with its own chat:** `C` puts it beside the video and it is remembered. Theater mode is for the window.
+  On Android, the chat in landscape is remembered too.
+- **Picture-in-picture** in the extension, in Chrome, Firefox and Zen.
+- **Fixes:** long pauses and "Ir al directo", VODs in fMP4 that started in low quality, Space after a click, and on
+  Android, rewinding at full screen and the VOD speed.
 
 ## How it removes ads
 
@@ -60,8 +64,9 @@ Firefox.
   by how much you watch each one. It can be collapsed.
 - **Search always at the top** (`/`), ranked like twitch.tv's.
 - **The channel:** the controls sit on top of the video and hide when the mouse rests: quality, theater mode (`T`),
-  full screen (`F`), chat (`C`) and mute (`M`). ↑/↓ switch channel, ←/→ move 10 s and `End` goes back to live. If the
-  channel keeps its VOD, the bar reaches back to the start of the broadcast.
+  full screen (`F`, with its own chat beside it), chat (`C`), picture-in-picture and mute (`M`). ↑/↓ switch channel,
+  ←/→ move 10 s and `End` goes back to live. If the channel keeps its VOD, the bar reaches back to the start of the
+  broadcast. The volume and the quality are remembered, in other tabs too.
 - **Chat** with 7TV, BTTV, FFZ and Twitch emotes. Hovering an emote shows its name. To write, `Tab` and `:` complete
   emotes, or you can pick them from a list.
 - **VODs** below each channel. They open in the best quality your connection allows, pick up 5 s before where you
@@ -74,15 +79,14 @@ Firefox.
 
 ![Extension: a VOD with its controls, its chat and the channel's other videos below](docs/media/escritorio-vod.jpg)
 
-**Install:** it is not in the stores. Download `goodttv-0.3.0.xpi` from the
+**Install:** it is not in the stores. Download it from the
 [releases](https://github.com/mateozariquiey/GoodTTV/releases).
-- **Zen** (and Firefox Developer Edition or Nightly): in `about:config`, set `xpinstall.signatures.required` to
-  `false`. Then, in `about:addons`, gear menu → "Install Add-on From File…".
+- **Zen** (and Firefox Developer Edition or Nightly), with `goodttv-0.4.0.xpi`: in `about:config`, set
+  `xpinstall.signatures.required` to `false`. Then, in `about:addons`, gear menu → "Install Add-on From File…".
 - **Firefox:** it only accepts unsigned add-ons temporarily: `about:debugging` → "This Firefox" → "Load Temporary
-  Add-on…". It is removed when Firefox closes.
-- **Chrome and Chromium,** on Windows too:
-  1. The `.xpi` is a ZIP file. Unzip it into a folder you will keep. On Windows, rename it to `.zip` and use "Extract
-     all", or open it with 7-Zip.
+  Add-on…" and the `.xpi`. It is removed when Firefox closes.
+- **Chrome and Chromium,** on Windows too, with `goodttv-0.4.0-chrome.zip`:
+  1. Unzip it into a folder you will keep.
   2. In `chrome://extensions`, turn on "Developer mode" (top right).
   3. Click "Load unpacked" and choose that folder.
 
@@ -98,9 +102,9 @@ To build it, `bun run build:navegador` (the extension ends up in `apps/navegador
 
 **Experimental.** The same ad removal, account and chat, with screens made for touch: Home, search, the channel with
 its chat and videos, VODs and rewinding live. Video plays with Android's own player (Media3) and keeps going with the
-screen off, with its controls in the notification, on the lock screen and on headphones. As in Twitch's app, a channel
-you leave keeps playing in a corner, swiping down on the video goes back, and leaving the app turns it into
-picture-in-picture.
+screen off, audio only to save data, with its controls in the notification, on the lock screen and on headphones. As
+in Twitch's app, a channel you leave keeps playing in a corner, swiping down on the video goes back, and leaving the
+app turns it into picture-in-picture.
 
 <p>
   <img alt="Android home: followed channels that are live, each with a small thumbnail" src="docs/media/android-inicio.jpg" width="270">
@@ -110,11 +114,11 @@ picture-in-picture.
 It has been tested on one phone only (a Galaxy S25 Ultra with Android 16). Whether chat stays in step with the picture
 has been checked by eye, not measured.
 
-**Install** (Android 13 or later): download `GoodTTV-0.3.0.apk` from the
+**Install** (Android 13 or later): download `GoodTTV-0.4.0.apk` from the
 [releases](https://github.com/mateozariquiey/GoodTTV/releases) on the phone and open it. Android will ask you to allow
 installing apps from the browser or the file manager, and Play Protect may warn that it does not know the developer.
 New versions install over the old one and keep your account, because they are signed with the same key. From a
-computer, `adb install -r GoodTTV-0.3.0.apk` does the same. The signing certificate's SHA-256 fingerprint is
+computer, `adb install -r GoodTTV-0.4.0.apk` does the same. The signing certificate's SHA-256 fingerprint is
 `38:CF:EA:F9:1C:2F:8C:C4:B8:35:27:11:BD:77:7F:56:0E:A8:D5:4F:87:37:C4:91:6C:B6:BA:C8:27:32:5A:D6` (`apksigner verify --print-certs` shows it).
 
 To build it you need the Android SDK and JDK 21: see [apps/android/README.md](apps/android/README.md) (in Spanish).
@@ -159,7 +163,7 @@ x86_64) and run it; it starts full screen and needs `libfuse2`. To build it:
 ```bash
 bun install --frozen-lockfile
 bun run build && bun run start   # in a window, for testing
-bun run package:appimage         # apps/tele/dist/GoodTTV-0.3.0-x86_64.AppImage
+bun run package:appimage         # apps/tele/dist/GoodTTV-0.4.0-x86_64.AppImage
 ```
 
 ## The code

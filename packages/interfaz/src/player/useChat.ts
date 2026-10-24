@@ -9,6 +9,17 @@ import { useCallback, useEffect, useRef, useState } from "react"
 import { NO_EMOTES } from "./emote-complete"
 
 export const CHAT_HISTORY = 150
+// Los más antiguos se quitan de golpe, al pasar de CHAT_HISTORY + CHAT_TRIM, hasta quedar CHAT_HISTORY. Quitar uno de
+// arriba con cada mensaje nuevo movía todos los demás, y el navegador volvía a pintar el chat entero con cada lote (unas
+// 10 veces por segundo en un chat con mucho movimiento); añadir abajo solo pinta lo nuevo.
+export const CHAT_TRIM = 50
+
+// Dónde empieza lo que se enseña de una lista que crece por el final: los últimos CHAT_HISTORY, quitando los de arriba
+// de CHAT_TRIM en CHAT_TRIM (entre CHAT_HISTORY y CHAT_HISTORY + CHAT_TRIM).
+export const chatWindowStart = (length: number): number =>
+  length <= CHAT_HISTORY + CHAT_TRIM
+    ? 0
+    : Math.ceil((length - CHAT_HISTORY - CHAT_TRIM) / CHAT_TRIM) * CHAT_TRIM
 
 export type ChatState = {
   readonly messages: readonly ChatMessage[]
@@ -52,7 +63,10 @@ export const applyChatEvents = (state: ChatState, events: readonly ChatEvent[]):
         break
     }
   }
-  return { messages: messages.slice(-CHAT_HISTORY), status }
+  return {
+    messages: messages.length > CHAT_HISTORY + CHAT_TRIM ? messages.slice(-CHAT_HISTORY) : messages,
+    status,
+  }
 }
 
 // Most chat events held at once (~100 s of a very busy chat). A long pause makes the delay grow without end; past

@@ -8,7 +8,7 @@ import {
   vodProgress,
 } from "@goodttv/interfaz"
 import { FilmStripIcon } from "@phosphor-icons/react"
-import { useEffect, useMemo, useState } from "react"
+import { memo, useEffect, useMemo, useState } from "react"
 
 // Los vídeos de un canal (VOD-1 y COL-2): debajo de la ficha del canal, o en su sitio si no está en directo, y debajo
 // de un VOD, los demás del canal. Encima, en una fila, los suyos que tienes a medias. Cada tarjeta dice si ya lo viste o
@@ -33,6 +33,9 @@ export const VideoTile = ({
       aria-current={current ? "page" : undefined}
       className="video-tile"
       href={`#/vod/${video.id}`}
+      // El que se está viendo no se vuelve a abrir: su dirección no lleva el segundo ni el directo del que se vino al
+      // retroceder, y se perdía «Ir al directo».
+      onClick={current ? (event) => event.preventDefault() : undefined}
       onPointerEnter={() => prefetchVod(video.id)}
       title={video.title}
     >
@@ -69,7 +72,9 @@ type Loaded =
   | { readonly kind: "error" }
   | { readonly kind: "ready"; readonly list: VideoList | null }
 
-export const ChannelVideos = ({
+// Memoizado: el canal y el VOD se vuelven a pintar a menudo (la hora, el chat, la posición del vídeo), y la lista no
+// cambia con eso.
+export const ChannelVideos = memo(function ChannelVideos({
   current,
   login,
   offline,
@@ -79,7 +84,7 @@ export const ChannelVideos = ({
   readonly login: string
   readonly offline: boolean
   readonly title?: string
-}) => {
+}) {
   const [loaded, setLoaded] = useState<Loaded>({ kind: "loading" })
   useEffect(() => {
     const vods = window.api.vods
@@ -137,4 +142,4 @@ export const ChannelVideos = ({
       )}
     </section>
   )
-}
+})

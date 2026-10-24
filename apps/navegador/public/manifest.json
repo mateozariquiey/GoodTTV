@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "GoodTTV",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "Twitch con el reproductor de GoodTTV, sin anuncios. Uso personal.",
   "minimum_chrome_version": "121",
   "icons": {
@@ -35,8 +35,9 @@
     "gecko": {
       "id": "goodttv@mateozariquiey.github.io",
       "strict_min_version": "140.0",
+      "update_url": "https://raw.githubusercontent.com/mateozariquiey/GoodTTV/main/updates.json",
       "data_collection_permissions": {
-        "required": ["none"]
+        "required": ["authenticationInfo", "personalCommunications"]
       }
     }
   }

@@ -1295,10 +1295,17 @@ img {
   font-size: 13px;
 }
 
-.chat__lista {
-  contain: strict; /* su tamaño lo da la columna: los mensajes nuevos no recolocan el resto de la página */
+/* La lista va dentro de un bloque y no directamente en la columna: Chrome no maqueta aparte a una hija de un flex o de
+ * una rejilla, aunque lleve contain: strict, así que cada mensaje rehacía la página entera. Dentro del bloque, solo se
+ * maqueta la lista (como en la extensión). */
+.chat__marco {
   flex: 1;
   min-height: 0;
+}
+
+.chat__lista {
+  contain: strict; /* su tamaño lo da el bloque: los mensajes nuevos no recolocan el resto de la página */
+  height: 100%;
   margin: 0;
   padding: 8px 16px;
   list-style: none;
@@ -1429,7 +1436,7 @@ img {
 }
 
 /* La lista entera, en el sitio de los mensajes (que se ocultan mientras). */
-.chat:has(> .lista-emotes) > .chat__lista,
+.chat:has(> .lista-emotes) > .chat__marco,
 .chat:has(> .lista-emotes) > .chat__ultimos,
 .chat:has(> .lista-emotes) > .chat__estado {
   display: none;

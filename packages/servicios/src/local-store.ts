@@ -58,6 +58,13 @@ export class LocalStore {
       const merged: RecentChannel = {
         ...previous,
         ...entry,
+        // A channel opened by its address is named after its login, without an id, until its data arrives: that
+        // placeholder must not replace the name already known («rubius» over «Rubius»), or it stays once the entry has
+        // an id. A name that comes with the channel's data (with its id) is real, even when it equals the login.
+        displayName:
+          previous !== undefined && entry.displayName === entry.login && entry.userId === undefined
+            ? previous.displayName
+            : entry.displayName,
       }
       const recents = [
         merged,

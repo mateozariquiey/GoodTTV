@@ -1,5 +1,7 @@
 import type { LatencyMode, PreferencesPatch, Storyboard, VideoDetail } from "@goodttv/contratos"
 import {
+  chosenLiveQuality,
+  chosenVolume,
   formatAgo,
   formatClock,
   formatViewers,
@@ -25,6 +27,8 @@ import {
 import { type CSSProperties, useCallback, useEffect, useRef, useState } from "react"
 import { Avatar } from "./Avatar"
 import { ChatPanel } from "./ChatPanel"
+import { useFullscreen } from "./fullscreen"
+import { PictureInPictureButton } from "./PictureInPictureButton"
 import { navigate } from "./routes"
 import { SeekBar } from "./SeekBar"
 import { SKIP_S, SkipButton } from "./SkipButton"
@@ -104,9 +108,12 @@ export const VodView = ({
   // biome-ignore lint/correctness/useExhaustiveDependencies: otro vídeo, donde se dejó.
   useEffect(() => setStart(null), [id])
   const surface = useRef<HTMLDivElement>(null)
-  const stage = useRef<HTMLDivElement>(null)
+  // A pantalla completa va la vista: solo el vídeo o, en modo teatro, también el chat (desktop.css).
+  const view = useRef<HTMLDivElement>(null)
   // Retrocediendo un directo: desde el segundo pedido, y sin guardarlo como vídeo a medias.
-  const player = useVodPlayer(surface, video, start ?? at ?? null, live === undefined)
+  // Al retroceder un directo, en la calidad elegida en él (si no es la automática).
+  const liveQuality = live === undefined ? null : chosenLiveQuality()
+  const player = useVodPlayer(surface, video, start ?? at ?? null, live === undefined, liveQuality)
   const goLive = useCallback(() => {
     if (live !== undefined) navigate({ login: live, view: "channel" })
   }, [live])
@@ -173,7 +180,16 @@ export const VodView = ({
     }
   }, [video])
 
-  const chat = useReplayChat(video?.id, video?.owner.id, state.time, chatVisible)
+  const onWindowChat = useCallback(
+    (on: boolean) => onPreferences({ chatVisible: on }),
+    [onPreferences],
+  )
+  const { chatShown, fullscreen, toggleChat, toggleFullscreen } = useFullscreen(
+    view,
+    chatVisible,
+    onWindowChat,
+  )
+  const chat = useReplayChat(video?.id, video?.owner.id, state.time, chatShown)
 
   // Controles a la vista al mover el ratón, y siempre en pausa o con un menú abierto.
   const [awake, setAwake] = useState(true)
@@ -199,18 +215,7 @@ export const VodView = ({
     return () => clearTimeout(timer)
   }, [state.resumedFrom])
 
-  const [fullscreen, setFullscreen] = useState(false)
-  useEffect(() => {
-    const onChange = (): void => setFullscreen(document.fullscreenElement === stage.current)
-    document.addEventListener("fullscreenchange", onChange)
-    return () => document.removeEventListener("fullscreenchange", onChange)
-  }, [])
-  const toggleFullscreen = useCallback(() => {
-    if (document.fullscreenElement !== null) void document.exitFullscreen()
-    else void stage.current?.requestFullscreen()
-  }, [])
-
-  const [volume, setVolumeState] = useState(1)
+  const [volume, setVolumeState] = useState(() => chosenVolume().volume)
   const { setVolume, toggleMuted, toggle, skip, seek } = player
   const changeVolume = (next: number): void => {
     takeSound(true)
@@ -251,8 +256,9 @@ export const VodView = ({
       else if (key === "l" || (key === "ArrowRight" && !context.onArrows)) skipBy(SKIP_S)
       else if (key === "m") toggleMuted()
       else if (key === "f") toggleFullscreen()
-      else if (key === "t") onTheater(!theater)
-      else if (key === "c") onPreferences({ chatVisible: !chatVisible })
+      // El modo teatro es de la ventana: a pantalla completa, T no hace nada (ChannelView).
+      else if (key === "t" && !fullscreen) onTheater(!theater)
+      else if (key === "c") toggleChat()
       else if (/^[0-9]$/.test(key)) seek((duration * Number(key)) / 10)
       else if (key === "Home") seek(0)
       else if (key === "End" && live !== undefined) goLive()
@@ -263,17 +269,17 @@ export const VodView = ({
     addEventListener("keydown", onKey)
     return () => removeEventListener("keydown", onKey)
   }, [
-    chatVisible,
     duration,
+    fullscreen,
     goLive,
     live,
-    onPreferences,
     onTheater,
     seek,
     skipBy,
     takeSound,
     theater,
     toggle,
+    toggleChat,
     toggleFullscreen,
     toggleMuted,
     wake,
@@ -313,7 +319,7 @@ export const VodView = ({
       : (state.qualities.find((each) => each.index === state.quality)?.label ?? "Auto")
   const twitchUrl = `https://www.twitch.tv/videos/${video.id}`
   return (
-    <div className={`watch${chatVisible ? " watch--chat" : ""}`}>
+    <div className={`watch${chatShown ? " watch--chat" : ""}`} ref={view}>
       <div className="watch__main">
         <div
           className={`stage${showControls ? "" : " stage--idle"}`}
@@ -324,7 +330,6 @@ export const VodView = ({
           }
           onPointerLeave={() => setAwake(false)}
           onPointerMove={wake}
-          ref={stage}
         >
           {/* biome-ignore lint/a11y/noStaticElementInteractions: clic y doble clic en el vídeo son atajos del ratón; con el teclado, Espacio y F. */}
           {/* biome-ignore lint/a11y/useKeyWithClickEvents: ídem. */}
@@ -485,30 +490,36 @@ export const VodView = ({
                   </Menu>
                 ) : null}
                 <button
-                  aria-label={chatVisible ? "Ocultar el chat" : "Mostrar el chat"}
-                  aria-pressed={chatVisible}
+                  aria-label={chatShown ? "Ocultar el chat" : "Mostrar el chat"}
+                  aria-pressed={chatShown}
                   className="icon-button icon-button--light"
-                  onClick={() => onPreferences({ chatVisible: !chatVisible })}
-                  title={chatVisible ? "Ocultar el chat (C)" : "Mostrar el chat (C)"}
+                  onClick={toggleChat}
+                  title={chatShown ? "Ocultar el chat (C)" : "Mostrar el chat (C)"}
                   type="button"
                 >
                   <ChatTextIcon />
                 </button>
-                <button
-                  aria-label="Modo teatro"
-                  aria-pressed={theater}
-                  className="icon-button icon-button--light icon-button--toggle"
-                  onClick={() => onTheater(!theater)}
-                  title="Modo teatro (T)"
-                  type="button"
-                >
-                  {theater ? <ArrowsInLineHorizontalIcon /> : <ArrowsOutLineHorizontalIcon />}
-                </button>
+                <PictureInPictureButton
+                  active={player.pictureInPicture}
+                  onToggle={player.togglePictureInPicture}
+                />
+                {fullscreen ? null : (
+                  <button
+                    aria-label="Modo teatro"
+                    aria-pressed={theater}
+                    className="icon-button icon-button--light icon-button--toggle"
+                    onClick={() => onTheater(!theater)}
+                    title="Modo teatro (T): el vídeo y el chat ocupan la ventana"
+                    type="button"
+                  >
+                    {theater ? <ArrowsInLineHorizontalIcon /> : <ArrowsOutLineHorizontalIcon />}
+                  </button>
+                )}
                 <button
                   aria-label={fullscreen ? "Salir de la pantalla completa" : "Pantalla completa"}
                   className="icon-button icon-button--light"
                   onClick={toggleFullscreen}
-                  title="Pantalla completa (F)"
+                  title={fullscreen ? "Salir de la pantalla completa (F)" : "Pantalla completa (F)"}
                   type="button"
                 >
                   {fullscreen ? <CornersInIcon /> : <CornersOutIcon />}
@@ -568,7 +579,7 @@ export const VodView = ({
           title={`Más vídeos de ${video.owner.displayName}`}
         />
       </div>
-      {chatVisible ? <ChatPanel chat={chat} replay scale={scale} writing="no" /> : null}
+      {chatShown ? <ChatPanel chat={chat} replay scale={scale} writing="no" /> : null}
     </div>
   )
 }

@@ -26,7 +26,13 @@ export type EstadoMedia3 = {
   readonly retrocedido: boolean
   // DVR-1: en pausa, desde cuándo y qué momento se veía (ms, en hora real). Lo lleva la app: también se pausa desde la
   // esquina o el PiP, y la pantalla del canal se desmonta al dejarlo.
-  readonly pausa: { readonly desde: number; readonly imagen: number } | null
+  // fuera: lo que se veía al pausar no está en la lista de este reproductor (se volvió a abrir en pausa, al volver a
+  // verse la app tras el solo audio): reanudar lo abre en el VOD, como tras una pausa larga.
+  readonly pausa: {
+    readonly desde: number
+    readonly fuera: boolean
+    readonly imagen: number
+  } | null
 }
 
 type Evento = EstadoMedia3 & {
@@ -35,6 +41,7 @@ type Evento = EstadoMedia3 & {
   readonly atras: number // s que caben hacia atrás en la lista del empalme
   readonly pausadoDesde: number | null
   readonly imagenPausada: number | null
+  readonly pausaFuera?: boolean // lo pausado no está en la lista del reproductor (reabierto en pausa)
 }
 
 const CARGANDO: EstadoMedia3 = {
@@ -52,7 +59,10 @@ const igual = (a: EstadoMedia3, b: EstadoMedia3): boolean =>
   a.pausado === b.pausado &&
   a.calidad === b.calidad &&
   a.retrocedido === b.retrocedido &&
-  a.pausa?.desde === b.pausa?.desde
+  a.pausa?.desde === b.pausa?.desde &&
+  // Moverse en pausa mueve lo que se veía (Reproductor.kt): si no, al reanudar se abriría el VOD donde se pausó.
+  a.pausa?.imagen === b.pausa?.imagen &&
+  a.pausa?.fuera === b.pausa?.fuera
 
 // Dónde está un elemento, en píxeles de la pantalla, para la app: al montarse y cada vez que cambia (girar el teléfono,
 // ocultar el chat). La app no hace nada si no ha cambiado. Al desmontarse, «alSalir».
@@ -235,7 +245,11 @@ export const useMedia3 = (
         pausa:
           detalle.pausadoDesde === null || detalle.imagenPausada === null
             ? null
-            : { desde: detalle.pausadoDesde, imagen: detalle.imagenPausada },
+            : {
+                desde: detalle.pausadoDesde,
+                fuera: detalle.pausaFuera === true,
+                imagen: detalle.imagenPausada,
+              },
         pausado: detalle.pausado,
         retrocedido: detalle.retrocedido,
       }
@@ -359,6 +373,11 @@ setInterval(() => {
   if (sonando !== null && Date.now() < sonando.hasta) addWatchMinute(sonando.login)
 }, 60_000)
 
+// Si no se pudo pedir la lista del VOD, lo de antes se paró (vodPreparar) sin cerrar el servicio ni los mandos del
+// sistema, que siguen esperando al VOD: sin nada abierto, la app los cierra (canalMinimizar llama a cerrarCanal). Al
+// reintentar, vodAbrir los vuelve a poner.
+const sinNadaQueVer = (): void => android.canalMinimizar()
+
 // Abre el VOD al montarse, donde se dejó (unos segundos antes, vod-progress.ts) o en «desde» (al retroceder un directo),
 // salvo que ya esté abierto (volver desde la esquina). «reanudado»: desde dónde se ha reanudado, para decirlo.
 export const useMedia3Vod = (
@@ -371,6 +390,13 @@ export const useMedia3Vod = (
   const posicion = useRef(0)
   // El VOD de ahora: lo que llega tarde de otro (reintentar) ya no cuenta.
   const actual = useRef(id)
+  // Reintentando: hasta que la app abra el VOD otra vez, su fallo de antes (que sigue diciendo a cada tic) no cuenta, y
+  // otro toque no lo abre dos veces.
+  const reintentando = useRef(false)
+  // La velocidad, como la del VOD de antes (otro de sus vídeos, un reintento), como en la extensión: la app abre cada VOD
+  // a 1×. «ponerRitmo»: al empezar a sonar el que se acaba de abrir.
+  const ritmo = useRef(1)
+  const ponerRitmo = useRef(false)
 
   useEffect(() => {
     setEstado(CARGANDO_VOD)
@@ -378,10 +404,18 @@ export const useMedia3Vod = (
     rutaVod = location.hash
     actual.current = id
     posicion.current = 0
+    reintentando.current = false
     let activo = true
     const onEvento = (event: Event): void => {
       const detalle = (event as CustomEvent<EventoVod>).detail
       if (detalle.vod !== id) return
+      if (reintentando.current && detalle.fase === "error") return
+      reintentando.current = false
+      if (detalle.fase === "reproduciendo") {
+        if (!ponerRitmo.current) ritmo.current = detalle.velocidad
+        else if (detalle.velocidad !== ritmo.current) android.vodVelocidad(ritmo.current)
+        ponerRitmo.current = false
+      }
       posicion.current = detalle.posicion
       const nuevo: EstadoVod = {
         bufer: detalle.bufer,
@@ -401,13 +435,18 @@ export const useMedia3Vod = (
     if (!android.vodPreparar(id)) {
       const inicio = desde ?? resumeAt(vodProgress(id))
       posicion.current = inicio
+      // Mientras llega, ya en «inicio»: el chat del vídeo empieza a pedir desde ahí, no desde el principio.
+      setEstado({ ...CARGANDO_VOD, posicion: inicio })
+      ponerRitmo.current = ritmo.current !== 1
       if (desde === null && inicio > 0) setReanudado(inicio)
       vodPlayback(id)
         .then((lista) => {
           if (activo) android.vodAbrir(id, lista, inicio)
         })
         .catch(() => {
-          if (activo) setEstado({ ...CARGANDO_VOD, fase: "error" })
+          if (!activo) return
+          setEstado({ ...CARGANDO_VOD, fase: "error", posicion: inicio })
+          sinNadaQueVer()
         })
     }
     return () => {
@@ -428,14 +467,20 @@ export const useMedia3Vod = (
   // Otra vez, donde iba, con la lista pedida de nuevo si la de antes ya no vale. Si mientras tanto se ha pasado a otra
   // cosa, ya no.
   const reintentar = useCallback(() => {
-    setEstado(CARGANDO_VOD)
+    if (reintentando.current) return
+    reintentando.current = true
     const desdeAqui = posicion.current
+    setEstado({ ...CARGANDO_VOD, posicion: desdeAqui })
+    ponerRitmo.current = ritmo.current !== 1
     vodPlayback(id)
       .then((lista) => {
         if (actual.current === id) android.vodAbrir(id, lista, desdeAqui)
       })
       .catch(() => {
-        if (actual.current === id) setEstado({ ...CARGANDO_VOD, fase: "error" })
+        if (actual.current !== id) return
+        reintentando.current = false
+        setEstado({ ...CARGANDO_VOD, fase: "error", posicion: desdeAqui })
+        sinNadaQueVer()
       })
   }, [id])
   return { calidad, estado, irA, pausar, reanudado, reintentar, saltar, velocidad }

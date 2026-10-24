@@ -800,10 +800,6 @@ kbd {
   overflow: hidden;
 }
 
-.stage:fullscreen {
-  height: 100%;
-}
-
 .stage--idle:not(:has(:focus-visible)) {
   cursor: none;
 }
@@ -1096,6 +1092,9 @@ kbd {
   grid-template-rows: auto auto minmax(0, 1fr) auto;
   min-height: 0;
   height: 100%;
+  /* Con fondo opaco, Chrome compone su desplazamiento aparte (en pantallas a 1x, sin fondo no lo hace, para no perder
+   * los subpíxeles del texto): cada mensaje nuevo ya no vuelve a dibujar todo el chat visible, y la GPU trabaja un 15 %
+   * menos. El texto se sigue dibujando igual. */
   background: var(--panel);
   border-left: 1px solid var(--rule);
 }
@@ -1112,9 +1111,21 @@ kbd {
   font-size: 13px;
 }
 
-.chat__list {
+/* La lista va dentro de un bloque y no directamente en la rejilla: Chrome no maqueta aparte a una hija de una rejilla o
+ * de un flex, aunque lleve contain: strict, así que cada mensaje rehacía la página entera (~1250 elementos, 3-5 ms, unas
+ * 10 veces por segundo). Dentro del bloque, solo se maqueta la lista. */
+.chat__scroller {
   grid-row: 3; /* con o sin línea de estado encima */
-  contain: strict; /* su tamaño lo da la rejilla: los mensajes nuevos no recolocan el resto de la página */
+  min-height: 0;
+}
+
+.chat__list {
+  contain: strict; /* su tamaño lo da el bloque: los mensajes nuevos no recolocan el resto de la página */
+  height: 100%;
+  /* Con fondo opaco, Chrome compone su desplazamiento aparte (en pantallas a 1x, sin fondo no lo hace, para no perder
+   * los subpíxeles del texto): cada mensaje nuevo ya no vuelve a dibujar todo el chat visible, y la GPU trabaja un 15 %
+   * menos. El texto se sigue dibujando igual. */
+  background: var(--panel);
   list-style: none;
   margin: 0;
   padding: 10px 16px;
@@ -1777,6 +1788,38 @@ kbd {
   }
 }
 
+/* Pantalla completa (F): la vista entera, sin la ficha ni los vídeos de debajo: el vídeo y, si se quiere, el chat a su
+ * lado, con su propio botón (fullscreen.ts, D33; empieza oculto). El modo teatro es solo de la ventana.
+ * Después de las ventanas estrechas: aquí el chat no baja. */
+.watch:fullscreen {
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
+  height: 100%;
+  background: #000;
+}
+
+.watch--chat:fullscreen {
+  grid-template-columns: minmax(0, 1fr) var(--chat);
+}
+
+.watch:fullscreen > .chat {
+  border-top: 0;
+  border-left: 1px solid var(--rule);
+}
+
+.watch:fullscreen .watch__main > :not(.stage) {
+  display: none;
+}
+
+.watch:fullscreen .watch__main {
+  overflow: hidden;
+  min-height: 0;
+}
+
+.watch:fullscreen .stage {
+  height: 100%;
+}
+
 /* Vídeo estrecho (zoom alto o ventana pequeña): fuera lo que no cabe en los controles, empezando por lo que solo
  * informa. */
 @container stage (max-width: 700px) {
@@ -1786,7 +1829,8 @@ kbd {
 }
 
 @container stage (max-width: 580px) {
-  .live {
+  .live,
+  .pip-button {
     display: none;
   }
 }

@@ -1,6 +1,7 @@
 import type { LiveArchive, Preferences, PreferencesPatch } from "@goodttv/contratos"
 import {
   type Channel,
+  chosenVolume,
   formatClock,
   formatUptime,
   formatViewers,
@@ -33,9 +34,11 @@ import {
   SpeakerSimpleXIcon,
   UserIcon,
 } from "@phosphor-icons/react"
-import { type CSSProperties, useCallback, useEffect, useRef, useState } from "react"
+import { type CSSProperties, memo, useCallback, useEffect, useRef, useState } from "react"
 import { Avatar } from "./Avatar"
 import { ChatPanel, type ChatWriting } from "./ChatPanel"
+import { useFullscreen } from "./fullscreen"
+import { PictureInPictureButton } from "./PictureInPictureButton"
 import { navigate } from "./routes"
 import { SeekBar } from "./SeekBar"
 import { SKIP_S, SkipButton } from "./SkipButton"
@@ -80,7 +83,8 @@ export const ChannelView = ({
   signedIn,
   theater,
 }: Props) => {
-  const stage = useRef<HTMLDivElement>(null)
+  // A pantalla completa va la vista: solo el vídeo o, en modo teatro, también el chat (desktop.css).
+  const view = useRef<HTMLDivElement>(null)
   const surface = useRef<HTMLDivElement>(null)
   // Con varias pestañas, suena una sola (sonido.ts): las demás se silencian y, ocultas un rato, se paran.
   const [stoppable, setStoppable] = useState(true)
@@ -194,23 +198,43 @@ export const ChannelView = ({
   }, [onAir, shownAt, state.playing])
   // ← → y los botones: dentro de la lista del directo (~100 s), al momento; más atrás, en el VOD de la emisión. Sin
   // él, hasta el principio de la lista.
-  const { seekBy } = player
+  const { play, seekBy } = player
   const canRewind = archive?.archiveId != null
+  // Moverse en pausa mueve también lo que se veía al pausar: al reanudar tras más de un minuto, el VOD abre donde se
+  // dejó la imagen, no donde se pausó.
+  const seekPaused = useCallback(
+    (seconds: number, orStart = false): boolean => {
+      const moved = seekBy(seconds, orStart)
+      if (moved === null) return false
+      const paused = pausedAt.current
+      if (paused !== null) pausedAt.current = { ...paused, shown: paused.shown + moved * 1000 }
+      return true
+    },
+    [seekBy],
+  )
   const skip = useCallback(
     (seconds: number) => {
-      if (seekBy(seconds, !canRewind) || seconds > 0 || state.phase !== "ready") return
+      if (seekPaused(seconds, !canRewind) || seconds > 0 || state.phase !== "ready") return
       openRewind(shownAt() + seconds * 1000)
     },
-    [canRewind, openRewind, seekBy, shownAt, state.phase],
+    [canRewind, openRewind, seekPaused, shownAt, state.phase],
   )
-  const goLive = useCallback(() => seekBy(Number.POSITIVE_INFINITY), [seekBy])
+  // «Ir al directo» sigue en el directo, también en pausa (como en Android): si no, la pausa de antes seguía contando y,
+  // pasado un minuto, reproducir abría el VOD donde se pausó.
+  const goLive = useCallback(() => {
+    seekBy(Number.POSITIVE_INFINITY)
+    pausedAt.current = null
+    play()
+  }, [play, seekBy])
 
   // Abierto por su nombre (la dirección, o el atajo de la búsqueda): se completan su nombre, su foto y su id (que el
   // chat necesita también sin directo) sin cuenta, y con cuenta, los datos del directo (cuánto lleva).
   const [details, setDetails] = useState(channel)
   useEffect(() => {
     setDetails(channel)
-    if (channel.userId !== undefined) return undefined
+    // Con su id, ya se sabe todo, salvo que su nombre sea solo el login: un reciente guardado mientras llegaban sus datos
+    // (antes podía quedarse así), que se corrige.
+    if (channel.userId !== undefined && channel.displayName !== channel.login) return undefined
     let active = true
     window.api.catalog
       .channel?.(channel.login)
@@ -220,7 +244,12 @@ export const ChannelView = ({
           setDetails((current) =>
             current.userId === undefined
               ? fromSearch(card)
-              : { ...current, profileImageUrl: current.profileImageUrl ?? card.thumbnailUrl },
+              : {
+                  ...current,
+                  displayName:
+                    current.displayName === current.login ? card.displayName : current.displayName,
+                  profileImageUrl: current.profileImageUrl ?? card.thumbnailUrl,
+                },
           )
       })
       .catch(() => undefined)
@@ -268,8 +297,8 @@ export const ChannelView = ({
       document.removeEventListener("visibilitychange", onVisible)
     }
   }, [broadcasterId, signedIn])
-  // A recientes al abrirlo, y otra vez cuando se completan sus datos (con su foto e id).
-  const recentKey = `${details.login}|${details.userId ?? ""}`
+  // A recientes al abrirlo, y otra vez cuando se completan sus datos (con su nombre, su foto e id).
+  const recentKey = `${details.login}|${details.userId ?? ""}|${details.displayName}`
   // biome-ignore lint/correctness/useExhaustiveDependencies: se guarda al cambiar recentKey, con los datos de ese momento.
   useEffect(() => {
     void window.api.recents.add(toRecent(latest.current))
@@ -283,13 +312,6 @@ export const ChannelView = ({
     if (seconds !== null) return Math.max(0, seconds - TWITCH_VIEWER_LATENCY)
     return phase === "loading" || phase === "ready" ? null : 0
   }, [latency, phase])
-  // Solo con la pestaña a la vista: EventSub admite tres conexiones por cuenta, y hay más pestañas.
-  const chat = useChat(
-    signedIn ? details.userId : undefined,
-    preferences.chatVisible,
-    chatDelay,
-    sole.visible,
-  )
 
   // Controles a la vista: al mover el ratón, y siempre en pausa o con el menú de calidad abierto.
   const [awake, setAwake] = useState(true)
@@ -306,18 +328,17 @@ export const ChannelView = ({
   const [qualityOpen, setQualityOpen] = useState(false)
   const showControls = awake || !state.playing || qualityOpen
 
-  const [fullscreen, setFullscreen] = useState(false)
-  useEffect(() => {
-    const onChange = (): void => setFullscreen(document.fullscreenElement === stage.current)
-    document.addEventListener("fullscreenchange", onChange)
-    return () => document.removeEventListener("fullscreenchange", onChange)
-  }, [])
-  const toggleFullscreen = useCallback(() => {
-    if (document.fullscreenElement !== null) void document.exitFullscreen()
-    else void stage.current?.requestFullscreen()
-  }, [])
+  const onWindowChat = useCallback(
+    (on: boolean) => onPreferences({ chatVisible: on }),
+    [onPreferences],
+  )
+  const { chatShown, fullscreen, toggleChat, toggleFullscreen } = useFullscreen(
+    view,
+    preferences.chatVisible,
+    onWindowChat,
+  )
 
-  const [volume, setVolume] = useState(1)
+  const [volume, setVolume] = useState(() => chosenVolume().volume)
   const { setVolume: applyVolume } = player
   const changeVolume = useCallback(
     (next: number) => {
@@ -367,7 +388,6 @@ export const ChannelView = ({
   )
 
   const { toggleMuted } = player
-  const chatVisible = preferences.chatVisible
   // Esc con el menú de calidad abierto solo lo cierra: en captura, antes que el Esc general de la ventana (Desktop).
   useEffect(() => {
     if (!qualityOpen) return undefined
@@ -388,8 +408,9 @@ export const ChannelView = ({
       if (shortcut === "play-pause") toggle()
       else if (shortcut === "mute") toggleMuted()
       else if (shortcut === "fullscreen") toggleFullscreen()
-      else if (shortcut === "theater") onTheater(!theater)
-      else if (shortcut === "chat") onPreferences({ chatVisible: !chatVisible })
+      // El modo teatro es de la ventana: a pantalla completa, T no hace nada.
+      else if (shortcut === "theater" && !fullscreen) onTheater(!theater)
+      else if (shortcut === "chat") toggleChat()
       else if (shortcut === "previous") step(-1)
       else if (shortcut === "next") step(1)
       else if (shortcut === "rewind") skip(-SKIP_S)
@@ -402,21 +423,26 @@ export const ChannelView = ({
     addEventListener("keydown", onKey)
     return () => removeEventListener("keydown", onKey)
   }, [
-    chatVisible,
+    fullscreen,
     goLive,
-    onPreferences,
     onTheater,
     skip,
     step,
     takeSound,
     theater,
     toggle,
+    toggleChat,
     toggleFullscreen,
     toggleMuted,
     wake,
   ])
 
-  const quality = state.qualities.find((each) => each.id === state.quality)?.label ?? "Auto"
+  // La que suena; con la automática, «Auto (1080p60)», como en un VOD.
+  const playingQuality = state.qualities.find((each) => each.id === state.quality)?.label
+  const quality =
+    player.chosenQuality === null
+      ? `Auto${playingQuality === undefined ? "" : ` (${qualityLabel(playingQuality)})`}`
+      : qualityLabel(playingQuality ?? "Auto")
   // La barra del directo (DVR-1): desde que empezó la emisión hasta ahora; lo que se ve, la latencia antes de ahora.
   const startedAtMs = Date.parse(archive?.startedAt ?? "")
   const dvr =
@@ -427,14 +453,12 @@ export const ChannelView = ({
           position: Math.max(0, (now - startedAtMs) / 1000 - (latency.current ?? 0)),
           start: startedAtMs,
         }
-  const writing: ChatWriting =
-    !signedIn || chat.send === undefined ? "no" : canChat ? "si" : "vincular"
   const muted = state.muted || volume === 0
   const live = phase === "ready"
   const twitchUrl = `https://www.twitch.tv/${channel.login}`
 
   return (
-    <div className={`watch${chatVisible ? " watch--chat" : ""}`}>
+    <div className={`watch${chatShown ? " watch--chat" : ""}`} ref={view}>
       <div className="watch__main">
         <div
           className={`stage${showControls ? "" : " stage--idle"}${phase === "offline" ? " stage--offline" : ""}`}
@@ -446,7 +470,6 @@ export const ChannelView = ({
           }
           onPointerLeave={() => setAwake(false)}
           onPointerMove={wake}
-          ref={stage}
         >
           {/* biome-ignore lint/a11y/noStaticElementInteractions: clic y doble clic en el vídeo son atajos del ratón; con el teclado, Espacio y F. */}
           {/* biome-ignore lint/a11y/useKeyWithClickEvents: ídem. */}
@@ -480,7 +503,7 @@ export const ChannelView = ({
                 }
                 onSeek={(to) => {
                   // Dentro de la lista, sin salir del directo; hacia delante, como mucho hasta el directo.
-                  if (seekBy(to - dvr.position)) return
+                  if (seekPaused(to - dvr.position)) return
                   if (dvr.duration - to >= DVR_MIN_BACK_S) openRewind(dvr.start + to * 1000)
                 }}
                 storyboard={null}
@@ -584,10 +607,14 @@ export const ChannelView = ({
                     </button>
                     {qualityOpen ? (
                       <div className="quality__menu" role="menu">
-                        {state.qualities.map((each) => (
+                        {[{ id: null, label: "Auto" }, ...state.qualities].map((each) => (
                           <button
-                            aria-checked={each.id === state.quality}
-                            key={each.id}
+                            aria-checked={
+                              each.id === null
+                                ? player.chosenQuality === null
+                                : player.chosenQuality !== null && each.id === state.quality
+                            }
+                            key={each.id ?? "auto"}
                             onClick={() => {
                               player.setQuality(each.id)
                               setQualityOpen(false)
@@ -595,7 +622,7 @@ export const ChannelView = ({
                             role="menuitemradio"
                             type="button"
                           >
-                            {each.label}
+                            {qualityLabel(each.label)}
                           </button>
                         ))}
                       </div>
@@ -603,30 +630,36 @@ export const ChannelView = ({
                   </div>
                 ) : null}
                 <button
-                  aria-label={chatVisible ? "Ocultar el chat" : "Mostrar el chat"}
-                  aria-pressed={chatVisible}
+                  aria-label={chatShown ? "Ocultar el chat" : "Mostrar el chat"}
+                  aria-pressed={chatShown}
                   className="icon-button icon-button--light"
-                  onClick={() => onPreferences({ chatVisible: !chatVisible })}
-                  title={chatVisible ? "Ocultar el chat (C)" : "Mostrar el chat (C)"}
+                  onClick={toggleChat}
+                  title={chatShown ? "Ocultar el chat (C)" : "Mostrar el chat (C)"}
                   type="button"
                 >
                   <ChatTextIcon />
                 </button>
-                <button
-                  aria-label="Modo teatro"
-                  aria-pressed={theater}
-                  className="icon-button icon-button--light icon-button--toggle"
-                  onClick={() => onTheater(!theater)}
-                  title="Modo teatro (T): el vídeo y el chat ocupan la ventana"
-                  type="button"
-                >
-                  {theater ? <ArrowsInLineHorizontalIcon /> : <ArrowsOutLineHorizontalIcon />}
-                </button>
+                <PictureInPictureButton
+                  active={player.pictureInPicture}
+                  onToggle={player.togglePictureInPicture}
+                />
+                {fullscreen ? null : (
+                  <button
+                    aria-label="Modo teatro"
+                    aria-pressed={theater}
+                    className="icon-button icon-button--light icon-button--toggle"
+                    onClick={() => onTheater(!theater)}
+                    title="Modo teatro (T): el vídeo y el chat ocupan la ventana"
+                    type="button"
+                  >
+                    {theater ? <ArrowsInLineHorizontalIcon /> : <ArrowsOutLineHorizontalIcon />}
+                  </button>
+                )}
                 <button
                   aria-label={fullscreen ? "Salir de la pantalla completa" : "Pantalla completa"}
                   className="icon-button icon-button--light"
                   onClick={toggleFullscreen}
-                  title="Pantalla completa (F): solo el vídeo"
+                  title={fullscreen ? "Salir de la pantalla completa (F)" : "Pantalla completa (F)"}
                   type="button"
                 >
                   {fullscreen ? <CornersInIcon /> : <CornersOutIcon />}
@@ -700,12 +733,49 @@ export const ChannelView = ({
         {/* COL-2: debajo de la ficha, sus emisiones anteriores; si no está en directo, en su lugar. */}
         <ChannelVideos login={channel.login} offline={phase === "offline"} />
       </div>
-      {chatVisible ? (
-        <ChatPanel chat={chat} scale={preferences.chatScale} writing={writing} />
-      ) : null}
+      <ChannelChat
+        broadcasterId={signedIn ? details.userId : undefined}
+        canChat={canChat}
+        connected={sole.visible}
+        delay={chatDelay}
+        scale={preferences.chatScale}
+        signedIn={signedIn}
+        visible={chatShown}
+      />
     </div>
   )
 }
+
+// El chat, aparte del resto del canal: cada lote de mensajes (unas 10 veces por segundo en un chat con mucho movimiento)
+// solo vuelve a pintar el chat, no los controles, la ficha ni los vídeos de debajo. Solo con la pestaña a la vista
+// (connected): EventSub admite tres conexiones por cuenta, y hay más pestañas.
+const ChannelChat = memo(
+  ({
+    broadcasterId,
+    canChat,
+    connected,
+    delay,
+    scale,
+    signedIn,
+    visible,
+  }: {
+    readonly broadcasterId: string | undefined
+    readonly canChat: boolean
+    readonly connected: boolean
+    readonly delay: () => number | null
+    readonly scale: Preferences["chatScale"]
+    readonly signedIn: boolean
+    readonly visible: boolean
+  }) => {
+    const chat = useChat(broadcasterId, visible, delay, connected)
+    const writing: ChatWriting =
+      !signedIn || chat.send === undefined ? "no" : canChat ? "si" : "vincular"
+    return visible ? <ChatPanel chat={chat} scale={scale} writing={writing} /> : null
+  },
+)
+
+// Twitch llama «1080p60 (source)» a la original: basta con «1080p60» (como en Android).
+const qualityLabel = (label: string): string => label.replace(/\s*\(source\)$/i, "")
 
 // Lo que tapa el vídeo cuando no hay nada que ver: cargando, sin directo, fallos y el arranque bloqueado.
 const Notice = ({

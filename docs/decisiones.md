@@ -358,7 +358,7 @@ terminado se copia al repo público `mateozariquiey/GoodTTV` con un commit por v
 - **Cómo:** un script del repo de trabajo copia solo una lista de rutas y quita de los documentos las partes que solo
   tienen sentido aquí. Después comprueba que no se cuelan secretos, correos personales ni rutas de un equipo. Nada se
   sube sin revisar el resultado.
-- **Sin tiendas:** ni Chrome Web Store ni AMO. Se instala desde las releases, como en D15.
+- **Sin tiendas:** ni Chrome Web Store ni AMO. Se instala desde las releases, como en D15. Lo cambia D30.
 - **Versiones:** la 0.2.0, con la tele y la extensión, sale como pre-release porque la tele no se ha probado en el
   mini PC. Android se publicará cuando esté terminada.
 
@@ -367,6 +367,110 @@ Descartado:
   su historial.
 - **Publicar sin el reproductor sin anuncios:** el público se quedaría en la tele con el reproductor oficial, sin
   extensión.
+
+**D30. La extensión, en las tiendas (24 oct).** Para que la instale y la actualice cualquiera sin el modo de
+desarrollador de Chrome ni `about:config`. El usuario asume que una tienda la rechace o la retire. Cambia D18 («sin
+tiendas»), y se prepara sin publicar: se subirá cuando el usuario lo diga.
+- **Chrome Web Store, «no listada»:** se instala con el enlace y se actualiza sola. Es la única forma de instalarla
+  firmada en Chrome en Windows y macOS. Su política prohíbe facilitar «the unauthorized access, download, or streaming
+  of copyrighted content», y un revisor podría aplicárnosla: otras para quitar los anuncios de Twitch siguen
+  publicadas (Purple, TTV LOL PRO), y otra ya no está (Alternate Player), sin que se sepa por qué.
+- **Firefox: firmada en AMO sin ficha** y distribuida desde las releases. Firefox, también el normal, y Zen la instalan
+  sin cambiar nada, y se actualiza sola con `updates.json` del repo público (`gecko.update_url`), como la versión de
+  desarrollo de uBlock Origin. La firma pasa una validación automática (`web-ext lint --self-hosted`: sin errores), y
+  Mozilla puede revisarla después.
+- **Lo que sale hacia Twitch se declara:** a Firefox, el token de la cuenta (`authenticationInfo`) y los mensajes que
+  se escriben en el chat (`personalCommunications`), como obligatorios. Su guía no aclara si cuenta lo que se manda al
+  servicio que se está usando, y así no se queda corto. La política de privacidad está en `PRIVACY.md`.
+- **Dos paquetes:** el `.xpi` y un `-chrome.zip` sin lo de Firefox en el manifiesto, que también ahorra cambiarle la
+  extensión al descargarlo para Chrome. La compilación es reproducible, también en arm64, como pide AMO para revisar
+  el código.
+
+Descartado:
+- **AMO con ficha:** más visible, con la revisión de la ficha y sin `update_url`, para lo mismo que ya dan las
+  releases con las actualizaciones automáticas.
+- **Chrome fuera de la tienda (un CRX propio):** Chrome solo lo instala en Linux.
+
+Investigación: `investigacion/navegador/tiendas.md`.
+
+**D31. El chat, barato de pintar en la extensión y en Android (24 oct).** Medido en Chrome con la GPU, el chat real de
+un canal con mucho movimiento costaba casi lo mismo que el vídeo: el navegador pasaba del 25 % de un núcleo sin chat al
+48 % con él. Una traza dio cuatro causas, todas de cómo se pintaba, no de cuánto se recibe:
+- **Cada lote de mensajes rehacía la maquetación de la página entera** (~1250 elementos, 3-5 ms, unas 10 veces por
+  segundo). La lista lleva `contain: strict` (D16) para que no pase, pero Chrome no maqueta aparte a una hija de una
+  rejilla o de un flex, y la lista lo era. Ahora va dentro de un bloque: solo se maqueta ella (0,2 ms).
+- **Cada lote volvía a pintar el canal entero en React:** el chat vivía en la vista del canal, con los controles, la
+  ficha y los vídeos de debajo. Además, cada tarjeta de vídeo leía y parseaba entero lo guardado de los VOD
+  (`vods-vistos`, hasta 100) en cada pintado: unas 275 veces por segundo con 25 tarjetas. Ahora el chat va en su propio
+  componente, la lista de vídeos está memoizada y lo guardado solo se vuelve a parsear si ha cambiado.
+- **Cada mensaje nuevo quitaba el más antiguo,** y todos los demás se movían y se volvían a pintar. Ahora se quitan
+  por tandas de 50: la lista guarda entre 150 y 200, también en el chat de un VOD.
+- **En pantallas a 1x, Chrome no componía aparte el desplazamiento del chat,** para no perder los subpíxeles del
+  texto, así que cada lote volvía a dibujar todo el chat visible. Con un fondo opaco en la lista (el mismo del panel)
+  lo compone sin perderlos. Solo en la extensión: en el teléfono, a más de 1x, ya lo hacía.
+
+Resultado en Chrome, con las dos versiones a la vez leyendo el mismo chat: con 15 mensajes por segundo idénticos, la CPU
+del navegador baja del 39,5 al 29,3 % de un núcleo (−26 %) y el hilo de la página, del 14,1 al 7,0 % (−50 %); con el
+chat real de `xqc` (4-12 mensajes por segundo), el hilo de la página baja un 22-33 %. En Zen, el proceso de la página
+baja un 22 % (Firefox no tenía el problema de la maquetación). En Android, en el emulador, el proceso de la WebView baja
+un 21 %. Ir de canal en canal no acumula memoria, nodos ni listeners. Detalle en
+[verificacion.md](verificacion.md#el-chat-barato-de-pintar-d31).
+
+Descartado:
+- **`content-visibility: auto` en los mensajes,** para no pintar los que no se ven: sale peor (el hilo de la página,
+  del 6,9 al 9 %), porque el navegador decide en cada fotograma cuáles entran y salen de la vista.
+- **`will-change: scroll-position`** en vez del fondo opaco: ahorra lo mismo, pero el texto del chat pierde los
+  subpíxeles.
+
+**D32. Solo audio con la pantalla apagada, la calidad recordada e imagen en imagen (24 oct).** El usuario eligió cuatro
+de las propuestas del repaso antes de la 1.0, y descartó los avisos de directo y el formato corto de los espectadores
+en la columna. La imagen en imagen, solo si no costaba rendimiento.
+- **Android: con la pantalla apagada, solo audio.** Al dejar de verse la app (la pantalla apagada, otra app delante, o
+  el PiP con la pantalla apagada), el canal se vuelve a abrir en la variante de solo audio de Twitch, y al volver a
+  verse, con vídeo. Solo si suena en el directo, sin pausa ni retroceder (si no, se perdería dónde estaba). Pasa por el
+  empalme, que admite `audio_only@0` como una calidad más: pedir a Twitch su lista de solo audio directamente traería
+  los anuncios. Sin el relleno con el VOD, cuyos trozos son de vídeo y se sitúan por la imagen: en una pausa de anuncios
+  de todas las sesiones, silencio, como en el modo *Directo*. Si el canal no da solo audio, el vídeo que menos gasta.
+  Medido en el emulador: con la pantalla apagada, de 8,3 a 0,39 Mbit/s (unos 175 MB por hora en vez de ~3,7 GB). El
+  precio: cambiar era volver a abrir el canal, con un corte de sonido al apagarla y una carga al encenderla (en el S25,
+  el vídeo a los 0,92 s de desbloquear). Lo quita el relevo (D33). Los VOD siguen igual.
+- **La extensión: la calidad del directo, como el volumen.** Se guarda en el `localStorage` de la página (una pestaña
+  nueva, o al volver a abrir, empieza con la última que se eligió), y el menú tiene «Auto» (la mejor que dé el canal:
+  «Auto (1080p60)»). Sin calidad pedida, el directo ya no reutiliza un empalme abierto con otra: al volver a «Auto»
+  tras 720p, se quedaba en 720p.
+- **La extensión: al retroceder al VOD, la calidad del directo.** Empieza y se queda en ella (la misma, la de la misma
+  altura o la mejor que no pase de ella): quien la bajó para ahorrar no ve el VOD en 1080p. Los VOD que se abren por su
+  cuenta siguen en automática.
+- **La extensión: imagen en imagen,** con un botón en el directo y en un VOD, donde el navegador la admite (Chrome,
+  Firefox 158 y Zen 1.23 la tienen), y no con el vídeo estrecho, para que quepan los controles. Mientras no se usa, no
+  hace nada. Usándola, la CPU del navegador, igual (+0,1-0,5 puntos en tres medidas). Se cierra al cambiar de canal o
+  retroceder al VOD (cada uno tiene su `<video>`).
+
+**D33. Sin corte al pasar a solo audio, y el chat a pantalla completa, aparte (24 oct).** Probando D32 en el S25, el
+usuario notó un corte de sonido de ~0,5 s al apagar la pantalla y una carga al encenderla. Y en la extensión, la
+pantalla completa con el chat dependía de dos botones a la vez (el modo teatro y el chat de la ventana), y no se
+entendía.
+- **Android: el relevo.** Pasar a solo audio o volver al vídeo ya no es volver a abrir el canal. El reproductor nuevo se
+  prepara callado mientras el de antes suena, y se coloca en la misma hora de los fragmentos (PDT), 1,5 s por delante.
+  Cuando el de antes llega ahí, suena el nuevo y se suelta el de antes. En el emulador quedan a 1-5 ms uno del otro, la
+  página no ve ninguna carga y la sesión de medios sigue en «PLAYING». Si algo falla, o no está en 12 s, se cambia como
+  antes. Al encenderse la pantalla, aún bloqueada, el vídeo ya empieza a volver, y al desbloquear está (en el emulador, a
+  los 40-50 ms; sin esto, ~2,3 s). Si se apaga sin desbloquearla, otra vez solo audio. Lo retrocedido sigue
+  retrocedido.
+- **El motor: el empalme de antes sigue un rato.** Si otro reproductor (otra visita) pide otra calidad del mismo canal,
+  el empalme de antes no se para: sirve al suyo (su lista y sus trozos del VOD) hasta 10 s después de su última
+  petición. El relevo lo necesita: si no, cada petición del de antes pararía el del nuevo, y al revés. En las tres
+  versiones, además, una petición tardía del reproductor de antes ya no para el nuevo al cambiar de calidad. Con otro
+  canal se paran los dos, como siempre.
+- **La extensión: la pantalla completa, con su propio chat.** Ahí solo cuenta C (o su botón). Empieza oculto, como en
+  Twitch, YouTube y Android en horizontal, y se recuerda en el `localStorage` de la página, aparte del chat de la
+  ventana. El modo teatro es solo de la ventana: a pantalla completa, su botón no sale y T no hace nada. Antes eran tres
+  mandos que se cruzaban (ocho combinaciones para cuatro vistas, y C no hacía nada a pantalla completa sin el modo
+  teatro). El usuario la eligió entre tres opciones. Las otras: un solo chat para todo (quitarlo a pantalla completa lo
+  quitaba también de la ventana) y que el modo teatro llevara siempre el chat (lo que se ve seguiría dependiendo de dónde
+  se pulsara F).
+- **Android: el chat en horizontal también se recuerda siempre,** en cualquier canal o VOD y al volver a abrir la app.
+  Antes valía mientras se veía el mismo canal.
 
 ## 4. Revisión temprana
 

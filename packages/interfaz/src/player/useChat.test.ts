@@ -1,6 +1,13 @@
 import type { ChatMessage } from "@goodttv/contratos"
 import { describe, expect, it } from "vitest"
-import { applyChatEvents, CHAT_HISTORY, CHAT_MAX_HELD, ChatDelayQueue } from "./useChat"
+import {
+  applyChatEvents,
+  CHAT_HISTORY,
+  CHAT_MAX_HELD,
+  CHAT_TRIM,
+  ChatDelayQueue,
+  chatWindowStart,
+} from "./useChat"
 
 const message = (id: string, userId = "1"): ChatMessage => ({
   action: false,
@@ -14,13 +21,31 @@ const message = (id: string, userId = "1"): ChatMessage => ({
 
 describe("applyChatEvents", () => {
   it("appends messages and keeps a bounded history", () => {
-    const events = Array.from({ length: CHAT_HISTORY + 10 }, (_, index) => ({
+    const events = Array.from({ length: CHAT_HISTORY + CHAT_TRIM + 10 }, (_, index) => ({
       kind: "message" as const,
       message: message(String(index)),
     }))
     const state = applyChatEvents({ messages: [], status: "connected" }, events)
     expect(state.messages).toHaveLength(CHAT_HISTORY)
-    expect(state.messages[0]?.id).toBe("10")
+    expect(state.messages[0]?.id).toBe(String(CHAT_TRIM + 10))
+  })
+
+  it("drops the oldest messages in batches, so the ones shown stay in place", () => {
+    const events = (from: number, count: number) =>
+      Array.from({ length: count }, (_, index) => ({
+        kind: "message" as const,
+        message: message(String(from + index)),
+      }))
+    let state = applyChatEvents({ messages: [], status: "connected" }, events(0, CHAT_HISTORY))
+    // Each new message used to push the first one out; now the first stays until CHAT_TRIM more have arrived.
+    for (let n = CHAT_HISTORY; n < CHAT_HISTORY + CHAT_TRIM; n++) {
+      state = applyChatEvents(state, events(n, 1))
+      expect(state.messages[0]?.id).toBe("0")
+    }
+    expect(state.messages).toHaveLength(CHAT_HISTORY + CHAT_TRIM)
+    state = applyChatEvents(state, events(CHAT_HISTORY + CHAT_TRIM, 1))
+    expect(state.messages).toHaveLength(CHAT_HISTORY)
+    expect(state.messages.at(-1)?.id).toBe(String(CHAT_HISTORY + CHAT_TRIM))
   })
 
   it("puts the copy from EventSub in place of one's own message, already shown", () => {
@@ -100,5 +125,19 @@ describe("ChatDelayQueue", () => {
     const queue = new ChatDelayQueue(() => 0)
     queue.push([{ kind: "clear" }], 100)
     expect(queue.due(100)).toEqual([{ kind: "clear" }])
+  })
+})
+
+describe("chatWindowStart", () => {
+  it("shows between CHAT_HISTORY and CHAT_HISTORY + CHAT_TRIM, moving the start in steps of CHAT_TRIM", () => {
+    let previous = 0
+    for (let length = 0; length <= 1000; length++) {
+      const start = chatWindowStart(length)
+      expect(length - start).toBeLessThanOrEqual(CHAT_HISTORY + CHAT_TRIM)
+      if (length >= CHAT_HISTORY) expect(length - start).toBeGreaterThanOrEqual(CHAT_HISTORY)
+      expect(start % CHAT_TRIM).toBe(0)
+      expect(start).toBeGreaterThanOrEqual(previous)
+      previous = start
+    }
   })
 })

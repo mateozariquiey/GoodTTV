@@ -11,23 +11,25 @@ tres comparten el código que quita los anuncios, la cuenta y el chat.
 
 | App | Para qué | Estado |
 | --- | --- | --- |
-| [Navegador](#navegador) (`apps/navegador`) | Chrome, Chromium, Firefox y Zen, con ratón y teclado | 0.3.0 |
-| [Android](#android) (`apps/android`) | Teléfonos con Android 13 o posterior | 0.3.0, experimental |
-| [Tele](#tele) (`apps/tele`) | Un mini PC Linux conectado a la tele, con un mando | 0.3.0, ya no se prueba en una tele |
+| [Navegador](#navegador) (`apps/navegador`) | Chrome, Chromium, Firefox y Zen, con ratón y teclado | 0.4.0 |
+| [Android](#android) (`apps/android`) | Teléfonos con Android 13 o posterior | 0.4.0, experimental |
+| [Tele](#tele) (`apps/tele`) | Un mini PC Linux conectado a la tele, con un mando | 0.4.0, ya no se prueba en una tele |
 
 ![Extensión: un canal con los controles encima del vídeo, su ficha y el chat; a la izquierda, los seguidos en directo](docs/media/escritorio-canal.jpg)
 
-## Lo nuevo de la 0.3.0
+## Lo nuevo de la 0.4.0
 
-- **Los VOD**, en la extensión y en Android: una barra con miniaturas, la velocidad, el chat tal como se escribió en
-  el directo, y siguen donde los dejaste.
-- **Retroceder un directo** hasta su principio, y volver con «Ir al directo». ← y → mueven 10 s.
-- **Escribir en el chat**, con los emotes de 7TV, BTTV, FFZ y los tuyos de Twitch. Para permitirlo hay que volver a
-  vincular la cuenta.
-- **Buscar como en twitch.tv**, por relevancia y con erratas, sin cuenta.
-- **Varias pestañas a la vez**, cada una con su canal. Solo suena la última que miraste.
-- **Inicio sale antes**, y ya no enseña canales de una sesión pasada como si estuvieran en directo.
-- **La primera versión de Android**, experimental.
+- **Solo audio con la pantalla apagada,** en Android: el canal pasa a la versión de solo audio de Twitch sin cortarse,
+  y al desbloquear ya está la imagen. Unos 0,4 Mbit/s en vez de 8: unos 175 MB por hora en vez de 3,7 GB.
+- **El chat cuesta menos de pintar:** con mucho movimiento, el hilo de la página de la extensión pasa del 10,5 % al
+  7,6 % de un núcleo, y la WebView de Android, del 30 % al 24 %.
+- **Android abre antes el último canal que viste,** en ~0,5 s en vez de 1,6 s: lo va preparando al abrir la app.
+- **La calidad se recuerda,** como el volumen, con «Auto» en el menú, y al retroceder al VOD sigue en ella.
+- **La pantalla completa, con su propio chat:** `C` lo pone al lado del vídeo y se recuerda. El modo teatro es de la
+  ventana. En Android, el chat en horizontal también se recuerda.
+- **Imagen en imagen** en la extensión, en Chrome, Firefox y Zen.
+- **Arreglos:** las pausas largas e «Ir al directo», los VOD en fMP4 que empezaban en baja calidad, Espacio tras un
+  clic y, en Android, retroceder a pantalla completa y la velocidad de los VOD.
 
 ## Cómo quita los anuncios
 
@@ -57,8 +59,9 @@ Chrome y para Firefox.
   ves cada uno. Se puede plegar.
 - **La búsqueda siempre arriba** (`/`), por relevancia, como en twitch.tv.
 - **El canal:** los controles van encima del vídeo y se ocultan con el ratón quieto: calidad, modo teatro (`T`),
-  pantalla completa (`F`), chat (`C`) y silencio (`M`). ↑/↓ cambian de canal, ←/→ mueven 10 s y `Fin` vuelve al
-  directo. Si el canal guarda su VOD, la barra llega hasta el principio de la emisión.
+  pantalla completa (`F`, con su propio chat al lado), chat (`C`), imagen en imagen y silencio (`M`). ↑/↓ cambian de
+  canal, ←/→ mueven 10 s y `Fin` vuelve al directo. Si el canal guarda su VOD, la barra llega hasta el principio de la
+  emisión. El volumen y la calidad se recuerdan, también al abrir otra pestaña.
 - **El chat**, con los emotes de 7TV, BTTV, FFZ y Twitch. Al pasar el ratón por un emote, dice su nombre. Para
   escribir, `Tab` y `:` completan emotes, o puedes elegirlos de una lista.
 - **Los VOD**, debajo de cada canal. Se abren en la mejor calidad que aguanta tu conexión, siguen 5 s antes de donde
@@ -71,15 +74,15 @@ Chrome y para Firefox.
 
 ![Extensión: un VOD con sus controles, su chat y, debajo, los demás vídeos del canal](docs/media/escritorio-vod.jpg)
 
-**Instalarla:** no está en las tiendas. Descarga `goodttv-0.3.0.xpi` de las
+**Instalarla:** no está en las tiendas. Descárgala de las
 [releases](https://github.com/mateozariquiey/GoodTTV/releases).
-- **Zen** (y Firefox Developer Edition o Nightly): en `about:config`, pon `xpinstall.signatures.required` a
-  `false`. Después, en `about:addons`, menú del engranaje → «Instalar complemento desde archivo…».
+- **Zen** (y Firefox Developer Edition o Nightly), con `goodttv-0.4.0.xpi`: en `about:config`, pon
+  `xpinstall.signatures.required` a `false`. Después, en `about:addons`, menú del engranaje → «Instalar complemento
+  desde archivo…».
 - **Firefox:** solo admite complementos sin firmar de forma temporal: `about:debugging` → «Este Firefox» → «Cargar
-  complemento temporal…». Se quita al cerrar Firefox.
-- **Chrome y Chromium,** también en Windows:
-  1. El `.xpi` es un ZIP. Descomprímelo en una carpeta que vayas a conservar. En Windows, cámbiale la extensión a
-     `.zip` y usa «Extraer todo», o ábrelo con 7-Zip.
+  complemento temporal…» y el `.xpi`. Se quita al cerrar Firefox.
+- **Chrome y Chromium,** también en Windows, con `goodttv-0.4.0-chrome.zip`:
+  1. Descomprímelo en una carpeta que vayas a conservar.
   2. En `chrome://extensions`, activa el «Modo Desarrollador» (arriba a la derecha).
   3. Pulsa «Cargar descomprimida» y elige esa carpeta.
 
@@ -95,9 +98,9 @@ Para compilarla, `bun run build:navegador` (deja la extensión en `apps/navegado
 
 **Experimental.** Lo mismo para quitar los anuncios, la cuenta y el chat, con pantallas para el dedo: Inicio, la
 búsqueda, el canal con su chat y sus vídeos, los VOD y retroceder el directo. El vídeo va con el reproductor propio de
-Android (Media3) y sigue sonando con la pantalla apagada, con sus controles en la notificación, en la pantalla de
-bloqueo y en los auriculares. Como en la app de Twitch, el canal que dejas sigue en una esquina, deslizar hacia abajo
-sobre el vídeo vuelve atrás, y al salir de la app pasa a imagen en imagen.
+Android (Media3) y sigue sonando con la pantalla apagada, en solo audio para gastar menos datos, con sus controles en
+la notificación, en la pantalla de bloqueo y en los auriculares. Como en la app de Twitch, el canal que dejas sigue en
+una esquina, deslizar hacia abajo sobre el vídeo vuelve atrás, y al salir de la app pasa a imagen en imagen.
 
 <p>
   <img alt="Inicio en Android: los seguidos en directo, cada uno con una miniatura pequeña" src="docs/media/android-inicio.jpg" width="270">
@@ -107,11 +110,11 @@ sobre el vídeo vuelve atrás, y al salir de la app pasa a imagen en imagen.
 Solo se ha probado en un teléfono (un Galaxy S25 Ultra con Android 16). Que el chat vaya a la par de la imagen se ha
 comprobado a ojo, sin medirlo.
 
-**Instalarla** (Android 13 o posterior): descarga `GoodTTV-0.3.0.apk` de las
+**Instalarla** (Android 13 o posterior): descarga `GoodTTV-0.4.0.apk` de las
 [releases](https://github.com/mateozariquiey/GoodTTV/releases) en el teléfono y ábrelo. Android te pedirá permiso para
 instalar apps desde el navegador o el gestor de archivos, y Play Protect puede avisar de que no conoce al
 desarrollador. Las versiones nuevas se instalan encima de la anterior y conservan la cuenta, porque van firmadas con la
-misma clave. Desde un ordenador, `adb install -r GoodTTV-0.3.0.apk` hace lo mismo. La huella SHA-256 del certificado de
+misma clave. Desde un ordenador, `adb install -r GoodTTV-0.4.0.apk` hace lo mismo. La huella SHA-256 del certificado de
 la firma es `38:CF:EA:F9:1C:2F:8C:C4:B8:35:27:11:BD:77:7F:56:0E:A8:D5:4F:87:37:C4:91:6C:B6:BA:C8:27:32:5A:D6` (la enseña `apksigner verify --print-certs`).
 
 Para compilarla hacen falta el SDK de Android y un JDK 21: lo explica [apps/android/README.md](apps/android/README.md).
@@ -156,7 +159,7 @@ x86_64) y ejecútalo; arranca a pantalla completa y necesita `libfuse2`. Para co
 ```bash
 bun install --frozen-lockfile
 bun run build && bun run start   # en una ventana, para probar
-bun run package:appimage         # apps/tele/dist/GoodTTV-0.3.0-x86_64.AppImage
+bun run package:appimage         # apps/tele/dist/GoodTTV-0.4.0-x86_64.AppImage
 ```
 
 ## El código

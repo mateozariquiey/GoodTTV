@@ -1,10 +1,10 @@
 // @vitest-environment jsdom
 
-import { useHlsPlayer } from "@goodttv/interfaz"
+import { useHlsPlayer, useOpeningPrewarm } from "@goodttv/interfaz"
 import { act, createElement, useRef } from "react"
 import { createRoot, type Root } from "react-dom/client"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
-import { OPENING_PREWARM_MS, PREWARM_MS, useOpeningPrewarm, usePointerPrewarm } from "./prewarm"
+import { PREWARM_MS, usePointerPrewarm } from "./prewarm"
 
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true })
 
@@ -127,66 +127,65 @@ describe("precalentar con una calidad elegida a mano", () => {
     ])
   })
 
-  it("sin reproductor abierto, ninguna (el canal se abrirá en automática)", () => {
+  it("sin reproductor abierto, la última elegida, con la que se abrirá el canal", () => {
     render(createElement(Player))
     act(() => player?.setQuality("1280x720@60"))
     act(() => root?.render(createElement(Prewarm)))
+    pointer("pointerdown", link("b"))
+    expect(prewarmed()).toEqual(["/stream/b/precalentar?modo=adaptativo&q=1280x720%4060"])
+    // Otro reproductor (al volver de un VOD, o abierto desde Inicio) la pide.
+    fetched.mockClear()
+    act(() => root?.render(createElement(Player)))
+    expect(fetched.mock.calls.map(([url]) => url).find((url) => url.includes("/info"))).toContain(
+      "q=1280x720%4060",
+    )
+  })
+})
+
+describe("la calidad elegida, guardada", () => {
+  let player: ReturnType<typeof useHlsPlayer> | undefined
+  const Player = () => {
+    const surface = useRef<HTMLDivElement>(null)
+    player = useHlsPlayer(surface, "a", true, "adaptativo")
+    return createElement("div", { ref: surface })
+  }
+
+  beforeEach(() => {
+    vi.stubGlobal("api", { player: { setWatching: async () => undefined } })
+    vi.spyOn(HTMLMediaElement.prototype, "pause").mockImplementation(() => undefined)
+    vi.spyOn(HTMLMediaElement.prototype, "load").mockImplementation(() => undefined)
+  })
+
+  it("se guarda en localStorage, como el volumen, y «Auto» la quita", () => {
+    render(createElement("div", null, createElement(Player), createElement(Prewarm)))
+    act(() => player?.setQuality("852x480@30"))
+    expect(localStorage.getItem("calidad-directo")).toBe("852x480@30")
+    expect(player?.chosenQuality).toBe("852x480@30")
+    act(() => player?.setQuality(null))
+    expect(localStorage.getItem("calidad-directo")).toBeNull()
+    expect(player?.chosenQuality).toBeNull()
     pointer("pointerdown", link("b"))
     expect(prewarmed()).toEqual(["/stream/b/precalentar?modo=adaptativo"])
   })
 })
 
 describe("precalentar al abrir (REN-1)", () => {
-  type Props = {
-    readonly atHome?: boolean
-    readonly live?: boolean | null // null: aún no hay último canal visto
-    readonly login?: string
-    readonly ready?: boolean
-  }
-  const Opening = ({ atHome = true, live = true, login = "ultimo", ready = true }: Props) => {
+  // La lógica se prueba en @goodttv/interfaz (opening-prewarm.test.ts); aquí, que en la extensión va al directo de la
+  // página, con el modo guardado.
+  const Opening = () => {
     useOpeningPrewarm(
-      atHome,
-      live === null ? undefined : { displayName: login, live, login },
+      true,
+      { displayName: "ultimo", live: true, login: "ultimo" },
       "sin-paradas",
-      ready,
+      true,
     )
     return null
   }
-  const update = (props: Props): void => {
-    act(() => root?.render(createElement(Opening, props)))
-  }
 
-  it("precalienta el último canal visto si emite, con el modo guardado", () => {
+  it("precalienta el último canal visto en el directo de la página", () => {
     render(createElement(Opening))
-    expect(prewarmed()).toEqual(["/stream/ultimo/precalentar?modo=sin-paradas"])
-  })
-
-  it("espera al modo guardado y no repite", () => {
-    render(createElement(Opening, { ready: false }))
-    expect(prewarmed()).toEqual([])
-    update({ ready: true })
-    update({ login: "otro" })
-    expect(prewarmed()).toEqual(["/stream/ultimo/precalentar?modo=sin-paradas"])
-  })
-
-  it("si lo guardado no dice que emite, espera a lo de ahora unos segundos", () => {
-    render(createElement(Opening, { live: false }))
-    update({ live: null })
-    expect(prewarmed()).toEqual([])
-    update({ live: true })
-    expect(prewarmed()).toEqual(["/stream/ultimo/precalentar?modo=sin-paradas"])
-  })
-
-  it("pasado el plazo, ya no", () => {
-    render(createElement(Opening, { live: false }))
-    wait(OPENING_PREWARM_MS + 1)
-    update({ live: true })
-    expect(prewarmed()).toEqual([])
-  })
-
-  it("ni si se abrió en otra vista", () => {
-    render(createElement(Opening, { atHome: false }))
-    update({ atHome: true })
-    expect(prewarmed()).toEqual([])
+    // Con la calidad elegida en esta página, si la hay (aquí, la de una prueba anterior).
+    expect(prewarmed()).toHaveLength(1)
+    expect(prewarmed()[0]).toMatch(/^\/stream\/ultimo\/precalentar\?modo=sin-paradas(&q=|$)/)
   })
 })

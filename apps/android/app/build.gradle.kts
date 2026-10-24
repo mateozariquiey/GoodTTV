@@ -29,8 +29,8 @@ android {
         targetSdk = 36
         // La versión de la familia (D18); el código, para que Android instale cada una encima de la anterior:
         // mayor × 10 000 + menor × 100 + parche.
-        versionCode = 300
-        versionName = "0.3.0"
+        versionCode = 400
+        versionName = "0.4.0"
         // Si la WebView se puede inspeccionar por CDP (chrome://inspect): solo en las variantes para depurar y medir.
         buildConfigField("boolean", "CDP", "false")
         // Si escribe la batería en logcat para medir la potencia (Bateria.kt): solo en la variante para medir.

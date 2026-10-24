@@ -28,10 +28,20 @@ export type VodProgress = {
 
 type Store = Readonly<Record<string, VodProgress>>
 
+// Lo último leído, mientras no cambie: cada tarjeta de una lista de vídeos pregunta por el suyo, y la lista se vuelve a
+// pintar a menudo (con el chat o la posición del vídeo). Parsear las 100 entradas para cada tarjeta costaba.
+let lastRead: { readonly raw: string; readonly storage: Storage; readonly store: Store } | null =
+  null
+
 const read = (storage: Storage | undefined): Store => {
   try {
-    const parsed: unknown = JSON.parse(storage?.getItem(KEY) ?? "{}")
-    return typeof parsed === "object" && parsed !== null ? (parsed as Store) : {}
+    const raw = storage?.getItem(KEY) ?? "{}"
+    if (storage !== undefined && lastRead?.storage === storage && lastRead.raw === raw)
+      return lastRead.store
+    const parsed: unknown = JSON.parse(raw)
+    const store = typeof parsed === "object" && parsed !== null ? (parsed as Store) : {}
+    if (storage !== undefined) lastRead = { raw, storage, store }
+    return store
   } catch {
     return {}
   }

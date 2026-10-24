@@ -1,9 +1,9 @@
 // Prueba de la interfaz de escritorio de la extensión, en Chrome for Testing y en Firefox (sin ventana ni sonido) y sin
 // cuenta: buscar con / y abrir con Enter, que reproduzca, pausar con Espacio y con un clic en el vídeo, modo teatro (T,
-// Esc), chat (C), silencio (M), volver a Inicio con el canal en «Seguir viendo», pedir y cancelar el código de la
+// Esc; en Chrome, F a pantalla completa, con su propio chat), chat (C), silencio (M), volver a Inicio con el canal en «Seguir viendo», pedir y cancelar el código de la
 // cuenta, un modo de retraso que se conserva al recargar, Inicio sin poder comprobar la cuenta y cerrar sesión así
-// (?sinred, EXT-4), un VOD de las emisiones del canal (VOD-1) y dos pestañas a la vez, con sonido solo en la última
-// (EXT-5).
+// (?sinred, EXT-4), un VOD de las emisiones del canal (VOD-1) con el volumen elegido en el directo, que sigue al
+// volver a él, y dos pestañas a la vez, con sonido solo en la última (EXT-5) y la nueva con ese volumen.
 // En Chrome, teclas, texto y clics son de verdad (CDP); en Firefox se simulan en la página (BiDi no los admite en las
 // páginas de una extensión).
 // Uso, desde la raíz y con la extensión compilada (bun run build:navegador):
@@ -50,8 +50,16 @@ const SAVED_HOME = {
 
 const VIDEO = `(() => {
   const video = document.querySelector(".stage__surface video")
-  return video === null ? null : { alto: video.videoHeight, pausado: video.paused, silencio: video.muted, tiempo: video.currentTime }
+  return video === null ? null : { alto: video.videoHeight, pausado: video.paused, silencio: video.muted, tiempo: video.currentTime, volumen: video.volume }
 })()`
+// Mueve la barra del volumen como al arrastrarla: React solo ve el cambio si el valor se pone con el setter nativo.
+const setVolume = (value) => `(() => {
+  const input = document.querySelector("input.volume")
+  Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value").set.call(input, "${value}")
+  input.dispatchEvent(new Event("input", { bubbles: true }))
+  return 0
+})()`
+const atVolume = (value) => `Math.abs((${VIDEO})?.volumen - ${value}) < 0.01`
 
 const run = async (name, launch) => {
   const { HUMO_CHROME: chrome, HUMO_FIREFOX: firefox } = process.env
@@ -130,6 +138,33 @@ const run = async (name, launch) => {
         `document.querySelector(".desktop--theater") !== null && getComputedStyle(document.querySelector(".topbar")).display === "none"`,
       ),
     )
+    // A pantalla completa, el chat va aparte del de la ventana (D33): la primera vez, solo el vídeo; C lo pone al lado,
+    // y se recuerda. El modo teatro es de la ventana: su botón no sale. Solo en Chrome: en Firefox las teclas se simulan
+    // en la página, y el navegador no deja pedir la pantalla completa sin una de verdad.
+    if (name === "chrome") {
+      const completa = `document.fullscreenElement?.classList.contains("watch") && document.querySelector(".stage").getBoundingClientRect().height === innerHeight`
+      const chatAlLado = `document.querySelector(".watch > .chat")?.getBoundingClientRect().height === innerHeight`
+      await press("f")
+      step(
+        "F, a pantalla completa solo el vídeo, sin el botón del modo teatro",
+        await waitFor(
+          `${completa} && document.querySelector(".watch > .chat") === null && document.querySelector('[aria-label="Modo teatro"]') === null`,
+        ),
+      )
+      await press("c")
+      step("C pone el chat al lado", await waitFor(`${completa} && ${chatAlLado}`))
+      await browser.evaluate("document.exitFullscreen().then(() => 0)")
+      step(
+        "al salir, sigue en modo teatro, con el chat de la ventana",
+        await waitFor(
+          `document.fullscreenElement === null && document.querySelector(".desktop--theater") !== null && document.querySelector(".watch > .chat") !== null`,
+        ),
+      )
+      await press("f")
+      step("y la próxima vez, con el chat al lado", await waitFor(`${completa} && ${chatAlLado}`))
+      await browser.evaluate("document.exitFullscreen().then(() => 0)")
+      await waitFor(`document.fullscreenElement === null`)
+    }
     await press("Escape")
     step(
       "Esc sale del modo teatro",
@@ -247,6 +282,12 @@ const run = async (name, launch) => {
       "debajo de la ficha, sus emisiones anteriores",
       await waitFor(`document.querySelectorAll(".videos .video-tile").length > 0`, 20_000),
     )
+    // El directo y el VOD son pantallas con su propio <video>: el volumen elegido en una sigue en la otra.
+    await waitFor(`(${VIDEO})?.tiempo > 1`, 40_000)
+    await browser.evaluate(setVolume(0.3))
+    step("el volumen, a 30 %", await waitFor(atVolume(0.3)), {
+      volumen: await browser.evaluate(`(${VIDEO})?.volumen`),
+    })
     // Está debajo del vídeo: a la vista antes del clic (en Chrome el clic es de verdad, en sus coordenadas). La marca
     // dice si la página se ha recargado entre medias.
     await browser.evaluate(
@@ -260,6 +301,9 @@ const run = async (name, launch) => {
         30_000,
       ),
     )
+    step("con el volumen del directo", await browser.evaluate(atVolume(0.3)), {
+      volumen: await browser.evaluate(`(${VIDEO})?.volumen`),
+    })
     const before = await browser.evaluate(`(${VIDEO}).tiempo`)
     await press("l")
     step("L salta 10 s", await waitFor(`(${VIDEO}).tiempo >= ${before} + 9`), {
@@ -281,6 +325,9 @@ const run = async (name, launch) => {
       "la primera pestaña vuelve a su canal, con sonido",
       await waitFor(`(${VIDEO})?.tiempo > 3 && (${VIDEO})?.silencio === false`, 40_000),
     )
+    step("y con el volumen que tenía", await browser.evaluate(atVolume(0.3)), {
+      volumen: await browser.evaluate(`(${VIDEO})?.volumen`),
+    })
     const other = await browser.openTab(`goodttv.html#/canal/${channel}`)
     const waitIn = async (page, expression, ms = 40_000) => {
       const until = Date.now() + ms
@@ -292,6 +339,9 @@ const run = async (name, launch) => {
     }
     step("otra pestaña abre el canal y reproduce", await waitIn(other, `(${VIDEO})?.tiempo > 3`))
     step("con sonido", await waitIn(other, `(${VIDEO})?.silencio === false`))
+    step("y con el volumen elegido en la primera", await waitIn(other, atVolume(0.3)), {
+      volumen: await other.evaluate(`(${VIDEO})?.volumen`),
+    })
     step(
       "y la primera sigue, sin sonido",
       await waitFor(`(${VIDEO})?.silencio === true && (${VIDEO})?.pausado === false`),

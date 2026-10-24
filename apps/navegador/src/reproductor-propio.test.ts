@@ -221,10 +221,10 @@ describe("salto del arranque", () => {
 })
 
 describe("retroceder dentro de la lista", () => {
-  const seekBy = (seconds: number, orStart = false): boolean => {
-    let moved = false
+  const seekBy = (seconds: number, orStart = false): number | null => {
+    let moved: number | null = null
     act(() => {
-      moved = current?.seekBy(seconds, orStart) ?? false
+      moved = current?.seekBy(seconds, orStart) ?? null
     })
     return moved
   }
@@ -233,7 +233,7 @@ describe("retroceder dentro de la lista", () => {
     const { player, video } = await open()
     fire(video, "playing")
     video.currentTime = 30 // el objetivo, en 32
-    expect(seekBy(-10)).toBe(true)
+    expect(seekBy(-10)).toBe(-10) // lo que se ha movido
     expect(video.currentTime).toBe(20)
     expect(current?.rewound).toBe(true)
     expect(player.config.liveMaxLatencyDuration).toBe(Number.POSITIVE_INFINITY)
@@ -247,10 +247,10 @@ describe("retroceder dentro de la lista", () => {
     const { player, video } = await open()
     video.currentTime = 30
     seekBy(-10)
-    expect(seekBy(10)).toBe(true)
+    expect(seekBy(10)).not.toBeNull()
     expect(video.currentTime).toBe(30)
     expect(current?.rewound).toBe(true)
-    expect(seekBy(Number.POSITIVE_INFINITY)).toBe(true)
+    expect(seekBy(Number.POSITIVE_INFINITY)).not.toBeNull()
     expect(video.currentTime).toBe(32)
     expect(current?.rewound).toBe(false)
     expect(player.config.liveMaxLatencyDuration).toBe(65) // objetivo + 60
@@ -259,9 +259,9 @@ describe("retroceder dentro de la lista", () => {
   it("más atrás de la lista no se mueve, salvo que se pida su principio (3 fragmentos dentro)", async () => {
     const { video } = await open()
     video.currentTime = 30
-    expect(seekBy(-40)).toBe(false)
+    expect(seekBy(-40)).toBeNull()
     expect(video.currentTime).toBe(30)
-    expect(seekBy(-40, true)).toBe(true)
+    expect(seekBy(-40, true)).not.toBeNull()
     expect(video.currentTime).toBe(6)
   })
 
@@ -269,8 +269,8 @@ describe("retroceder dentro de la lista", () => {
     const { player, video } = await open()
     player.latestLevelDetails = { age: 0.5, edge: 8, fragmentStart: 0 } // el objetivo, en 3,5; el principio, en 6
     video.currentTime = 3.5
-    expect(seekBy(-10)).toBe(false)
-    expect(seekBy(-10, true)).toBe(true)
+    expect(seekBy(-10)).toBeNull()
+    expect(seekBy(-10, true)).not.toBeNull()
     expect(video.currentTime).toBe(3.5)
     expect(current?.rewound).toBe(false)
   })

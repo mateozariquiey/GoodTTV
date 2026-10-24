@@ -793,6 +793,7 @@ fotogramas perdidos son fiables, 0,1-0,4 %; en un Weston 14 sin pantalla salían
 - **REN-1:** al abrir GoodTTV en Inicio, se precalienta el último canal visto si emite (`useOpeningPrewarm`, con
   pruebas). El arranque que se gana es el de precalentar (D16: ~0,5 s en vez de ~0,9 s si se abre tras medio segundo).
   Solo en la extensión: la tele ya precalienta el canal con el foco al abrir, y Android aún no precalienta (no hay ratón).
+  Desde el 24 de octubre, Android también lo hace al abrir, en el motor de la app.
 - **REP-1:** `/info` dice aparte la calidad que suena (`playing`), y el menú enseña esa. Pidiendo 720p60 a dos canales
   pequeños en directo: `meromeruu` (solo 30 fps) sonaba en 1080p30 y el menú decía «Auto». Además, sin la pedida, el
   empalme elige la misma resolución u otra que no pase de ella (`pickVariant`): ahora suena en 720p30. Con pruebas,
@@ -884,4 +885,184 @@ detrás); para un salto hacia atrás no se nota. Corregirlo con la hora (PDT) de
 - **Sin probar:** un VOD solo para suscriptores (usher da 403 y se dice) y los trozos silenciados.
 - **La prueba de la interfaz** abre una emisión desde la ficha, salta con L y comprueba que guarda por dónde va, en
   Chrome y en Firefox.
+
+## El chat, barato de pintar (D31)
+
+24 de octubre, en `mini-agentes`. Scripts y datos en `.lab/rendimiento-1.0/` (no se suben).
+- **Cómo se encontró:** con el chat real de `xqc` en Chrome for Testing en la sesión GNOME (con la GPU), la CPU de todo
+  el navegador, por proceso e hilo (`hilos.mjs`): 25,4 % de un núcleo sin chat y 47,5 % con él; el hilo de la página,
+  del 3,2 al 10,5 %. La traza (`traza.mjs`, `analiza.cjs`) daba 5,6 maquetaciones por segundo de 2,8 ms, todas de la
+  página entera (`partialLayout: false`, ~1250 elementos), 32 pintados por segundo y `performWorkUntilDeadline`
+  (React) 26 ms por segundo. Con la lista en un bloque, la maquetación pasó a ser parcial y de 0,23 ms.
+- **Cómo se comparó:** las dos versiones a la vez, cada una en su Weston 14 sin pantalla (con la GPU), en el mismo canal y
+  leyendo el mismo chat (`ab-chat.mjs --simultaneo`), cambiando de Weston en cada ronda; 30 s por ronda tras 15 s de
+  arranque, con 100 VOD a medias en `localStorage` (`--historial`), como alguien que los usa. CPU en % de un núcleo;
+  «hilo» es el hilo de la página.
+
+  | Comparación (rondas) | CPU del navegador | Hilo de la página | JS (CDP) | Maquetación (CDP) | GPU |
+  | --- | --- | --- | --- | --- | --- |
+  | Antes → ahora, 15 mensajes/s inventados (2) | 39,5 → 29,3 | 14,1 → 7,0 | 3,6 → 1,1 | 2,5 → 0,45 | 11,3 → 10,1 |
+  | Antes → sin el fondo opaco, chat real de `xqc` a 4,9-11 mensajes/s (4) | 46,2 → 42,7 | 10,5 → 7,6 | 2,0 → 0,8 | 1,5 → 0,24 | 16,1 → 16,0 |
+  | Por tandas de 50, solo eso, chat real (4) | 46,8 → 45,8 | 9,1 → 8,2 | | | 17,2 → 17,3 |
+  | El fondo opaco, solo eso, 15 mensajes/s inventados (2) | 35,7 → 27,9 | 7,1 → 6,6 | | | 13,8 → 9,3 |
+  | El fondo opaco, solo eso, chat real a 2,7-5,8 mensajes/s (4) | 36,9 → 36,8 | 5,2 → 5,2 | | | 14,4 → 13,6 |
+
+  Con el chat real, la GPU la marcan sobre todo los emotes animados, que se siguen redibujando; con los inventados, sin
+  animaciones, el fondo opaco la deja como sin chat. En las capturas (`captura-chat.mjs`) el texto sale igual que antes,
+  con subpíxeles; con `will-change: scroll-position` salía en gris. El árbol de capas (`capas.mjs`) lo confirma: sin el
+  fondo, la lista no tiene capa propia; con él, sí (`OverflowScrolling`).
+- **Zen** (1.23, en los mismos Weston, 15 mensajes/s inventados, 2 rondas): los procesos de contenido (con la página),
+  de 11,8 a 9,3 %; todo Zen, de 43,5 a 41,3 %. Lo que más gasta allí es el proceso principal (~31 %, la composición), igual en las dos.
+- **Android, en el emulador** (`goodttv-s25`, sin GPU; `android/chat.mjs`, con la cuenta, los seguidos y el chat falsos
+  de la maqueta de AND-3 a 10 mensajes por segundo, 3 rondas alternas): el proceso de la WebView, de 13,0 a 10,3 %
+  (12,4/13,6/13,0 frente a 9,6/10,7/10,6). El de la app (~80-125 %) lo ocupa el vídeo, dibujado por software. En el
+  teléfono (2,8x en el emulador) la lista ya tenía capa propia: allí no hace falta el fondo opaco.
+- **En el S25** (24 oct, la misma maqueta con `jynxzi`, 30 s por ronda, 4 rondas alternas de cada versión; `.lab/s25-1.0/`):
+  el proceso de la WebView, de 30,2 a 24,1 % de un núcleo (29,9-30,5 frente a 23,2-24,5); el de la app, con el vídeo,
+  de 60,0 a 57,3 %. En el teléfono hay procesos de WebView de otras apps: `chat.mjs` se quedaba con el último que
+  encontraba (dio 0 en tres rondas, descartadas) y ahora suma los que gastan.
+- **Sin fugas** (`fugas.mjs`): tres vueltas por seis canales con chat real, 12 s en cada uno, y tras cada vuelta, en
+  Inicio y tras recoger la basura: 6,6, 7,3 y 7,3 MB de JavaScript (la primera vuelta guarda los catálogos de emotes),
+  y los mismos nodos y listeners.
+- **Descartado, `content-visibility: auto` en los mensajes:** con el chat real, el hilo de la página subió de 8,2 a 9,9 %
+  y de 6,9 a 9,0 % en dos rondas, y la maquetación, de 0,25 a 0,7 %.
+- **Pruebas:** las unitarias (con el recorte por tandas y la ventana del chat de un VOD), `test:interfaz` en Chrome
+  (43 pasos) y Firefox (41), y las 10 e2e de la tele.
+
+## Fallos encontrados probando (24 oct)
+
+Con recorridos largos en la extensión (Chrome for Testing con teclas y clics de verdad por CDP, una cuenta falsa cuyos
+seguidos son canales en directo; `.lab/fallos/`, no se sube) y, en Android, el emulador `goodttv-s25` con la maqueta de
+AND-3 y la app manejada desde la página. Una revisión del código de Android (un subagente, solo lectura) encontró los
+de Android y dos que también tenía la extensión; cada uno se comprobó antes de arreglarlo.
+- **Espacio no pausaba (extensión)** tras abrir un canal con un clic en la columna o tocar el volumen, y tras el botón
+  del modo teatro lo quitaba: lo tocado con el ratón se queda con el foco, y Espacio era suyo. Ahora solo lo es si se
+  llegó con el teclado (`watchPointerFocus`, en `shortcuts.ts`; `:focus-visible` no sirve: Chrome lo da al pulsar la
+  tecla). Comprobado con teclas de verdad en los tres casos (`espacio.mjs`, `espacio2.mjs`).
+- **La calidad elegida se perdía al retroceder al VOD (extensión):** al volver, el menú decía 720p60 (la del empalme, aún
+  caliente) y con ↓ el canal siguiente se abría en la original. Ahora se queda en la pestaña (`estado.mjs`: 720p60 tras el
+  VOD, con ↓ y con ↑).
+- **Los VOD en fMP4 empezaban mal (extensión):** el primer trozo iba con la carga progresiva (se desactivaba tarde), no se
+  veía, el segundo fallaba y hls.js volvía a empezar, a veces en peor calidad (`vod-directo.mjs`, `vod-arranque.mjs`):
+
+  | VOD (fMP4) | Antes | Ahora |
+  | --- | --- | --- |
+  | `theburntpeanut`, terminado | 1,9 s, en 360p, con un reinicio | 0,9 s, en 1080p60 |
+  | `illojuan` | 0,64 s, con un reinicio | 0,70 s, sin él |
+  | `theburntpeanut`, en curso, al retroceder | 3,6 s, en 720p60, con un reinicio | 2,1 s, en 1080p60 |
+
+  Sin carga progresiva, el primero tiene que llegar entero. Los TS (`ibai`, `jynxzi`, `xqc`, `hasanabi`) no cambian:
+  0,6-1,3 s.
+- **Pausas largas e «Ir al directo» (extensión y Android):** «Ir al directo» no olvidaba la pausa de antes, y al pausar
+  otra vez y reanudar se abría el VOD donde se pausó la primera vez. En la extensión, además, no reanudaba (ahora sí,
+  como Android). Y moverse en pausa no movía el momento guardado. Comprobado en la extensión con pausas de 65 s
+  (`pausa.mjs`: tras «Ir al directo» y una pausa corta, sigue en el directo; con ← en pausa, el VOD abre 10 s antes, a
+  2 s de lo esperado) y en el emulador (`android-pausa.mjs`: la segunda pausa lleva su hora, no la de la primera).
+- **Android: retroceder al VOD cerraba el canal:** a pantalla completa, el VOD volvía a vertical, y el servicio y los
+  mandos del sistema se iban y volvían. En el emulador (`android-dvr.mjs`), antes vertical y ahora horizontal, con el
+  chat abierto también al volver al directo (antes se cerraba).
+- **Android, en un VOD:** la velocidad volvía a 1× al pasar a otro (ahora sigue, como en la extensión: 1,5× en el
+  emulador); reintentar enseñaba otra vez el fallo de antes y otro toque lo abría dos veces; y su chat pedía desde el
+  segundo 0 mientras llegaba el VOD.
+- **La tarjeta del VOD que se ve («Viéndolo»)** lo volvía a abrir sin el directo del que se vino: se perdía «Ir al
+  directo». Extensión y Android.
+- **Recientes en minúsculas** (S25, 23 oct): el nombre provisional de un canal abierto por su dirección (su login)
+  pisaba el que ya se sabía y, con el id puesto, el canal no volvía a pedir sus datos. Ahora no lo pisa, y uno que quedó
+  así se corrige al abrirlo (`nombre.mjs`: «theburntpeanut» pasa a «TheBurntPeanut», también en lo guardado).
+- **Sin cambios, comprobado:** la ficha de un emote y el chat quieto mientras el ratón está encima, con la lista en su
+  bloque nuevo (`ficha-emote.mjs`); capturas de Inicio, el canal, el modo teatro, un VOD, Ajustes, la búsqueda y un
+  canal sin directo, a 1920 × 1080 y 1280 × 720 (`capturas.mjs`); `test:interfaz` en Zen (41 pasos); y 15 min de
+  `xqc` en Zen en *Sin paradas* (`vigilar.mjs`): ningún salto ni parada, ningún error de hls.js y un anuncio cubierto.
+- **Revisión de Codex** (`gpt-6.1-sol`, razonamiento alto, solo lectura) de todo lo de D31 y de estos arreglos. Se
+  aceptaron sus cuatro hallazgos, comprobados antes de arreglarlos:
+  - **Android: si no se podía pedir la lista del VOD,** el servicio y los mandos de lo de antes se quedaban esperándolo.
+    Ahora la app los cierra;
+  - **Android: en pausa, la imagen guardada se movía lo pedido, no lo que de verdad se movía** (Media3 cae en el
+    fotograma clave anterior), y el error se acumulaba. Ahora se mueve adonde cae: en el emulador, −10,13 s, igual que
+    la posición (`android-pausa-salto.mjs`);
+  - **recientes:** un nombre de verdad igual al login no podía cambiar lo guardado. El provisional es el que no trae id;
+  - **Espacio,** si se llegó a un botón con Tab y después se pulsaba con el ratón, seguía siendo del botón
+    (`espacio3.mjs`: ahora pausa).
+
+  Sostuvo, revisándolo en hls.js 1.7.3, que `LEVEL_UPDATED` llega antes de pedir el primer trozo, y que la calidad que se
+  queda no hace que el precalentado y el reproductor pidan calidades distintas. En la tele, la calidad elegida también
+  se queda al cerrar el reproductor y volver a abrirlo.
+
+## Solo audio, la calidad recordada e imagen en imagen (D32)
+
+24 de octubre, en `mini-agentes` (scripts en `.lab/fallos/`, no se suben).
+- **Android, solo audio con la pantalla apagada,** en el emulador `goodttv-s25` con la maqueta de AND-3 y un canal en
+  directo, midiendo lo que baja la interfaz de red del emulador (`android-audio.mjs`, `android-audio-pip.mjs`):
+
+  | | Antes | Ahora |
+  | --- | --- | --- |
+  | Pantalla encendida | 8,3 Mbit/s | 8,3 Mbit/s |
+  | Pantalla apagada | 8,28 Mbit/s | 0,39 Mbit/s, sonando (la sesión de medios, «PLAYING») |
+  | Al encenderla, hasta que vuelve el vídeo | al momento | ~3 s (el emulador, sin GPU) |
+  | En PiP / en PiP con la pantalla apagada | | 8,3 / 0,37 Mbit/s |
+
+  Antes, con un empalme de verdad en solo audio (`empalme-audio.ts`): publica trozos fMP4 de 2 s de ~52 KB (unos
+  210 kbit/s), con la numeración común de las sesiones, y salta los anuncios como con vídeo.
+- **En el S25** (24 oct, `jynxzi` con la maqueta, `.lab/s25-1.0/audio.mjs`): con la pantalla encendida, 7,93 Mbit/s en
+  1080p60; apagada, 0,38 Mbit/s, sonando («PLAYING»). Al encenderla, el vídeo vuelve 0,92 s después de desbloquearla
+  (una medida; el S25 tiene bloqueo, así que se cuenta desde que lo quita el usuario). En el emulador eran ~3 s.
+- **La calidad del directo** (`calidad.mjs`, Chrome con clics de verdad): al abrir, «Auto (1080p60)»; tras elegir
+  720p60, 720p y guardada; al recargar, sigue en 720p60; el VOD al retroceder, en 720p; y «Auto» vuelve a 1080p60 y la
+  olvida (antes del arreglo del directo, se quedaba en 720p).
+- **Imagen en imagen** (`pip.mjs`, en un Weston sin pantalla): el botón la abre con un clic, sigue sonando y la cierra.
+  Se creyó que solo la tenía Chrome, pero el usuario vio el botón en su Zen: Firefox 158 y Zen 1.23 tienen la API
+  (`document.pictureInPictureEnabled`). En Zen, con un clic de verdad (en un Xvfb, con `xdotool`;
+  `.lab/teatro-zen/pip.mjs`), se abre su ventana y otro clic la cierra; sin él, la rechaza.
+  CPU de todo el navegador en el mismo canal, sin y con ella: 19,8/20,3, 19,8/20,0 y 19,8/19,9 % de un núcleo. Con el
+  botón de más, la fila de controles desbordaba 4-10 px con el vídeo estrecho (`controles-ancho.mjs`, de 1280 a 440 px de
+  ventana); por debajo de 580 px de vídeo ya no sale, y no desborda en ninguno.
+- **Pruebas:** las unitarias (la calidad guardada y «Auto», `levelFor`, el solo audio en `pickVariant` y en el directo),
+  `test:interfaz` en Chrome (43 pasos) y Firefox (41), y las 10 e2e de la tele.
+- **Revisión de Codex** (`gpt-6.1-sol`, razonamiento alto, solo lectura). Se aceptaron sus cuatro hallazgos, comprobados
+  antes de arreglarlos y después en el emulador (`android-audio2.mjs`):
+  - **encender la pantalla mientras se abría el solo audio lo dejaba en solo audio, a la vista.** Ahora vuelve el vídeo
+    (7,9-8,3 Mbit/s, en 1080p60);
+  - **apagarla mientras cargaba el canal, o en pausa y reanudar después, lo dejaba bajando vídeo.** Ahora pasa a solo
+    audio al empezar a sonar (0,38 Mbit/s);
+  - **pausar en solo audio y volver perdía lo que quedaba hasta el directo:** el vídeo nuevo empieza en el directo, y su
+    lista, corta, no llega a la pausa. Ahora se abre en pausa con la pausa «fuera», y reproducir abre el VOD donde se
+    pausó, como tras una pausa larga;
+  - **el VOD al retroceder pedía antes la lista de otra calidad.** Ahora empieza ya en la del directo.
+
+  Al comprobarlo apareció otro, del 24 por la mañana: la página de Android no actualizaba lo pausado al moverse en
+  pausa (solo comparaba cuándo se pausó), así que el arreglo de entonces no llegaba a abrir el VOD donde se dejó la
+  imagen. Ahora sí, y la imagen se mueve lo que de verdad se movió (`android-pausa-salto.mjs`: −10,14 s).
+
+## El relevo del solo audio y el chat a pantalla completa (D33)
+
+24 de octubre, en `mini-agentes` (scripts en `.lab/relevo/`, no se suben).
+- **El relevo, en el emulador** `goodttv-s25`, con la maqueta de AND-3 y `jynxzi` (`relevo.mjs`, dos vueltas): al apagar
+  la pantalla, el relevo a solo audio se entrega a los 2,3-2,5 s de empezar, con los dos reproductores a 1-5 ms uno del
+  otro (por la hora de los fragmentos). La página solo ve «reproduciendo», sin ninguna carga, la sesión de medios sigue
+  en «PLAYING» y bajan 0,40-0,43 Mbit/s. Al encenderla, igual hacia el vídeo (2,3 s). Empezándolo al encenderse la
+  pantalla y desbloqueando a los 2,5 s, como una persona, el vídeo está a los 39-49 ms de desbloquear (sin eso, ~2,3 s).
+  Las capturas a 0,3 y 1,5 s del desbloqueo lo enseñan moviéndose (`captura.mjs`).
+- **Que no hay corte** se comprueba por la hora de los fragmentos y por lo que ve la página: el emulador va sin sonido.
+- **En el S25** (24 oct, la release, probado por el usuario): sin corte de sonido al apagar ni al encender; al
+  desbloquear, el vídeo ya está, con un parpadeo negro muy corto. En logcat, los relevos se entregan a los 2,3-2,6 s, con
+  los dos reproductores a 1-7 ms.
+- **Lo de la revisión de D32, otra vez** (`android-audio2.mjs`): apagar y encender enseguida deja el vídeo (7,9 Mbit/s);
+  apagar mientras carga, solo audio (0,38); pausar en solo audio y volver, en pausa y «fuera», y reproducir abre el VOD.
+  Pausar con los mandos del sistema (`cmd media_session dispatch pause`) con la pantalla apagada, volver y reproducir
+  abre el VOD donde se pausó (`pausa-mandos.mjs`), también antes del relevo. En el S25, con la versión anterior, el
+  usuario vio que volvía al directo. Con esta, por ese mismo camino (`pausa-s25.sh`: solo audio ya puesto, pausa por la
+  sesión de medios con la pantalla apagada, encenderla), se reabre en pausa «fuera» al encenderse y, al darle a
+  reproducir, abre el VOD. También pausando desde la pantalla de bloqueo en `jaimemellado`. Y la pausa larga con «Ir
+  al directo» y una pausa corta después sigue en el directo (`jynxzi`). No se sabe por qué falló antes.
+- **El motor:** pruebas nuevas en `directo.test.ts` (el empalme de antes sigue con su reproductor y se para a los 10 s
+  sin peticiones suyas; con el mismo reproductor, sin visita o con otro canal, se para; sus trozos del VOD siguen
+  valiendo). El rendimiento de la extensión (`rendimiento.mjs`, antes y ahora a la vez en dos Weston, con `jynxzi`,
+  `papaplatte` y `eslcs`, 2 rondas): primer fotograma, mediana de 756 y 731 ms; CPU del navegador, 17,8 y 17,7 %; ninguna
+  parada.
+- **La pantalla completa con su chat** (`test:interfaz` en Chrome, con teclas de verdad): F da solo el vídeo, sin el
+  botón del modo teatro; C pone el chat al lado; al salir, sigue en modo teatro con el chat de la ventana; y la vez
+  siguiente, F ya lo pone al lado. En Zen 1.23.4b (`.lab/teatro-zen/zen.mjs`, con la pantalla completa permitida sin
+  gesto), igual: solo el vídeo a 1920 × 1080, T no hace nada, y C pone el chat a 340 px.
+- **Pruebas:** las unitarias (436), `test:interfaz` en Chrome (45 pasos) y Firefox (41), y las 10 e2e de la tele (con
+  `E2E_CHANNELS`: de su lista, a esa hora solo emitía uno).
 

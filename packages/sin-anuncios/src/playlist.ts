@@ -19,6 +19,11 @@ export type Variant = {
 
 export type Want = { readonly fps: number; readonly resolution: string }
 
+// Solo audio (VIDEO="audio_only" en la lista maestra, sin resolución): lo que pide Android con la pantalla apagada, unos
+// 160 kbit/s en vez de varios Mbit/s. Se pide como las demás, «audio_only@0».
+export const AUDIO_ONLY = "audio_only"
+export const AUDIO_ONLY_WANT: Want = { fps: 0, resolution: AUDIO_ONLY }
+
 // Variantes de vídeo de la lista maestra (sin «solo audio»), de más a menos ancho de banda.
 export const listVariants = (master: string): readonly Variant[] => {
   const names = new Map<string, string>()
@@ -50,12 +55,35 @@ export const listVariants = (master: string): readonly Variant[] => {
 
 const heightOf = (resolution: string): number => Number(resolution.split("x")[1] ?? 0)
 
+// La variante de solo audio de la lista maestra, si la trae.
+const audioOnlyVariant = (master: string): Variant | undefined => {
+  let pending: Readonly<Record<string, string>> | null = null
+  for (const line of master.split("\n")) {
+    if (line.startsWith("#EXT-X-STREAM-INF:")) pending = attrs(line.slice(18))
+    else if (pending !== null && line !== "" && !line.startsWith("#")) {
+      if (pending["RESOLUTION"] === undefined && pending["VIDEO"] === AUDIO_ONLY) {
+        return {
+          bandwidth: Number(pending["BANDWIDTH"] ?? 0),
+          fps: 0,
+          name: AUDIO_ONLY,
+          resolution: AUDIO_ONLY,
+          url: line.trim(),
+        }
+      }
+      pending = null
+    }
+  }
+  return undefined
+}
+
 // La variante pedida. Si el canal no la tiene (se eligió en otro canal), la misma resolución con otros fotogramas por
 // segundo o, si no, la mejor que no pase de esa resolución: no gasta más de lo que se eligió. Sin nada de eso, o sin
 // calidad pedida, la de más ancho de banda. Todas las sesiones eligen así la misma.
 export const pickVariant = (master: string, want: Want | null): Variant | undefined => {
   const variants = listVariants(master)
   if (want === null) return variants[0]
+  // Solo audio; si el canal no lo da, el vídeo que menos gasta.
+  if (want.resolution === AUDIO_ONLY) return audioOnlyVariant(master) ?? variants.at(-1)
   return (
     variants.find((v) => v.resolution === want.resolution && v.fps === want.fps) ??
     variants.find((v) => v.resolution === want.resolution) ??

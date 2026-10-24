@@ -1,5 +1,7 @@
-import { describe, expect, it } from "vitest"
-import { shortcutFor } from "./shortcuts"
+// @vitest-environment jsdom
+
+import { afterEach, describe, expect, it } from "vitest"
+import { contextOf, shortcutFor, watchPointerFocus } from "./shortcuts"
 
 const key = (name: string, extra: Partial<KeyboardEvent> = {}) => ({
   altKey: false,
@@ -51,5 +53,44 @@ describe("shortcutFor", () => {
   it("con modificadores son atajos del navegador", () => {
     expect(shortcutFor(key("f", { ctrlKey: true }), free)).toBeUndefined()
     expect(shortcutFor(key("t", { metaKey: true }), free)).toBeUndefined()
+  })
+})
+
+describe("contextOf: Espacio sobre un control", () => {
+  let stop: (() => void) | undefined
+  afterEach(() => {
+    stop?.()
+    document.body.replaceChildren()
+  })
+  const button = (): HTMLButtonElement =>
+    document.body.appendChild(document.createElement("button"))
+  const pointer = (type: string, target: Element): void => {
+    target.dispatchEvent(new Event(type, { bubbles: true }))
+  }
+
+  it("con el teclado, es del control", () => {
+    stop = watchPointerFocus()
+    const element = button()
+    element.focus()
+    expect(contextOf(element).onControl).toBe(true)
+    expect(shortcutFor(key(" "), contextOf(element))).toBeUndefined()
+  })
+
+  it("tocado con el ratón, es pausar: el control se queda con el foco sin haberlo pedido", () => {
+    stop = watchPointerFocus()
+    const element = button()
+    pointer("pointerdown", element)
+    element.focus()
+    pointer("pointerup", element)
+    expect(contextOf(element).onControl).toBe(false)
+    expect(shortcutFor(key(" "), contextOf(element))).toBe("play-pause")
+    // Tab a otro: ese sí es del teclado.
+    const next = button()
+    next.focus()
+    expect(contextOf(next).onControl).toBe(true)
+    // Y si después se pulsa con el ratón (ya tenía el foco: no llega otro focusin), ya no.
+    pointer("pointerdown", next)
+    pointer("pointerup", next)
+    expect(contextOf(next).onControl).toBe(false)
   })
 })

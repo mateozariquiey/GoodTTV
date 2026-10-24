@@ -21,6 +21,7 @@ import android.graphics.drawable.Icon
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.os.PowerManager
 import android.util.Log
 import android.util.Rational
 import android.view.OrientationEventListener
@@ -77,6 +78,16 @@ class MainActivity : Activity() {
     // La pausa del PiP (el botón de la ventana, una RemoteAction): llega como un aviso de la propia app.
     private val pausaPip = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) = reproductor.pausar(!caja.pausado)
+    }
+
+    // La pantalla se apagó con la app a la vista (onStop): al encenderse, aún bloqueada, el vídeo empieza a volver
+    // (Reproductor.relevar), para que al desbloquear ya esté; si se apaga sin llegar a desbloquear, otra vez solo audio.
+    private var apagadaConLaApp = false
+    private val pantalla = object : BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent) {
+            if (!apagadaConLaApp || !detenida) return
+            reproductor.soloAudio(intent.action == Intent.ACTION_SCREEN_OFF)
+        }
     }
 
     // JavaScript, porque la página es una app web; solo carga la del APK (Paginas no deja cargar otras).
@@ -146,12 +157,17 @@ class MainActivity : Activity() {
             alPausar = { reproductor.pausar(it) },
             alMover = { caja.post { pip() } }, // tras colocarse
         )
-        reproductor = Reproductor(this, caja.vista, alCambiar = { estado ->
+        // Al registro, solo los relevos entre solo audio y vídeo (pocos, sin datos de la sesión): para ver en el teléfono
+        // cómo fue cada uno.
+        val registrar = { datos: JSONObject -> if (datos.has("relevo")) Log.i("GoodTTVMedia3", datos.toString()) }
+        reproductor = Reproductor(this, caja.vista, registrar = registrar, alCambiar = { estado ->
             caja.pausado = estado.optBoolean("pausado")
             if (pipPausado != caja.pausado || pipActivo != pipConCanal()) pip()
             avisarPagina("goodttv-reproductor", estado)
         })
         registerReceiver(pausaPip, IntentFilter(PAUSA_PIP), RECEIVER_NOT_EXPORTED)
+        val encenderYApagar = IntentFilter(Intent.ACTION_SCREEN_ON).apply { addAction(Intent.ACTION_SCREEN_OFF) }
+        registerReceiver(pantalla, encenderYApagar, RECEIVER_NOT_EXPORTED)
         // Con targetSdk 35 o más, la app dibuja bajo las barras del sistema y la cámara: el marco deja la página (y el
         // vídeo) entre ellas, y encima del teclado.
         val marco = FrameLayout(this)
@@ -307,6 +323,9 @@ class MainActivity : Activity() {
     override fun onStart() {
         super.onStart()
         detenida = false
+        apagadaConLaApp = false
+        // Otra vez a la vista: con vídeo (Reproductor.soloAudio).
+        if (::reproductor.isInitialized) reproductor.soloAudio(false)
     }
 
     // Si algo se abrió con la app fuera de la vista, Android no dejó arrancar el servicio en primer plano: ahora sí.
@@ -315,8 +334,15 @@ class MainActivity : Activity() {
         if (::reproductor.isInitialized) reproductor.asegurarServicio()
     }
 
+    // Sin verse (la pantalla apagada, otra app delante sin PiP): el directo, en solo audio. En el PiP se sigue viendo,
+    // salvo con la pantalla apagada.
     override fun onStop() {
         detenida = true
+        val pantallaEncendida = getSystemService(PowerManager::class.java)?.isInteractive != false
+        apagadaConLaApp = !pantallaEncendida
+        if (::reproductor.isInitialized && (!isInPictureInPictureMode || !pantallaEncendida)) {
+            reproductor.soloAudio(true)
+        }
         super.onStop()
     }
 
@@ -342,6 +368,7 @@ class MainActivity : Activity() {
         if (::reproductor.isInitialized) {
             reproductor.soltar()
             unregisterReceiver(pausaPip)
+            unregisterReceiver(pantalla)
             enderezar.disable()
         }
         if (::web.isInitialized) web.destroy()
@@ -432,13 +459,20 @@ class MainActivity : Activity() {
 
         // Un VOD (VOD-1), como un canal: debajo de la página, con su estado en «goodttv-reproductor» (con «vod»), y en la
         // esquina o en el PiP al dejarlo. Antes de pedir su lista, la página pregunta si ya está abierto (al volver a él
-        // desde la esquina): si lo está, vuelve a la página; si no, se cierra lo que hubiera, para no verlo mientras llega
-        // el VOD. Llega en el hilo de la WebView: vodAbierto se puede leer desde aquí.
+        // desde la esquina): si lo está, vuelve a la página; si no, se para lo que hubiera, para no verlo mientras llega
+        // el VOD. Sin cerrar el canal del todo: al retroceder a pantalla completa, seguía en vertical, y el servicio y
+        // los mandos del sistema se iban y volvían. Llega en el hilo de la WebView: vodAbierto se puede leer desde aquí.
         @JavascriptInterface
         fun vodPreparar(id: String): Boolean {
             val abierto = reproductor.vodAbierto == id
             runOnUiThread {
-                if (!abierto) return@runOnUiThread cerrarCanal()
+                if (!abierto) {
+                    // Las barras del sistema, como estaban: vodAbrir las pone según quede el VOD.
+                    reproductor.parar()
+                    caja.ocultar()
+                    pip()
+                    return@runOnUiThread
+                }
                 caja.enPagina()
                 reproductor.avisar()
                 barras()

@@ -24,12 +24,19 @@ import {
   HeartIcon,
   UserIcon,
 } from "@phosphor-icons/react"
-import { useCallback, useEffect, useRef, useState } from "react"
+import { memo, useCallback, useEffect, useRef, useState } from "react"
 import { android } from "../api"
 import { BarraTiempo } from "./BarraTiempo"
 import { Chat, type Escritura } from "./Chat"
 import { Avatar } from "./comun"
-import { Centro, type Pestana, Pestanas, useDespierto, useHorizontal } from "./controles"
+import {
+  Centro,
+  type Pestana,
+  Pestanas,
+  useChatHorizontal,
+  useDespierto,
+  useHorizontal,
+} from "./controles"
 import { type EstadoMedia3, useDeslizarParaVolver, useMandos, useMedia3 } from "./media3"
 import { atras, navigate } from "./rutas"
 import { ChannelVideos } from "./Videos"
@@ -80,7 +87,9 @@ export const Canal = ({
   const [details, setDetails] = useState(channel)
   useEffect(() => {
     setDetails(channel)
-    if (channel.userId !== undefined) return undefined
+    // Con su id, ya se sabe todo, salvo que su nombre sea solo el login: un reciente guardado mientras llegaban sus datos
+    // (antes podía quedarse así), que se corrige.
+    if (channel.userId !== undefined && channel.displayName !== channel.login) return undefined
     let active = true
     window.api.catalog
       .channel?.(channel.login)
@@ -90,7 +99,12 @@ export const Canal = ({
           setDetails((current) =>
             current.userId === undefined
               ? fromSearch(card)
-              : { ...current, profileImageUrl: current.profileImageUrl ?? card.thumbnailUrl },
+              : {
+                  ...current,
+                  displayName:
+                    current.displayName === current.login ? card.displayName : current.displayName,
+                  profileImageUrl: current.profileImageUrl ?? card.thumbnailUrl,
+                },
           )
       })
       .catch(() => undefined)
@@ -119,8 +133,8 @@ export const Canal = ({
   )
   const latest = useRef(details)
   latest.current = details
-  // A recientes al abrirlo, y otra vez cuando se completan sus datos (con su foto e id).
-  const recentKey = `${details.login}|${details.userId ?? ""}`
+  // A recientes al abrirlo, y otra vez cuando se completan sus datos (con su nombre, su foto e id).
+  const recentKey = `${details.login}|${details.userId ?? ""}|${details.displayName}`
   useEffect(() => {
     void window.api.recents.add(toRecent(latest.current))
   }, [recentKey])
@@ -232,7 +246,7 @@ export const Canal = ({
     if (
       estado.pausado &&
       pausada !== null &&
-      Date.now() - pausada.desde > DVR_PAUSE_MS &&
+      (pausada.fuera || Date.now() - pausada.desde > DVR_PAUSE_MS) &&
       canRewind
     )
       openRewind(pausada.imagen)
@@ -251,10 +265,10 @@ export const Canal = ({
 
   // En vertical, el chat o los vídeos, en pestañas: se empieza en el chat salvo que la preferencia lo oculte (Cuenta) o el
   // canal no esté en directo, y elegir la otra no cambia la preferencia (es mirar sus vídeos, no ocultar el chat). En
-  // horizontal, el chat empieza oculto y se muestra con su botón (lo elegido vale mientras se esté en el canal). Mientras
+  // horizontal, el chat empieza oculto y se muestra con su botón (lo elegido se recuerda: useChatHorizontal). Mientras
   // se vea en uno de los dos, se sigue leyendo, también al girar.
   const horizontal = useHorizontal()
-  const [chatHorizontal, setChatHorizontal] = useState(false)
+  const [chatHorizontal, setChatHorizontal] = useChatHorizontal()
   const [pestana, setPestana] = useState<Pestana>(preferences.chatVisible ? "chat" : "videos")
   const chatPreferido = useRef(preferences.chatVisible)
   chatPreferido.current = preferences.chatVisible
@@ -265,19 +279,12 @@ export const Canal = ({
     if (sinDirecto) setPestana("videos")
   }, [sinDirecto])
   const chatVisible = horizontal ? chatHorizontal : pestana === "chat"
-  const chat = useChat(
-    signedIn ? details.userId : undefined,
-    pestana === "chat" || chatHorizontal,
-    chatDelay,
-  )
 
   // Los controles: al tocar el vídeo salen y se ocultan solos; siempre a la vista si no está reproduciendo.
   const { despertar, despierto, dormir } = useDespierto()
   const [arrastrando, setArrastrando] = useState(false)
   const playing = enDirecto && !estado.pausado
   const showControls = despierto || !playing || arrastrando
-  const writing: Escritura =
-    !signedIn || chat.send === undefined ? "no" : canChat ? "si" : "vincular"
   const toggleChat = (): void => {
     if (horizontal) setChatHorizontal(!chatHorizontal)
     else setPestana(chatVisible ? "videos" : "chat")
@@ -490,9 +497,16 @@ export const Canal = ({
       <div className="canal__lado">
         {horizontal ? null : <Ficha channel={details} following={following} live={enDirecto} />}
         {horizontal ? null : <Pestanas elegida={pestana} onElegir={setPestana} videos="Vídeos" />}
-        {chatVisible ? (
-          <Chat chat={chat} scale={preferences.chatScale} writing={writing} />
-        ) : horizontal ? null : (
+        <CanalChat
+          broadcasterId={signedIn ? details.userId : undefined}
+          canChat={canChat}
+          delay={chatDelay}
+          reading={pestana === "chat" || chatHorizontal}
+          scale={preferences.chatScale}
+          signedIn={signedIn}
+          visible={chatVisible}
+        />
+        {chatVisible || horizontal ? null : (
           <div className="canal__videos">
             <ChannelVideos login={channel.login} />
           </div>
@@ -501,6 +515,34 @@ export const Canal = ({
     </div>
   )
 }
+
+// El chat, aparte del resto del canal: cada lote de mensajes (unas 10 veces por segundo en un chat con mucho movimiento)
+// solo vuelve a pintar el chat, no el vídeo, los controles ni la ficha (como en la extensión). reading: se lee aunque no
+// se vea en esta orientación, para no perderlo al girar.
+const CanalChat = memo(
+  ({
+    broadcasterId,
+    canChat,
+    delay,
+    reading,
+    scale,
+    signedIn,
+    visible,
+  }: {
+    readonly broadcasterId: string | undefined
+    readonly canChat: boolean
+    readonly delay: () => number | null
+    readonly reading: boolean
+    readonly scale: Preferences["chatScale"]
+    readonly signedIn: boolean
+    readonly visible: boolean
+  }) => {
+    const chat = useChat(broadcasterId, reading, delay)
+    const writing: Escritura =
+      !signedIn || chat.send === undefined ? "no" : canChat ? "si" : "vincular"
+    return visible ? <Chat chat={chat} scale={scale} writing={writing} /> : null
+  },
+)
 
 // following: si la cuenta lo sigue (SEG-1; null mientras no se sabe o sin cuenta). Seguir y dejar de seguir, en
 // twitch.tv (D24): el enlace sale de la app (Paginas.kt).

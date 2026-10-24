@@ -7,16 +7,17 @@ import {
   useAuth,
   useFollowedOrder,
   useHome,
+  useOpeningPrewarm,
   usePreferences,
 } from "@goodttv/interfaz"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { ChannelView } from "./ChannelView"
 import { HomeView } from "./HomeView"
-import { useOpeningPrewarm, usePointerPrewarm } from "./prewarm"
+import { usePointerPrewarm } from "./prewarm"
 import { navigate, useRoute } from "./routes"
 import { SettingsView } from "./SettingsView"
 import { Sidebar } from "./Sidebar"
-import { contextOf, shortcutFor } from "./shortcuts"
+import { contextOf, shortcutFor, watchPointerFocus } from "./shortcuts"
 import { TopBar } from "./TopBar"
 import { VodView } from "./VodView"
 
@@ -120,6 +121,9 @@ export const Desktop = () => {
   }, [route.view])
   const search = useRef<HTMLInputElement>(null)
 
+  // Espacio es del control enfocado solo si se llegó a él con el teclado (shortcuts.ts).
+  useEffect(() => watchPointerFocus(), [])
+
   // Atajos de toda la ventana; los del reproductor los atiende ChannelView.
   useEffect(() => {
     const onKey = (event: KeyboardEvent): void => {
@@ -128,10 +132,11 @@ export const Desktop = () => {
         event.preventDefault()
         search.current?.focus()
       } else if (shortcut === "back" && !event.defaultPrevented) {
+        // A pantalla completa, Esc es para salir de ella (lo hace el navegador): ni sale del modo teatro, que se queda
+        // con el chat al lado a pantalla completa, ni vuelve a Inicio.
+        if (document.fullscreenElement !== null) return
         if (theater) setTheater(false)
-        else if (route.view !== "home" && document.fullscreenElement === null) {
-          navigate({ view: "home" })
-        }
+        else if (route.view !== "home") navigate({ view: "home" })
       }
     }
     addEventListener("keydown", onKey)

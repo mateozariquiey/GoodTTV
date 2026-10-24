@@ -1,10 +1,9 @@
 import type { LatencyMode } from "@goodttv/contratos"
-import { type Channel, prewarmStream } from "@goodttv/interfaz"
-import { useEffect, useRef } from "react"
+import { prewarmStream } from "@goodttv/interfaz"
+import { useEffect } from "react"
 import { parseRoute } from "./routes"
 
 export const PREWARM_MS = 150 // con el ratón parado este tiempo sobre un canal, se precalienta
-export const OPENING_PREWARM_MS = 10_000 // al abrir, plazo para saber si el último canal visto emite
 
 // El canal de un enlace (#/canal/<login>) bajo el puntero, o null.
 const channelUnder = (target: EventTarget | null): string | null => {
@@ -42,27 +41,4 @@ export const usePointerPrewarm = (
       document.removeEventListener("pointerdown", onDown)
     }
   }, [mode, offline, watching])
-}
-
-// Al abrir GoodTTV en Inicio, el último canal que viste, que suele ser el primero que se abre (REN-1). Una sola vez y
-// con el modo guardado (ready). Se precalienta en cuanto se sabe que emite, por lo guardado de la última vez o por lo
-// de ahora, durante los primeros segundos; no si se abrió en otra vista o se sale de Inicio antes.
-export const useOpeningPrewarm = (
-  atHome: boolean,
-  lastSeen: Channel | undefined,
-  mode: LatencyMode,
-  ready: boolean,
-): void => {
-  const done = useRef(false)
-  const openedAt = useRef(Date.now())
-  useEffect(() => {
-    if (done.current || !ready) return
-    if (!atHome || Date.now() - openedAt.current > OPENING_PREWARM_MS) {
-      done.current = true
-      return
-    }
-    if (lastSeen?.live !== true) return
-    done.current = true
-    prewarmStream(lastSeen.login, mode)
-  }, [atHome, lastSeen, mode, ready])
 }

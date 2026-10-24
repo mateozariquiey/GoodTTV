@@ -9,7 +9,7 @@
 // para.
 import { Empalme, type EmpalmeEvent, type EmpalmeOptions } from "./empalme"
 import { type Bytes, firstVideoPts, fmp4FirstVideoTime, trimFmp4, trimTs } from "./media-time"
-import type { Want } from "./playlist"
+import { AUDIO_ONLY, type Want } from "./playlist"
 import { type Fetch, getBytes, HttpError, videoTrackOf } from "./twitch-source"
 
 const LOGIN = /^[a-z0-9_]{1,25}$/
@@ -22,9 +22,11 @@ const MODES = {
 type Mode = keyof typeof MODES
 const modeOf = (value: string | null): Mode =>
   value !== null && Object.hasOwn(MODES, value) ? (value as Mode) : "adaptativo"
-const QUALITY = /^(\d{2,5}x\d{2,5})@(\d{1,3})$/
+const QUALITY = /^(\d{2,5}x\d{2,5}|audio_only)@(\d{1,3})$/
 const VISIT = /^[a-z0-9]{1,40}$/ // una por reproductor creado en la página
 const IDLE_MS = 30_000
+// El de antes de un cambio de calidad, sin peticiones de su reproductor durante esto, se para (ver ensure).
+const OUTGOING_IDLE_MS = 10_000
 // Cuánto se retiene una petición de la lista hasta que haya un fragmento nuevo. Largo para que una espera del relleno
 // con el VOD (sin nada nuevo durante 15-25 s) no acabe en una respuesta sin novedades: tras ella, hls.js no vuelve a
 // preguntar hasta pasados TARGETDURATION/2 (6,5 s con relleno). Por debajo de IDLE_MS; el reproductor espera la
@@ -116,6 +118,7 @@ export const createDirecto = ({
 }: DirectoOptions = {}): Directo => {
   let active: Active | undefined
   let warm: Active | undefined // precalentado (ver prewarm)
+  let outgoing: Active | undefined // el de antes de cambiar de calidad, para su reproductor (ver ensure)
   const trimmed = new Map<string, Bytes>() // «url|comienzo» → trozo recortado y comprobado (5 min)
 
   // Recorte comprobado: se descarga el trozo, se corta y se mide dónde empieza de verdad.
@@ -148,6 +151,10 @@ export const createDirecto = ({
     warm?.empalme.stop()
     warm = undefined
   }
+  const stopOutgoing = (): void => {
+    outgoing?.empalme.stop()
+    outgoing = undefined
+  }
 
   const matches = (
     stream: Active | undefined,
@@ -156,9 +163,10 @@ export const createDirecto = ({
     mode: Mode,
   ): stream is Active => {
     if (stream === undefined || stream.login !== login || stream.mode !== mode) return false
-    // Sin calidad pedida, el empalme elige una; pedir después esa misma no lo recrea.
+    // Sin calidad pedida (la automática), el empalme elige una, y pedir después esa misma no lo recrea. Pero uno abierto
+    // con otra pedida no vale para la automática: al volver a «Auto» tras elegir 720p, se quedaba en 720p.
     const current = stream.quality ?? stream.empalme.status().quality ?? null
-    return quality === null || current === quality
+    return quality === null ? stream.quality === null : current === quality
   }
 
   const create = (
@@ -171,6 +179,9 @@ export const createDirecto = ({
     const want: Want | null =
       match === null ? null : { fps: Number(match[2]), resolution: match[1] ?? "" }
     const settings = MODES[mode]
+    // En solo audio, sin el relleno con el VOD: sus trozos son de vídeo, y se sitúan por la imagen. En una pausa de
+    // anuncios en todas las sesiones, silencio, como en el modo directo.
+    const audioOnly = want?.resolution === AUDIO_ONLY
     const empalme = createEmpalme({
       channel: login,
       fetch: red,
@@ -178,7 +189,7 @@ export const createDirecto = ({
       log: (event) => log({ ...event, canal: login }),
       simulatedPause,
       startBackSeconds: settings.startBackSeconds,
-      vod: settings.vod,
+      vod: settings.vod && !audioOnly,
       vodTrimmer: trimVod,
       vodUrl,
       want,
@@ -187,14 +198,31 @@ export const createDirecto = ({
     return { empalme, lastUse: Date.now(), login, mode, quality, served: null, visit }
   }
 
+  // Otra calidad del mismo canal para otro reproductor (otra visita): el empalme de antes no se para todavía, sigue
+  // sirviendo al suyo hasta que deja de pedir. En Android, el que suena mientras se prepara el nuevo al pasar a solo audio
+  // o volver al vídeo (el relevo, Reproductor.kt), sin corte; en todas, una petición tardía del reproductor de antes ya
+  // no para el nuevo. Con otro canal, se paran los dos, como siempre.
   const ensure = (
     login: string,
     quality: string | null,
     mode: Mode,
     visit: string | null,
   ): Active => {
+    if (visit !== null && outgoing?.visit === visit && matches(outgoing, login, quality, mode)) {
+      outgoing.lastUse = Date.now()
+      return outgoing
+    }
+    const previous: Active | undefined = active // sin el estrechamiento de matches()
     if (!matches(active, login, quality, mode)) {
-      stopActive()
+      const sameChannel = previous?.login === login && previous.mode === mode
+      if (sameChannel && previous?.visit != null && visit !== null && previous.visit !== visit) {
+        stopOutgoing()
+        outgoing = previous
+        active = undefined
+      } else {
+        stopActive()
+        if (!sameChannel) stopOutgoing()
+      }
       if (matches(warm, login, quality, mode)) {
         active = warm // ya precalentado: con parte del arranque hecho
         warm = undefined
@@ -227,19 +255,18 @@ export const createDirecto = ({
   const idle = setInterval(() => {
     if (active !== undefined && Date.now() - active.lastUse > IDLE_MS) stopActive()
     if (warm !== undefined && Date.now() - warm.lastUse > IDLE_MS) stopWarm()
+    if (outgoing !== undefined && Date.now() - outgoing.lastUse > OUTGOING_IDLE_MS) stopOutgoing()
   }, 5000)
   unref(idle)
 
   const serveVod = async (query: URLSearchParams, request: DirectoRequest): Promise<Response> => {
     const target = query.get("u") ?? ""
     const map = query.get("map")
-    const empalme = active?.empalme
-    // Solo URL que el empalme ha publicado: no es un proxy abierto.
-    if (
-      empalme === undefined ||
-      !empalme.knowsVodUrl(target) ||
-      (map !== null && !empalme.knowsVodUrl(map))
-    ) {
+    // Solo URL que el empalme ha publicado (el activo o, en un relevo, el de antes): no es un proxy abierto.
+    const empalme = [active, outgoing].find((stream) =>
+      stream?.empalme.knowsVodUrl(target),
+    )?.empalme
+    if (empalme === undefined || (map !== null && !empalme.knowsVodUrl(map))) {
       return reply(403, TEXT)
     }
     const desde = query.get("desde")
@@ -355,6 +382,7 @@ export const createDirecto = ({
       clearInterval(idle)
       stopActive()
       stopWarm()
+      stopOutgoing()
     },
   }
 }

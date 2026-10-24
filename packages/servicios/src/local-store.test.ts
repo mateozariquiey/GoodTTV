@@ -44,3 +44,29 @@ describe("LocalStore en varias pestañas", () => {
     expect(await a.recents()).toHaveLength(1)
   })
 })
+
+describe("LocalStore: recientes", () => {
+  it("el nombre provisional de un canal abierto por su dirección (su login) no pisa el que ya se sabía", async () => {
+    const store = new LocalStore(sharedText(true))
+    await store.addRecent({
+      displayName: "Rubius",
+      login: "rubius",
+      userId: "39276140",
+      watchedAt: 1,
+    })
+    await store.addRecent({ displayName: "rubius", login: "rubius", watchedAt: 2 })
+    expect(await store.recents()).toEqual([
+      { displayName: "Rubius", login: "rubius", userId: "39276140", watchedAt: 2 },
+    ])
+    // Un nombre de verdad sí lo cambia, también si es igual al login: llega con sus datos (con su id).
+    await store.addRecent({ displayName: "RUBIUS", login: "rubius", watchedAt: 3 })
+    expect((await store.recents())[0]?.displayName).toBe("RUBIUS")
+    await store.addRecent({
+      displayName: "rubius",
+      login: "rubius",
+      userId: "39276140",
+      watchedAt: 4,
+    })
+    expect((await store.recents())[0]?.displayName).toBe("rubius")
+  })
+})

@@ -1,0 +1,12 @@
+{
+  "addons": {
+    "goodttv@mateozariquiey.github.io": {
+      "updates": [
+        {
+          "version": "0.4.0",
+          "update_link": "https://github.com/mateozariquiey/GoodTTV/releases/download/v0.4.0/goodttv-0.4.0.xpi"
+        }
+      ]
+    }
+  }
+}

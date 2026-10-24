@@ -108,35 +108,39 @@ export const Chat = ({
   return (
     <section aria-label="Chat" className={`chat chat--${scale}`}>
       {status === undefined ? null : <p className="chat__estado">{status}</p>}
-      <ol
-        aria-live="off"
-        className="chat__lista"
-        // Sin el menú ni la selección de la imagen al mantener pulsado un emote.
-        onContextMenu={(event) => {
-          if (event.target instanceof Element && event.target.closest(".emote") !== null)
-            event.preventDefault()
-        }}
-        onPointerCancel={soltar}
-        onPointerDown={onPointerDown}
-        onPointerMove={onPointerMove}
-        onPointerUp={soltar}
-        // Al cambiar de alto (el teclado, la ficha que se aparta), Chrome desplaza la lista sin que la persona lo haga: si
-        // iba abajo, sigue abajo (useChatAtBottom la baja).
-        onScroll={(event) => {
-          const element = event.currentTarget
-          if (element.clientHeight !== alto.current) {
-            alto.current = element.clientHeight
-            if (stick.current) return
-          }
-          stick.current = element.scrollHeight - element.scrollTop - element.clientHeight < STICK_PX
-          setAtBottom(stick.current)
-        }}
-        ref={list}
-      >
-        {chat.messages.map((message) => (
-          <Message key={message.id} message={message} />
-        ))}
-      </ol>
+      {/* En un bloque propio, para que la lista se maquete aparte del resto de la página (estilos.css). */}
+      <div className="chat__marco">
+        <ol
+          aria-live="off"
+          className="chat__lista"
+          // Sin el menú ni la selección de la imagen al mantener pulsado un emote.
+          onContextMenu={(event) => {
+            if (event.target instanceof Element && event.target.closest(".emote") !== null)
+              event.preventDefault()
+          }}
+          onPointerCancel={soltar}
+          onPointerDown={onPointerDown}
+          onPointerMove={onPointerMove}
+          onPointerUp={soltar}
+          // Al cambiar de alto (el teclado, la ficha que se aparta), Chrome desplaza la lista sin que la persona lo haga: si
+          // iba abajo, sigue abajo (useChatAtBottom la baja).
+          onScroll={(event) => {
+            const element = event.currentTarget
+            if (element.clientHeight !== alto.current) {
+              alto.current = element.clientHeight
+              if (stick.current) return
+            }
+            stick.current =
+              element.scrollHeight - element.scrollTop - element.clientHeight < STICK_PX
+            setAtBottom(stick.current)
+          }}
+          ref={list}
+        >
+          {chat.messages.map((message) => (
+            <Message key={message.id} message={message} />
+          ))}
+        </ol>
+      </div>
       {atBottom ? null : (
         <div className="chat__ultimos">
           <button

@@ -41,11 +41,13 @@ export {
   type Word,
   wordAt,
 } from "./player/emote-complete"
+export { OPENING_PREWARM_MS, useOpeningPrewarm } from "./player/opening-prewarm"
 export { type ChatView, useChat } from "./player/useChat"
 export { useChatAtBottom } from "./player/useChatAtBottom"
 export { useChatCompose } from "./player/useChatCompose"
 export { useChatEmotes } from "./player/useChatEmotes"
 export {
+  chosenLiveQuality,
   prewarmStream,
   TWITCH_VIEWER_LATENCY,
   useBehind,
@@ -54,6 +56,7 @@ export {
 } from "./player/useHlsPlayer"
 export { useReplayChat } from "./player/useReplayChat"
 export type { PlayerPhase, PlayerState } from "./player/useTwitchPlayer"
+export { chooseVolume, chosenVolume, type Volume } from "./player/volume"
 export { LATENCY_MODES, LATENCY_ORDER } from "./screens/AccountScreen"
 export { prefetchVod, renewVod, VOD_WARM_MS, vodDetail, vodPlayback } from "./vod-cache"
 export { formatAgo, formatClock } from "./vod-format"
