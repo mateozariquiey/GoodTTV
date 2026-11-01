@@ -32,7 +32,7 @@ import { PictureInPictureButton } from "./PictureInPictureButton"
 import { navigate } from "./routes"
 import { SeekBar } from "./SeekBar"
 import { SKIP_S, SkipButton } from "./SkipButton"
-import { contextOf } from "./shortcuts"
+import { contextOf, sideArrowsFree } from "./shortcuts"
 import { useSoleSound } from "./sonido"
 import { useVodPlayer } from "./useVodPlayer"
 import { ChannelVideos } from "./Videos"
@@ -252,8 +252,8 @@ export const VodView = ({
       const key = event.key.length === 1 ? event.key.toLowerCase() : event.key
       if ((key === " " && !context.onControl) || key === "k" || key === "m") takeSound(key === "m")
       if ((key === " " && !context.onControl) || key === "k") toggle()
-      else if (key === "j" || (key === "ArrowLeft" && !context.onArrows)) skipBy(-SKIP_S)
-      else if (key === "l" || (key === "ArrowRight" && !context.onArrows)) skipBy(SKIP_S)
+      else if (key === "j" || (key === "ArrowLeft" && sideArrowsFree(context))) skipBy(-SKIP_S)
+      else if (key === "l" || (key === "ArrowRight" && sideArrowsFree(context))) skipBy(SKIP_S)
       else if (key === "m") toggleMuted()
       else if (key === "f") toggleFullscreen()
       // El modo teatro es de la ventana: a pantalla completa, T no hace nada (ChannelView).

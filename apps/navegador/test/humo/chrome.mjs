@@ -91,10 +91,18 @@ export const launchChrome = async ({
       evaluate,
       // Texto en el campo con el foco, como si se tecleara.
       type: (text) => command("Input.insertText", { text }, sessionId),
-      // Un clic de verdad en el centro del elemento (doble con count 2).
+      // Un clic de verdad en el elemento (doble con count 2): en su centro o, si otro lo tapa ahí, en el primer punto
+      // donde se ve, como haría una persona. En la ventana pequeña de Chrome sin pantalla, la barra de controles con
+      // «Ir al directo» tapa el centro del vídeo (29 oct).
       click: async (selector, count = 1) => {
         const box = await evaluate(`(() => {
-          const rect = document.querySelector(${JSON.stringify(selector)}).getBoundingClientRect()
+          const element = document.querySelector(${JSON.stringify(selector)})
+          const rect = element.getBoundingClientRect()
+          for (const [fx, fy] of [[0.5, 0.5], [0.5, 0.25], [0.25, 0.25], [0.75, 0.25], [0.5, 0.75]]) {
+            const x = rect.left + rect.width * fx
+            const y = rect.top + rect.height * fy
+            if (element.contains(document.elementFromPoint(x, y))) return { x, y }
+          }
           return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 }
         })()`)
         for (let clickCount = 1; clickCount <= count; clickCount++) {

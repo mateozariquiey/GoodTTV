@@ -12,6 +12,7 @@ type Item =
   | readonly ["D"]
   | readonly ["p", number]
   | readonly ["pA"]
+  | readonly ["S", number] // otra LIVE-SEQUENCE, la del tramo que sigue
 const playlist = (
   mseq: number,
   lseq: number | null,
@@ -41,6 +42,7 @@ const playlist = (
         `https://x/ad${ad++}.ts`,
       )
     } else if (item[0] === "p") lines.push(`#EXT-X-TWITCH-PREFETCH:https://x/pf${item[1]}.ts`)
+    else if (item[0] === "S") lines.push(`#EXT-X-TWITCH-LIVE-SEQUENCE:${item[1]}`)
     else lines.push("#EXT-X-TWITCH-PREFETCH:https://x/adpf.ts")
   }
   return lines.join("\n")
@@ -469,6 +471,35 @@ describe("emisión nueva", () => {
     // Una respuesta de embed pedida antes del reinicio (generación anterior) no se publica.
     empalme.receive(embed, playlist(5001, 5001, L(5001, 5008)), -1)
     expect(shape(empalme.publishedForTests).endsWith("0D 1 2 3")).toBe(true)
+  })
+
+  // Al acabar un anuncio, la lista lleva otra LIVE-SEQUENCE para el tramo de después (29 oct, opoartstudy).
+  it("la LIVE-SEQUENCE del tramo de después de un anuncio no renumera el de antes", () => {
+    const { empalme, sessions, events } = make({ sources: ["site", "embed"] })
+    const [site, embed] = sessions
+    if (site === undefined || embed === undefined) throw new Error("sin sesiones")
+    empalme.receive(site, playlist(100, 100, L(100, 104)))
+    empalme.receive(embed, playlist(0, 100, L(100, 104)))
+    empalme.receive(
+      embed,
+      playlist(1, 101, [...L(101, 105), ["D"], ...A(3), ["D"], ["S", 110], ["p", 110]]),
+    )
+    expect(events.filter((e) => e.ev === "nueva-numeracion" || e.ev === "url-distinta")).toEqual([])
+    expect(shape(empalme.publishedForTests)).toBe("101 102 103 104 105")
+  })
+
+  // Visto el 29 de octubre en opoartstudy: la sesión que tuvo un anuncio de entrada (y numera desde 0) entra en otro, y
+  // esa lista trae LIVE-SEQUENCE 0. Se reiniciaba la línea de tiempo y el vídeo saltaba 30-40 s.
+  it("una lista que entra en anuncio con LIVE-SEQUENCE 0 no es una emisión nueva", () => {
+    const { empalme, sessions, events } = make({ sources: ["site", "embed"] })
+    const [site, embed] = sessions
+    if (site === undefined || embed === undefined) throw new Error("sin sesiones")
+    empalme.receive(site, playlist(5000, 5000, L(5000, 5004)))
+    empalme.receive(embed, playlist(0, null, A(3)))
+    empalme.receive(embed, playlist(0, 5003, [...A(3), ["D"], ...L(5003, 5006)]))
+    empalme.receive(embed, playlist(6, 0, [...L(5006, 5008), ["D"], ...A(2)]))
+    expect(events.some((e) => e.ev === "nueva-emision")).toBe(false)
+    expect(shape(empalme.publishedForTests)).toBe("5001 5002 5003 5004 5005 5006 5007 5008")
   })
 })
 

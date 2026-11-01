@@ -1,5 +1,12 @@
 import { describe, expect, it, vi } from "vitest"
-import { commentsFrom, storyboardOf, thumbnailAt, videosOf, vodMasterUrl } from "./vods"
+import {
+  commentsFrom,
+  liveArchive,
+  storyboardOf,
+  thumbnailAt,
+  videosOf,
+  vodMasterUrl,
+} from "./vods"
 
 // Una red falsa: a GQL contesta lo que se le dé; a lo demás, el texto de `files` por URL.
 const fakeRed = (gql: unknown, files: Record<string, string> = {}) => {
@@ -169,5 +176,51 @@ describe("commentsFrom", () => {
     expect(bodies[0]).toMatchObject({
       variables: { contentOffsetSeconds: 600, videoID: "2904365699" },
     })
+  })
+})
+
+describe("liveArchive", () => {
+  // GQL contesta por orden: primero la emisión, luego el token del VOD.
+  const sequence = (...answers: unknown[]) =>
+    vi.fn(async () => {
+      const answer = answers.shift()
+      return answer instanceof Error ? Promise.reject(answer) : Response.json(answer)
+    })
+  const stream = {
+    data: {
+      user: {
+        stream: {
+          archiveVideo: { id: "2913105176", recordedAt: "2026-10-28T15:27:50Z" },
+          createdAt: "2026-10-28T15:27:12Z",
+        },
+      },
+    },
+  }
+  const token = (chansub: unknown) => ({
+    data: {
+      videoPlaybackAccessToken: { signature: "s", value: JSON.stringify({ chansub }) },
+    },
+  })
+
+  it("con el VOD que graba la emisión, si se ve como invitado", async () => {
+    const red = sequence(stream, token({ restricted_bitrates: [] }))
+    expect(await liveArchive("Canal", red)).toEqual({
+      archiveId: "2913105176",
+      recordedAt: "2026-10-28T15:27:50Z",
+      startedAt: "2026-10-28T15:27:12Z",
+    })
+  })
+
+  it("sin VOD si es solo para suscriptores: retroceder abriría uno que no se puede ver", async () => {
+    const red = sequence(
+      stream,
+      token({ restricted_bitrates: ["160p30", "720p60", "audio_only", "chunked"] }),
+    )
+    expect((await liveArchive("jaimemellado_", red))?.archiveId).toBeNull()
+  })
+
+  it("si no se puede comprobar, el VOD, como antes", async () => {
+    const red = sequence(stream, new Error("sin red"))
+    expect((await liveArchive("canal", red))?.archiveId).toBe("2913105176")
   })
 })

@@ -472,6 +472,34 @@ entendía.
 - **Android: el chat en horizontal también se recuerda siempre,** en cualquier canal o VOD y al volver a abrir la app.
   Antes valía mientras se veía el mismo canal.
 
+**D34. Saltar en vez de acelerar, y lo que salió del audio desincronizado (29 oct).** El usuario notó el audio
+desincronizado en el canal de `jaimemellado_` con la 0.4.0, y pidió ← → para retroceder y avanzar 10 s, como en YouTube.
+- **El reproductor propio ya no acelera para recuperar el margen.** Con margen de más (una parada, o en *Adaptativo*
+  antes del primer relleno) aceleraba a 1,05× hasta recuperarlo. En Zen, como en Firefox, cada cambio de velocidad deja
+  el sonido algo más atrás de la imagen, y ahí se queda: con un directo sintético de pitidos y destellos, 2,9 s tras
+  5 min alternando 1,05× y 1×, y a velocidad fija nada que se acumule. En Chrome, nada. Es un fallo abierto de Firefox
+  ([1762617](https://bugzilla.mozilla.org/show_bug.cgi?id=1762617)). Los VOD de `jaimemellado_` son solo para
+  suscriptores, así que su canal nunca tiene relleno y *Adaptativo* no dejaba de acelerar, y tras una pausa de 40 s
+  aceleraba unos 13 min. Ahora lo que sobra se salta de una vez, como ya se hacía al arrancar, y lo pausado (más de 1 s)
+  se conserva como lo retrocedido, con «Ir al directo» (en *Directo* y en la tele, que no tiene ese botón, se salta). La velocidad
+  que se elige en un VOD no cambia: es un cambio, no uno cada pocos segundos. Android no cambia: Media3 no ajusta la
+  velocidad.
+- **Los VOD solo para suscriptores no se ofrecen para retroceder.** ← más allá de la lista, la barra o reanudar tras
+  más de un minuto en pausa abrían ese VOD, que solo dice «Este vídeo es solo para suscriptores». `liveArchive` mira el
+  token de invitado del VOD: si restringe calidades (`chansub.restricted_bitrates`), como si no hubiera VOD. En la
+  extensión y en Android.
+- **El empalme numera bien el directo alrededor de un anuncio.** Al acabar un anuncio a mitad de emisión, la lista de
+  la sesión lleva dos `LIVE-SEQUENCE`: la del directo de antes y la del de después. Se leía la última y se aplicaba al
+  primer fragmento en directo, el de antes, que quedaba 10-15 índices desplazado: en cada fin de anuncio, unos 30 s de
+  paradas y un salto atrás con contenido repetido, y después minutos acelerando (en Zen, más desfase de audio). Ahora
+  cuenta la que va delante de él. Y una lista que acaba en anuncio con
+  `LIVE-SEQUENCE` muy por debajo de lo publicado ya no es una emisión nueva: con `LIVE-SEQUENCE` 0 al entrar una sesión
+  en anuncio, el empalme reiniciaba la línea de tiempo, se saltaba miles de índices y el vídeo daba un salto de
+  30-40 s (visto en `opoartstudy` en dos vigías a la vez). En las tres versiones.
+- **← → tras tocar el volumen con el ratón.** Desde la 0.3.0 retroceden y avanzan 10 s en el directo y en un VOD, pero
+  el volumen tocado con el ratón se quedaba con el foco, y ← lo bajaba un 1 %, que ni se nota. Ahora ← → son de un
+  control solo si se llegó a él con el teclado, como Espacio; ↑ ↓ siguen moviendo el volumen.
+
 ## 4. Revisión temprana
 
 Codex (`gpt-6.1-sol`, razonamiento alto) revisó este documento, el prototipo y los registros el

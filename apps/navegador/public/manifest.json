@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "GoodTTV",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "description": "Twitch con el reproductor de GoodTTV, sin anuncios. Uso personal.",
   "minimum_chrome_version": "121",
   "icons": {

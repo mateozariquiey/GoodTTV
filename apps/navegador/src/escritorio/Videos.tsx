@@ -4,6 +4,7 @@ import {
   formatClock,
   isSeen,
   prefetchVod,
+  prefetchVodMaster,
   unfinishedVods,
   vodProgress,
 } from "@goodttv/interfaz"
@@ -36,7 +37,10 @@ export const VideoTile = ({
       // El que se está viendo no se vuelve a abrir: su dirección no lleva el segundo ni el directo del que se vino al
       // retroceder, y se perdía «Ir al directo».
       onClick={current ? (event) => event.preventDefault() : undefined}
-      onPointerEnter={() => prefetchVod(video.id)}
+      onPointerEnter={() => {
+        prefetchVod(video.id)
+        prefetchVodMaster(video.id)
+      }}
       title={video.title}
     >
       <span className="video-tile__picture">

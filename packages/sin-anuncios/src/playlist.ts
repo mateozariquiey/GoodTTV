@@ -118,7 +118,8 @@ export type MediaPlaylist = {
 // Anuncio: título distinto de "live" (Twitch pone "Amazon|…") o fecha dentro de un DATERANGE twitch-stitched-ad.
 // Un prefetch es anuncio si hay una discontinuidad tras el último fragmento normal (Twitch la pone justo antes del
 // anuncio) o si el anterior ya lo era, como en Streamlink. liveSequence: #EXT-X-TWITCH-LIVE-SEQUENCE, la numeración
-// común del primer fragmento en directo de la lista.
+// común del primer fragmento en directo de la lista: la etiqueta que va delante de él. Al acabar un anuncio, la lista
+// lleva otra para el tramo de después (29 oct); con ella, el de antes quedaba 10-15 índices desplazado.
 export const parseMedia = (text: string, prefetch = false): MediaPlaylist => {
   const segments: MediaSegment[] = []
   const adRanges: (readonly [number, number])[] = []
@@ -128,7 +129,8 @@ export const parseMedia = (text: string, prefetch = false): MediaPlaylist => {
   let pdt: string | null = null
   let map: string | null = null
   let discontinuity = false
-  let liveSequence: number | null = null
+  let liveSequence: number | null = null // la última vista
+  let firstLive: number | null | undefined // la que va delante del primer fragmento en directo
   for (const line of text.split("\n")) {
     if (prefetch && line.startsWith("#EXT-X-TWITCH-PREFETCH:")) {
       const last = segments.at(-1)
@@ -170,6 +172,7 @@ export const parseMedia = (text: string, prefetch = false): MediaPlaylist => {
       duration = Number(value.slice(0, comma))
       title = value.slice(comma + 1).trim()
     } else if (line !== "" && !line.startsWith("#")) {
+      if (firstLive === undefined && title === "live") firstLive = liveSequence
       segments.push({
         ad: title !== "" && title !== "live",
         duration,
@@ -191,5 +194,5 @@ export const parseMedia = (text: string, prefetch = false): MediaPlaylist => {
     const date = segment.pdt === null ? Number.NaN : Date.parse(segment.pdt)
     if (adRanges.some(([start, end]) => date >= start && date < end)) segment.ad = true
   }
-  return { liveSequence, segments }
+  return { liveSequence: firstLive === undefined ? liveSequence : firstLive, segments }
 }

@@ -2,8 +2,10 @@ import type { VideoDetail } from "@goodttv/contratos"
 import {
   chooseVolume,
   chosenVolume,
+  prefetchedVodMaster,
   resumeAt,
   saveVodProgress,
+  type VodMaster,
   vodPlayback,
   vodProgress,
 } from "@goodttv/interfaz"
@@ -18,6 +20,10 @@ import { type RefObject, useCallback, useEffect, useRef, useState } from "react"
 // Reanuda donde se dejó (vod-progress.ts) y guarda por dónde va cada 5 s, al pausar, al saltar y al ocultarse.
 
 const SAVE_MS = 5000
+// Cuánto puede empezar el búfer después del punto pedido para llevar ahí el vídeo sin esperar a hls.js (s).
+const START_SLACK_S = 0.25
+// Hasta cuándo se intenta llevar el vídeo al punto pedido al abrir (ms).
+const PLACE_MS = 15_000
 // Para empezar en buena calidad: el ancho de banda medido la última vez (localStorage) o, la primera, uno que da
 // 1080p60 (~8 Mbit/s). Si la conexión no llega, hls.js baja tras el primer trozo.
 const BANDWIDTH_KEY = "vod-ancho-de-banda"
@@ -58,6 +64,20 @@ export const levelFor = (
   if (exact >= 0) return exact
   const same = best((level) => level.height === height)
   return same >= 0 ? same : best((level) => level.height <= height)
+}
+
+// La lista maestra ya descargada (vod-cache.ts, al ver el canal o pasar el ratón por el vídeo), como URL data: para que
+// hls.js no la pida otra vez: solo si es de esa URL y sus variantes son URL completas, porque hls.js resuelve las
+// relativas con la de la lista, que sería la data:.
+export const masterSource = (url: string, master: VodMaster | undefined): string => {
+  if (master === undefined || master.url !== url) return url
+  const uris = master.text.split("\n").filter((line) => line.trim() !== "" && !line.startsWith("#"))
+  if (uris.length === 0 || !uris.every((line) => line.trim().startsWith("https://"))) return url
+  try {
+    return `data:application/vnd.apple.mpegurl;base64,${btoa(master.text)}`
+  } catch {
+    return url // btoa solo admite Latin-1; una lista de Twitch no lleva otra cosa
+  }
 }
 
 export type VodPhase = "loading" | "ready" | "error" | "unavailable"
@@ -183,8 +203,8 @@ export const useVodPlayer = (
     })
 
     let player: Hls | undefined
-    vodPlayback(video.id)
-      .then((url) => {
+    Promise.all([vodPlayback(video.id), prefetchedVodMaster(video.id)])
+      .then(([url, master]) => {
         if (!active) return
         player = new Hls({
           abrEwmaDefaultEstimate: startEstimate(),
@@ -243,10 +263,11 @@ export const useVodPlayer = (
           })
           media.play().catch(() => undefined)
         })
-        // fMP4 (los canales con Enhanced Broadcasting): sin carga progresiva, como en el directo (useHlsPlayer). Se decide
-        // antes del primer trozo: LEVEL_UPDATED lo da hls.js al recibir la lista y antes de pedirlo; en LEVEL_LOADED ya
-        // lo había pedido con la carga progresiva. El primero no llegaba a verse, el segundo fallaba y hls.js volvía a
-        // empezar, a veces en peor calidad (en 720p o 360p, en ~2 s en vez de ~0,6).
+        // fMP4 (los canales con Enhanced Broadcasting): sin carga progresiva. Con hls.js 1.7.3 cada trozo que llegaba se
+        // ponía encima de lo anterior (hls.js#8058): el primero no llegaba a verse, el segundo fallaba y hls.js volvía a
+        // empezar, a veces en peor calidad (en 720p o 360p, en ~2 s en vez de ~0,6). La 1.7.4 lo arregla y el directo ya
+        // la usa en fMP4 (REN-4); en el VOD no se ha medido. Se decide antes del primer trozo: LEVEL_UPDATED lo da hls.js
+        // al recibir la lista y antes de pedirlo; en LEVEL_LOADED ya lo había pedido con la carga progresiva.
         player.once(Hls.Events.LEVEL_UPDATED, (_event, data) => {
           if (
             player !== undefined &&
@@ -255,6 +276,39 @@ export const useVodPlayer = (
             player.config.progressive = false
           }
         })
+        // El vídeo, en el punto pedido en cuanto el búfer lo cubre (con medio segundo por delante; si el búfer empieza
+        // un poco después, al principio de un trozo, desde donde empieza). hls.js lo hace al tener el primer trozo
+        // entero (seekToStartPos, en onFragBuffered), y un trozo del VOD son 10 s (~8 MB a 1080p60): con la carga
+        // progresiva, el punto ya estaba en el búfer ~0,5 s antes con una red como la de Twitch. Y si en ese momento el
+        // vídeo está en otro salto, hls.js no lo hace: el VOD empezaba al principio del trozo, hasta 10 s antes de lo
+        // pedido (en Zen, 1 de cada ~4 veces). Aquí se vuelve a intentar al acabar ese salto. Deja de mirar al
+        // colocarlo, si ya está ahí o a los PLACE_MS (después, quien mueve el vídeo es la persona).
+        if (start > 0) {
+          const place = (): void => {
+            if (media.currentTime >= start - START_SLACK_S) {
+              stopPlacing()
+              return
+            }
+            if (media.seeking) return // al acabar ese salto (seeked)
+            const ranges = media.buffered
+            for (let index = 0; index < ranges.length; index++) {
+              const from = Math.max(start, ranges.start(index))
+              if (from - start <= START_SLACK_S && ranges.end(index) >= from + 0.5) {
+                media.currentTime = from
+                stopPlacing()
+                return
+              }
+            }
+          }
+          const giveUp = setTimeout(() => stopPlacing(), PLACE_MS)
+          const stopPlacing = (): void => {
+            clearTimeout(giveUp)
+            player?.off(Hls.Events.BUFFER_APPENDED, place)
+            media.removeEventListener("seeked", place)
+          }
+          player.on(Hls.Events.BUFFER_APPENDED, place)
+          media.addEventListener("seeked", place)
+        }
         player.on(Hls.Events.LEVEL_SWITCHED, (_event, data) => {
           if (active) patch({ playingLevel: data.level })
         })
@@ -269,7 +323,7 @@ export const useVodPlayer = (
           patch({ phase: forbidden ? "unavailable" : "error", playing: false })
         })
         player.attachMedia(media)
-        player.loadSource(url)
+        player.loadSource(masterSource(url, master))
       })
       .catch(() => {
         if (active) patch({ phase: "error" })

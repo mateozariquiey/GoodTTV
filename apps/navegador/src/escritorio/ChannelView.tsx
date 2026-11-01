@@ -8,6 +8,7 @@ import {
   fromSearch,
   fromStream,
   prefetchVod,
+  prefetchVodMaster,
   prewarmStream,
   renewVod,
   TWITCH_VIEWER_LATENCY,
@@ -94,6 +95,7 @@ export const ChannelView = ({
     channel.login,
     preferencesLoaded && sole.standby !== "parado",
     preferences.latencyMode,
+    true,
   )
   const { latency, state } = player
   // Los minutos que suena (en la pestaña que suena), para ordenar tus seguidos por los que más ves.
@@ -161,8 +163,10 @@ export const ChannelView = ({
   useEffect(() => {
     const id = archive?.archiveId
     if (id == null) return undefined
-    // Retroceder no espera a pedir su lista ni sus datos. Valen 5 min (vod-cache.ts): mientras se ve, se renuevan.
+    // Retroceder no espera a pedir su lista ni sus datos, ni a descargar la lista. Valen 5 min (vod-cache.ts): mientras
+    // se ve, se renuevan.
     prefetchVod(id)
+    prefetchVodMaster(id)
     const warm = setInterval(() => renewVod(id), VOD_WARM_MS)
     const timer = setInterval(() => setNow(Date.now()), 1000)
     return () => {

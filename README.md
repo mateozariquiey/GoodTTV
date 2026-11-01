@@ -11,28 +11,30 @@ that removes the ads, the account and the chat.
 
 | App | For | Status |
 | --- | --- | --- |
-| [Browser](#browser) (`apps/navegador`) | Chrome, Chromium, Firefox and Zen, with mouse and keyboard | 0.4.0 |
-| [Android](#android) (`apps/android`) | Phones with Android 13 or later | 0.4.0, experimental |
-| [TV](#tv) (`apps/tele`) | A Linux mini PC connected to the TV, with a remote | 0.4.0, no longer tested on a real TV |
+| [Browser](#browser) (`apps/navegador`) | Chrome, Chromium, Firefox and Zen, with mouse and keyboard | 0.4.1 |
+| [Android](#android) (`apps/android`) | Phones with Android 13 or later | 0.4.1, experimental |
+| [TV](#tv) (`apps/tele`) | A Linux mini PC connected to the TV, with a remote | 0.4.1, no longer tested on a real TV |
 
 The interfaces are in Spanish for now.
 
 ![Extension: a channel with its controls on top of the video, its card and chat; on the left, followed channels that are live](docs/media/escritorio-canal.jpg)
 
-## New in 0.4.0
+## New in 0.4.1
 
-- **Audio only with the screen off,** on Android: the channel switches to Twitch's audio-only stream without a gap, and
-  the picture is back by the time you unlock. About 0.4 Mbit/s instead of 8: some 175 MB an hour instead of 3.7 GB.
-- **Chat takes less work to draw:** with a busy chat, the extension's page thread goes from 10.5 % to 7.6 % of a core,
-  and Android's web view from 30 % to 24 %.
-- **Android opens the last channel you watched sooner,** in about 0.5 s instead of 1.6 s: it gets it ready when the app
-  opens.
-- **The quality is remembered,** like the volume, with "Auto" in the menu, and rewinding to the VOD keeps it.
-- **Full screen with its own chat:** `C` puts it beside the video and it is remembered. Theater mode is for the window.
-  On Android, the chat in landscape is remembered too.
-- **Picture-in-picture** in the extension, in Chrome, Firefox and Zen.
-- **Fixes:** long pauses and "Ir al directo", VODs in fMP4 that started in low quality, Space after a click, and on
-  Android, rewinding at full screen and the VOD speed.
+- **Rewinding from live to the VOD is about twice as fast** in the extension: with `←`, the first frame takes about
+  0.84 s instead of 1.55 s (measured locally, with a network like Twitch's), and 0.19 s instead of 0.44 s on a real
+  channel in Chrome. It also opens where you asked: it could start up to 10 s earlier, in at least 4 of 20 tries in Zen.
+- **`←` and `→` land on the nearest keyframe** in the extension, as they already did on Android: each jump is 9-11 s
+  instead of exactly 10, and the picture moves again in 127 ms instead of 161 ms.
+- **Cleaner ad breaks,** on every version. At the end of an ad, some sessions caused about 30 s of stalls and a jump
+  back with repeated content, and entering one could jump 30-40 s. Neither happens now, also right after a new broadcast.
+- **The stream's clock is steadier,** and the chat's sync comes from it: in replays of 58 recorded visits, its jumps
+  are 45 % smaller in total, and filling a global pause with the VOD no longer repeats what you already saw.
+- **Audio stays in sync in Zen and Firefox:** the player skips the extra margin instead of speeding up, because each
+  speed change left the sound a little further behind the picture.
+- **Subscriber-only VODs are no longer offered for rewinding,** in the extension and on Android.
+- **hls.js 1.7.4,** which brings progressive loading back to fMP4 channels.
+- **Fixes:** `←` and `→` also work after touching the volume with the mouse.
 
 ## How it removes ads
 
@@ -81,11 +83,11 @@ Firefox.
 
 **Install:** it is not in the stores. Download it from the
 [releases](https://github.com/mateozariquiey/GoodTTV/releases).
-- **Zen** (and Firefox Developer Edition or Nightly), with `goodttv-0.4.0.xpi`: in `about:config`, set
+- **Zen** (and Firefox Developer Edition or Nightly), with `goodttv-0.4.1.xpi`: in `about:config`, set
   `xpinstall.signatures.required` to `false`. Then, in `about:addons`, gear menu → "Install Add-on From File…".
 - **Firefox:** it only accepts unsigned add-ons temporarily: `about:debugging` → "This Firefox" → "Load Temporary
   Add-on…" and the `.xpi`. It is removed when Firefox closes.
-- **Chrome and Chromium,** on Windows too, with `goodttv-0.4.0-chrome.zip`:
+- **Chrome and Chromium,** on Windows too, with `goodttv-0.4.1-chrome.zip`:
   1. Unzip it into a folder you will keep.
   2. In `chrome://extensions`, turn on "Developer mode" (top right).
   3. Click "Load unpacked" and choose that folder.
@@ -114,11 +116,11 @@ app turns it into picture-in-picture.
 It has been tested on one phone only (a Galaxy S25 Ultra with Android 16). Whether chat stays in step with the picture
 has been checked by eye, not measured.
 
-**Install** (Android 13 or later): download `GoodTTV-0.4.0.apk` from the
+**Install** (Android 13 or later): download `GoodTTV-0.4.1.apk` from the
 [releases](https://github.com/mateozariquiey/GoodTTV/releases) on the phone and open it. Android will ask you to allow
 installing apps from the browser or the file manager, and Play Protect may warn that it does not know the developer.
 New versions install over the old one and keep your account, because they are signed with the same key. From a
-computer, `adb install -r GoodTTV-0.4.0.apk` does the same. The signing certificate's SHA-256 fingerprint is
+computer, `adb install -r GoodTTV-0.4.1.apk` does the same. The signing certificate's SHA-256 fingerprint is
 `38:CF:EA:F9:1C:2F:8C:C4:B8:35:27:11:BD:77:7F:56:0E:A8:D5:4F:87:37:C4:91:6C:B6:BA:C8:27:32:5A:D6` (`apksigner verify --print-certs` shows it).
 
 To build it you need the Android SDK and JDK 21: see [apps/android/README.md](apps/android/README.md) (in Spanish).
@@ -163,7 +165,7 @@ x86_64) and run it; it starts full screen and needs `libfuse2`. To build it:
 ```bash
 bun install --frozen-lockfile
 bun run build && bun run start   # in a window, for testing
-bun run package:appimage         # apps/tele/dist/GoodTTV-0.4.0-x86_64.AppImage
+bun run package:appimage         # apps/tele/dist/GoodTTV-0.4.1-x86_64.AppImage
 ```
 
 ## The code

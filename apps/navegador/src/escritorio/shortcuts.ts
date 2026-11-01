@@ -1,6 +1,6 @@
 // Atajos de teclado del escritorio (Ajustes los enumera). Con un campo de texto activo solo vale Esc, Espacio sobre un
 // botón o un enlace al que se ha llegado con el teclado es suyo (lo pulsa), y las flechas, de los controles que las usan
-// (el volumen, un menú).
+// (el volumen, un menú). ← y →, solo si se llegó a ese control con el teclado (sideArrowsFree).
 export type Shortcut =
   | "back"
   | "chat"
@@ -18,8 +18,15 @@ export type Shortcut =
 export type ShortcutContext = {
   readonly onArrows: boolean // el foco está en un control que usa las flechas
   readonly onControl: boolean // el foco está en un botón, enlace o control, y se llegó a él con el teclado
+  readonly byPointer: boolean // el foco llegó al tocarlo con el ratón
   readonly typing: boolean // el foco está en un campo de texto
 }
+
+// ← → retroceden y avanzan 10 s salvo en un control con flechas al que se ha llegado con el teclado. Tras mover el volumen
+// con el ratón se quedaba con el foco, y ← movía el volumen un 1 %, que ni se nota, en vez de retroceder (29 oct). ↑ ↓
+// siguen siendo del control: el volumen que se acaba de tocar.
+export const sideArrowsFree = (context: ShortcutContext): boolean =>
+  !context.onArrows || context.byPointer
 
 const KEYS: Readonly<Record<string, Shortcut>> = {
   " ": "play-pause",
@@ -46,7 +53,9 @@ export const shortcutFor = (
   if (event.key === "Escape") return "back"
   if (context.typing) return undefined
   if (context.onControl && event.key === " ") return undefined
-  if (context.onArrows && event.key.startsWith("Arrow")) return undefined
+  const sideways = event.key === "ArrowLeft" || event.key === "ArrowRight"
+  if (context.onArrows && event.key.startsWith("Arrow") && !(sideways && sideArrowsFree(context)))
+    return undefined
   return KEYS[event.key.length === 1 ? event.key.toLowerCase() : event.key]
 }
 
@@ -59,14 +68,15 @@ export const contextOf = (target: EventTarget | null): ShortcutContext => {
       (element.tagName === "INPUT" && (element as HTMLInputElement).type !== "range"))
   // Solo si se llegó con el teclado. Lo que se toca con el ratón se queda con el foco, y Espacio, en un vídeo, es pausar:
   // tras abrir un canal en la columna o tocar el volumen no hacía nada, y tras el botón del modo teatro, lo quitaba.
+  const byPointer = element !== null && element === pointerFocused
   const onControl =
     element !== null &&
-    element !== pointerFocused &&
+    !byPointer &&
     element.closest("button, a, input, select, [role='slider']") !== null
   const onArrows =
     element !== null &&
     element.closest("input, select, [role='slider'], [role='menu'], [role='radiogroup']") !== null
-  return { onArrows, onControl, typing }
+  return { byPointer, onArrows, onControl, typing }
 }
 
 // El elemento que recibió el foco al tocarlo con el puntero (null si llegó con el teclado o de otra forma). No sirve

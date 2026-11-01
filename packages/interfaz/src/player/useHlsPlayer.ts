@@ -20,8 +20,6 @@ const INITIAL: PlayerState = {
 }
 
 const STALL_MS = 20_000
-// Al empezar a reproducir, durante este tiempo el margen que sobra se salta en vez de recuperarlo acelerando.
-const STARTUP_MS = 10_000
 // Retraso típico de un espectador de Twitch respecto al emisor (embed oficial, medido: ~2,7 s). Quien escribe en el
 // chat lo hace viendo el directo con ese retraso.
 export const TWITCH_VIEWER_LATENCY = 3
@@ -42,11 +40,6 @@ export const useBehind = (latency: { readonly current: number | null }): number 
 // Margen hasta el final de la lista, en fragmentos del directo. Con la carga progresiva, el último (PREFETCH, que se
 // descarga mientras se codifica) se añade a medida que llega: con 2,5 quedan 1-2 s de búfer.
 const SYNC_SEGMENTS = 2.5
-// Sin carga progresiva (fMP4, ver LEVEL_LOADED), el último fragmento solo cuenta al llegar entero, como antes de D16:
-// con 2,5 el búfer bajaba a ~0,05 s. En 5 canales fMP4 (21 oct), 2,5 dio 16 s de paradas en 4 de 10 visitas y 3,
-// ninguna, con ~0,6 s más de retraso.
-const FMP4_SYNC_SEGMENTS = 3
-const CATCHUP_RATE = 1.05 // velocidad para recuperar el margen cuando el modo lo pide
 const NO_STOP_TARGET = 24 // modo sin paradas: margen fijo (s) hasta el final de la lista, que cubre la espera del VOD
 const LIVE_MAX_BEHIND = 4 // modo directo: más atrás que esto sobre el objetivo, hls.js salta al directo
 const MAX_BEHIND = 60 // los otros modos: lo mismo, con margen para las pausas de la persona (la lista abarca 100 s)
@@ -58,6 +51,13 @@ const VOD_START_TARGET = 16
 // Al retroceder, fragmentos que se dejan hasta el principio de la lista: mientras se ve, la lista avanza a la par, y lo
 // que sale de ella ya no se puede pedir.
 const SEEK_FLOOR_SEGMENTS = 3
+// ← → caen en el fotograma clave más cercano (el principio de un fragmento) si está a menos de esto (s) del punto exacto:
+// así el navegador no decodifica hasta 2 s de vídeo para llegar a él (161 → 112 ms hasta que la imagen se mueve, 31 oct;
+// investigacion/velocidad/informe.md). Como Media3 en Android (PREVIOUS_SYNC).
+const SEEK_SNAP_S = 1
+// El principio de un fragmento según hls.js puede quedar unas centésimas antes de su fotograma clave de vídeo (el
+// audio empieza antes): justo en él, el navegador decodificaba desde el fotograma clave anterior.
+const SEEK_SNAP_AFTER_S = 0.1
 
 type StreamInfo = {
   readonly filling: boolean
@@ -146,12 +146,14 @@ const readInfo = async (
 }
 
 // mode: retraso del directo (Ajustes). latency (s): retraso de la imagen respecto a la hora real del fragmento que
-// se ve; lo usa el chat para ir sincronizado.
+// se ve; lo usa el chat para ir sincronizado. canGoLive: la pantalla ofrece «Ir al directo» (rewound y seekBy), como la
+// extensión; la tele, no.
 export const useHlsPlayer = (
   container: React.RefObject<HTMLElement | null>,
   channel: string,
   enabled: boolean,
   mode: LatencyMode,
+  canGoLive = false,
 ) => {
   const [state, setState] = useState<PlayerState>(INITIAL)
   const [attempt, setAttempt] = useState(0)
@@ -234,7 +236,7 @@ export const useHlsPlayer = (
             : info.filling
               ? Math.max(VOD_START_TARGET, segmentTarget)
               : segmentTarget
-        let maxLatency = target + (mode === "directo" ? LIVE_MAX_BEHIND : MAX_BEHIND)
+        const maxLatency = target + (mode === "directo" ? LIVE_MAX_BEHIND : MAX_BEHIND)
         const player = new Hls({
           autoStartLoad: false, // empieza a cargar en el objetivo (LEVEL_LOADED, abajo)
           // Sin subtítulos ni pistas de metadatos (la interfaz no los usa): hls.js crearía pistas data: que la
@@ -261,8 +263,10 @@ export const useHlsPlayer = (
           manifestLoadingMaxRetry: 60,
           manifestLoadingRetryDelay: 1000,
           // Cada fragmento se añade al vídeo a medida que llega. El último de Twitch (PREFETCH) se descarga mientras
-          // se codifica, durante unos 2 s: sin esto el búfer solo crecía al completarse cada fragmento. Solo con
-          // MPEG-TS (ver LEVEL_LOADED).
+          // se codifica, durante unos 2 s: sin esto el búfer solo crecía al completarse cada fragmento. También con
+          // fMP4 (EXT-X-MAP, los canales con Enhanced Broadcasting) desde hls.js 1.7.4: hasta la 1.7.3, cada trozo
+          // que llegaba se ponía encima de lo anterior (hls.js#8058), y en fMP4 se cargaba fragmento a fragmento con
+          // 3 fragmentos de margen (REN-4).
           progressive: true,
           // El primer fragmento se pide sin esperar a que el <video> tenga listo su MediaSource.
           startFragPrefetch: true,
@@ -274,36 +278,21 @@ export const useHlsPlayer = (
         // del final que TARGETDURATION, y con relleno la lista declara 13 s (los trozos del VOD): empezaría al
         // principio de la lista, más atrás de lo pedido, y luego aceleraría (1,05× descarta fotogramas).
         player.once(Hls.Events.LEVEL_LOADED, (_event, data) => {
-          // fMP4 (EXT-X-MAP; p. ej. los canales con Enhanced Broadcasting), sin carga progresiva: hls.js 1.7 sitúa cada
-          // trozo que llega respecto al principio del fragmento y, a partir de 1 s, lo da por desfasado y lo pone
-          // encima de lo anterior. Cada fragmento de 2 s ocupaba ~1,1 s: saltos y la imagen pegada al borde (15 oct,
-          // illojuan). Se decide aquí, antes del primer fragmento: hls.js copia la configuración al crear el
-          // transmuxer.
-          let start = target
-          if (data.details.fragments.some((frag) => frag.initSegment !== null)) {
-            player.config.progressive = false
-            const fmp4 = FMP4_SYNC_SEGMENTS * (info.segmentDuration ?? 2)
-            if (fmp4 > start) {
-              start = fmp4
-              maxLatency = fmp4 + (mode === "directo" ? LIVE_MAX_BEHIND : MAX_BEHIND)
-              player.config.liveSyncDuration = fmp4
-              player.config.liveMaxLatencyDuration = maxLatency
-              player.targetLatency = fmp4
-            }
-          }
-          player.startLoad(Math.max(0, data.details.edge - start))
+          player.startLoad(Math.max(0, data.details.edge - target))
         })
-        // Al arrancar no hay contenido que preservar: lo que sobre de margen se salta en vez de recuperarlo acelerando,
-        // que descarta fotogramas (60 fps a 1,05× piden 63 por segundo). Puede sobrar al poco de empezar: la primera
-        // lista puede llegar hasta un fragmento atrasada respecto a Twitch, y no se nota hasta la siguiente.
-        let playingSince: number | null = null
-        video.addEventListener("playing", () => {
-          playingSince ??= performance.now()
-        })
-        // Una pausa (de la persona) cierra el arranque: el retraso que deja no es margen que sobre.
-        let pausedOnce = false
+        // Pausar es retroceder (DVR-1): al reanudar, lo que se ha quedado atrás no es margen que sobre. Se conserva como
+        // lo retrocedido, con «Ir al directo» para volver, en vez de saltárselo. En el modo directo, no: va lo más cerca
+        // posible del directo, y pasados LIVE_MAX_BEHIND s hls.js ya salta solo. Tampoco sin «Ir al directo» (la tele):
+        // se quedaría atrás para siempre. Ni una pausa de un instante (pulsar dos veces): no es retroceder.
+        let pausedAt: number | null = null
+        let pausedFor = 0 // s que duró la pausa más larga desde que lo miró el intervalo
         video.addEventListener("pause", () => {
-          pausedOnce = true
+          pausedAt = performance.now()
+        })
+        video.addEventListener("playing", () => {
+          if (pausedAt !== null)
+            pausedFor = Math.max(pausedFor, (performance.now() - pausedAt) / 1000)
+          pausedAt = null
         })
         player.on(Hls.Events.ERROR, (_event, data) => {
           if (!data.fatal) return
@@ -318,10 +307,10 @@ export const useHlsPlayer = (
         player.attachMedia(video) // primero: el MediaSource se abre mientras llega la lista
         player.loadSource(`/stream/${channel}/live.m3u8${streamQuery(info.quality, mode, visit)}`)
         // Margen según el modo (D11). Adaptativo: tras la primera pausa global del canal (llegan trozos del VOD) se
-        // conserva el margen que deja el relleno en vez de recuperarlo acelerando, para que las siguientes no se
-        // noten; antes, si se queda atrás, acelera un poco. Sin paradas: nunca acelera; el margen mínimo es fijo y lo
-        // que se añada (una pausa de la persona) se conserva, hasta un tope, como en adaptativo tras el primer relleno. Directo:
-        // acelera un poco si se queda atrás, y si se queda mucho hls.js salta (liveMaxLatencyDuration).
+        // conserva el margen que deja el relleno, para que las siguientes no se noten; antes, lo que sobre se salta.
+        // Sin paradas: el margen mínimo es fijo y lo que se añada (una parada) se conserva, hasta un tope, como en
+        // adaptativo tras el primer relleno. Directo: lo que sobre se salta, y si se queda mucho atrás, hls.js salta
+        // (liveMaxLatencyDuration).
         let keepMargin = mode === "sin-paradas"
         player.on(Hls.Events.FRAG_LOADING, (_event, data) => {
           if (mode === "adaptativo" && data.frag.url.includes("/stream/vod")) keepMargin = true
@@ -350,9 +339,22 @@ export const useHlsPlayer = (
             if (!orStart) return null
             to = Math.min(floor, video.currentTime)
           }
+          // Al fotograma clave más cercano en ← →, sin pasar del objetivo ni bajar del suelo. Fin («Ir al directo») y lo que
+          // llega al objetivo, exactos: un fotograma clave antes sería retraso de más.
+          if (Number.isFinite(seconds) && to < live - SEEK_SNAP_S) {
+            const exact = to
+            let nearest: number | null = null
+            for (const fragment of details.fragments) {
+              const key = (fragment.startPTS ?? fragment.start) + SEEK_SNAP_AFTER_S
+              const fits =
+                Math.abs(key - exact) <= SEEK_SNAP_S && key <= live && key >= Math.min(floor, exact)
+              if (fits && (nearest === null || Math.abs(key - exact) < Math.abs(nearest - exact)))
+                nearest = key
+            }
+            if (nearest !== null) to = nearest
+          }
           const moved = to - video.currentTime
           setBack(to < live - 1)
-          video.playbackRate = 1
           video.currentTime = to
           return moved
         }
@@ -363,31 +365,33 @@ export const useHlsPlayer = (
           if (target === null || video.paused || video.readyState < 3) return
           const extra = player.latency - target
           if (!Number.isFinite(extra)) return
+          if (pausedFor > 0) {
+            if (pausedFor > 1 && extra > 1 && canGoLive && mode !== "directo") setBack(true)
+            pausedFor = 0
+          }
           if (back) {
             // De vuelta en el objetivo: avanzando, o porque hls.js ha saltado al directo.
             if (extra > 1) return
             setBack(false)
           }
-          const starting =
-            !pausedOnce && playingSince !== null && performance.now() - playingSince < STARTUP_MS
+          if (extra <= 1) return
+          if (keepMargin) {
+            // hls.js tampoco debe intentar recuperarlo. Por encima del tope no se conserva: si el retraso pasa de
+            // liveMaxLatencyDuration, hls.js salta adelante hasta el tope.
+            player.targetLatency = Math.min(player.latency, maxLatency - KEEP_BELOW_MAX)
+            return
+          }
+          // Lo que sobra de margen (una parada; al empezar, la primera lista puede llegar hasta un fragmento atrasada
+          // respecto a Twitch, y no se nota hasta la siguiente) se salta en vez de recuperarlo acelerando. A 1,05× se
+          // descartan fotogramas (60 fps a 1,05× piden 63 por segundo) y, en Firefox y Zen, el sonido se queda atrás con
+          // cada cambio de velocidad y ya no vuelve: 2,9 s tras 5 min alternando 1,05× y 1× (29 oct; en Chrome, no).
           // Solo con la lista al día: si se ha quedado parada (una pausa global, Twitch se retrasa), el retraso
           // también crece, pero no es margen que sobre, y saltar solo adelantaría la parada.
           const fresh = (player.latestLevelDetails?.age ?? 0) < 1.5 * (info.segmentDuration ?? 2)
-          if (starting && !keepMargin && fresh && extra > 1) {
-            const end =
-              video.buffered.length > 0 ? video.buffered.end(video.buffered.length - 1) : 0
-            const to = Math.min(video.currentTime + extra, end - 1)
-            if (to > video.currentTime + 0.5) video.currentTime = to
-            return
-          }
-          if (keepMargin) {
-            video.playbackRate = 1
-            // hls.js tampoco debe intentar recuperarlo. Por encima del tope no se conserva: si el retraso pasa de
-            // liveMaxLatencyDuration, hls.js salta adelante hasta el tope.
-            if (extra > 1)
-              player.targetLatency = Math.min(player.latency, maxLatency - KEEP_BELOW_MAX)
-          } else if (extra > 1) video.playbackRate = CATCHUP_RATE
-          else if (extra < 0.3) video.playbackRate = 1
+          if (!fresh) return
+          const end = video.buffered.length > 0 ? video.buffered.end(video.buffered.length - 1) : 0
+          const to = Math.min(video.currentTime + extra, end - 1)
+          if (to > video.currentTime + 0.5) video.currentTime = to
         }, 1000)
       })
       .catch(() => {
@@ -407,7 +411,7 @@ export const useHlsPlayer = (
       element.replaceChildren()
       void window.api.player.setWatching(false)
     }
-  }, [attempt, channel, container, enabled, mode, patch, platformHls, quality])
+  }, [attempt, canGoLive, channel, container, enabled, mode, patch, platformHls, quality])
 
   // Al volver a ser visible (tras apagarse la pantalla), sigue salvo que la persona hubiera pausado.
   useEffect(() => {

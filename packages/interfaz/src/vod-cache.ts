@@ -61,4 +61,29 @@ export const prefetchVod = (id: string): void => {
 export const renewVod = (id: string): void => {
   renew(urls, id, () => loadPlayback(id))
   renew(details, id, () => loadDetail(id))
+  if (masters.has(id)) renew(masters, id, () => loadMaster(id))
+}
+
+// La lista maestra ya descargada, con la URL de la que salió: la extensión se la da a hls.js al abrir el VOD, que si no
+// la pide entonces (~0,2-0,4 s a usher, y después aún la del VOD). Solo en la extensión: en Android la pide Media3, por
+// la red del teléfono. renewVod la renueva si se ha pedido.
+export type VodMaster = { readonly url: string; readonly text: string }
+const masters: Cache<VodMaster> = new Map()
+
+const loadMaster = async (id: string): Promise<VodMaster> => {
+  const url = await vodPlayback(id)
+  const response = await fetch(url)
+  if (!response.ok) throw new Error(`HTTP ${response.status}`)
+  return { text: await response.text(), url }
+}
+
+export const prefetchVodMaster = (id: string): void => {
+  cached(masters, id, () => loadMaster(id)).catch(() => undefined)
+}
+
+// La que ya está pedida (aunque aún no haya llegado), sin pedirla si no lo está.
+export const prefetchedVodMaster = (id: string): Promise<VodMaster | undefined> => {
+  const entry = masters.get(id)
+  if (entry === undefined || Date.now() - entry.at >= KEEP_MS) return Promise.resolve(undefined)
+  return entry.value.catch(() => undefined)
 }

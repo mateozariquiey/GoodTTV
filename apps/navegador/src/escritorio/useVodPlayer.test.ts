@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { levelFor } from "./useVodPlayer"
+import { levelFor, masterSource } from "./useVodPlayer"
 
 // Los niveles de un VOD de Twitch, como los da hls.js (sin el de solo audio, de alto 0).
 const levels = [
@@ -20,5 +20,22 @@ describe("levelFor: la calidad del directo en un VOD", () => {
     expect(levelFor(levels, "1920x1080@30")).toBe(0)
     expect(levelFor(levels, "640x360@30")).toBe(-1)
     expect(levelFor(levels, "1600x900@60")).toBe(1)
+  })
+})
+
+describe("la lista maestra ya descargada (masterSource)", () => {
+  const url = "https://usher.ttvnw.net/vod/1.m3u8?token=x"
+  const text = "#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=1\nhttps://cdn/chunked/index-dvr.m3u8\n"
+
+  it("se le da a hls.js como data:, con su contenido", () => {
+    const source = masterSource(url, { text, url })
+    expect(source.startsWith("data:application/vnd.apple.mpegurl;base64,")).toBe(true)
+    expect(atob(source.split(",")[1] ?? "")).toBe(text)
+  })
+
+  it("si no hay, es de otra URL o tiene variantes relativas, la URL de siempre", () => {
+    expect(masterSource(url, undefined)).toBe(url)
+    expect(masterSource(url, { text, url: "https://usher.ttvnw.net/vod/1.m3u8?token=y" })).toBe(url)
+    expect(masterSource(url, { text: "#EXTM3U\nchunked/index-dvr.m3u8\n", url })).toBe(url)
   })
 })

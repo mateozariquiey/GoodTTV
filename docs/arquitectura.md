@@ -118,7 +118,9 @@ src/fondo.ts           abre GoodTTV o trae al frente la pestaña con esa vista; 
   pasado el 97 % (o a 45 s del final) cuenta como visto. Los vídeos del canal salen debajo de su ficha (COL-2) y, sin
   directo, en vez del vídeo, con una fila encima con los suyos a medias; también debajo de un VOD, y todos los que van
   a medias, en Inicio. También son comunes los tiempos (`vod-format.ts`) y la lista maestra pedida de antemano
-  (`vod-cache.ts`). En Android (D25), el VOD lo reproduce Media3 con esa lista, por la red del teléfono y sin el motor
+  (`vod-cache.ts`); la extensión, además, la descarga (al ver el canal o pasar el ratón por el vídeo) y se la da a
+  hls.js como `data:`, y lleva el vídeo al punto pedido en cuanto el búfer lo cubre, sin esperar a que hls.js tenga el
+  trozo de 10 s entero (`useVodPlayer`). En Android (D25), el VOD lo reproduce Media3 con esa lista, por la red del teléfono y sin el motor
   (`Reproductor.kt`), y la página (`pantallas/Vod.tsx`) pinta encima la barra y los controles, como en un canal.
 - **Buscar canales y abrir uno por su nombre, sin cuenta** (la extensión y Android): con el buscador de
   twitch.tv como invitado (`canales.ts`, en `@goodttv/sin-anuncios`, que `createPageApi` usa en `catalog.search` y
@@ -129,8 +131,11 @@ src/fondo.ts           abre GoodTTV o trae al frente la pestaña con esa vista; 
   orden recomendado es propio, con los minutos que suena cada canal en GoodTTV, en directo o en sus VOD, que pesan la
   mitad cada 14 días (`watch-time.ts`, en `@goodttv/interfaz`, en `localStorage`), y luego los abiertos hace poco.
 - **Retroceder el directo (DVR-1):** con el VOD que graba la emisión en curso (`liveArchive`, en `vods.ts`; va unos
-  segundos por detrás del directo), la barra del canal va desde que empezó. Lo que cubre la lista del empalme (~100 s,
-  menos el margen del modo), ← y la barra lo recorren en el mismo reproductor (`seekBy` de `useHlsPlayer`): lo
+  segundos por detrás del directo), la barra del canal va desde que empezó. Si ese VOD es solo para suscriptores
+  (su token de invitado restringe las calidades), no se ofrece: ← y la pausa se quedan en la lista del empalme
+  (D34). Lo que cubre la lista del empalme (~100 s,
+  menos el margen del modo), ← y la barra lo recorren en el mismo reproductor (`seekBy` de `useHlsPlayer`; ← y →, al
+  fotograma clave más cercano, a menos de 1 s, como Media3 en Android, para no decodificar hasta 2 s de vídeo): lo
   retrocedido se conserva, sin acelerar ni que hls.js vuelva solo al directo, hasta avanzar a él o pulsar «Ir al
   directo» (Fin), que también reanuda y olvida la pausa. Moverse en pausa mueve también el momento en que se pausó.
   Más atrás, o al reanudar tras más de un minuto en pausa, se abre ese VOD en ese momento
@@ -327,11 +332,13 @@ funciona como se describe a continuación.
   «final − objetivo» (`autoStartLoad: false` y `startLoad` al llegar la lista). Por lo mismo, tras
   un error fatal de medios vuelve a cargar él mismo (`startLoad` después de `recoverMediaError`):
   hls.js ya ha parado la carga y, sin `autoStartLoad`, no la reanuda.
-- **Saltar en vez de acelerar al empezar:** la primera lista puede llegar hasta un fragmento
-  atrasada respecto a Twitch, y no se nota hasta la siguiente. Durante los 10 primeros segundos, lo
-  que sobre de margen se salta (un salto de ~1-2 s hacia el segundo 3); acelerar a 1,05× durante
-  ~30 s descartaba fotogramas (60 fps a 1,05× piden 63 por segundo). No se salta tras una pausa de
-  la persona ni con la lista parada (una pausa global): ese retraso no es margen que sobre.
+- **Saltar en vez de acelerar:** lo que sobre de margen se salta de una vez, sin pasar del búfer: al empezar (la
+  primera lista puede llegar hasta un fragmento atrasada respecto a Twitch, y no se nota hasta la siguiente; un salto
+  de ~1-2 s hacia el segundo 3) y tras una parada. Acelerar a 1,05× descartaba fotogramas (60 fps a 1,05× piden 63 por
+  segundo) y, en Firefox y Zen, cada cambio de velocidad dejaba el sonido algo más atrás de la imagen, sin volver (D34).
+  No se salta con la lista parada (una pausa global): ese retraso no es margen que sobre. Tras una pausa de más de 1 s,
+  lo pausado se conserva como lo retrocedido, con «Ir al directo»; en *Directo* y en la tele, que no tiene ese botón, se
+  salta.
 - **La lista abarca 100 s** (`WINDOW_SECONDS` en el empalme), más de lo que hls.js deja quedarse atrás antes de
   saltar (`liveMaxLatencyDuration`: el objetivo más 60 s, 84 s en *Sin paradas*). *Sin paradas* y *Adaptativo* (tras
   el primer relleno) conservan el retraso que se añade, como una pausa de la persona, hasta 10 s por debajo de ese
@@ -347,14 +354,15 @@ funciona como se describe a continuación.
   a medida que llega. El último de Twitch (PREFETCH) se descarga mientras se codifica, durante unos
   2 s; antes el búfer solo crecía al completarse cada fragmento y bajaba a ~1 s justo antes. El
   primer fragmento se pide sin esperar al MediaSource (`startFragPrefetch`).
-  - **Solo con MPEG-TS.** Los canales con fMP4 (`EXT-X-MAP`; p. ej. con *Enhanced Broadcasting*, como `illojuan`) se
-    cargan fragmento a fragmento: hls.js 1.7 sitúa cada trozo que llega respecto al principio del fragmento y, a partir
-    de 1 s, lo da por desfasado (`isInvalidInitPts`) y lo pone encima de lo anterior. Se decide con la primera lista,
-    antes de cargar nada (`useHlsPlayer`, `LEVEL_LOADED`; en el VOD, `LEVEL_UPDATED`, porque allí hls.js ya ha pedido el
-    primer trozo al llegar `LEVEL_LOADED`); el VOD va en el mismo formato que el directo
-    ([verificacion.md](verificacion.md#fmp4-saltos-con-la-carga-progresiva)). Sin carga progresiva, el último
-    fragmento solo cuenta al llegar entero, como antes de D16: el margen sube a 3 fragmentos (con 2,5 se paraba,
-    [verificacion.md](verificacion.md#fmp4-paradas-con-el-margen-de-25-fragmentos)).
+  - **También con fMP4** (`EXT-X-MAP`; p. ej. con *Enhanced Broadcasting*, como `illojuan`), con el mismo margen de
+    2,5 fragmentos, desde hls.js 1.7.4. Hasta la 1.7.3, hls.js situaba cada trozo que llegaba respecto al principio del
+    fragmento y, a partir de 1 s, lo daba por desfasado (`isInvalidInitPts`) y lo ponía encima de lo anterior
+    ([verificacion.md](verificacion.md#fmp4-saltos-con-la-carga-progresiva)), así que fMP4 se cargaba fragmento a
+    fragmento y con 3 fragmentos de margen. La 1.7.4 lo arregla
+    ([verificacion.md](verificacion.md#hlsjs-174-ren-4)).
+  - **El VOD en fMP4 sigue sin carga progresiva** (`useVodPlayer`, decidido en `LEVEL_UPDATED`, porque al llegar
+    `LEVEL_LOADED` hls.js ya ha pedido el primer trozo): con la 1.7.3 el primero no se veía y hls.js volvía a empezar, a
+    veces en peor calidad, y con la 1.7.4 no se ha medido. El VOD va en el mismo formato que el directo.
 - **El chat, barato de pintar:** cada lote solo pinta los mensajes nuevos (`Message` memoizado) y la
   lista lleva `contain: strict`, así que los mensajes que entran no recolocan el resto de la pantalla. En la extensión
   y en Android, además (D31):

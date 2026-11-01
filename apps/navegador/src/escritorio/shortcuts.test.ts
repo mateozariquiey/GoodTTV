@@ -10,7 +10,7 @@ const key = (name: string, extra: Partial<KeyboardEvent> = {}) => ({
   metaKey: false,
   ...extra,
 })
-const free = { onArrows: false, onControl: false, typing: false }
+const free = { byPointer: false, onArrows: false, onControl: false, typing: false }
 
 describe("shortcutFor", () => {
   it("cada tecla, su atajo, en mayúsculas o minúsculas", () => {
@@ -30,24 +30,32 @@ describe("shortcutFor", () => {
   })
 
   it("escribiendo, solo Esc", () => {
-    const typing = { onArrows: true, onControl: true, typing: true }
+    const typing = { byPointer: false, onArrows: true, onControl: true, typing: true }
     expect(shortcutFor(key("m"), typing)).toBeUndefined()
     expect(shortcutFor(key(" "), typing)).toBeUndefined()
     expect(shortcutFor(key("Escape"), typing)).toBe("back")
   })
 
   it("Espacio sobre un botón es del botón; las flechas y las letras, no", () => {
-    const control = { onArrows: false, onControl: true, typing: false }
+    const control = { byPointer: false, onArrows: false, onControl: true, typing: false }
     expect(shortcutFor(key(" "), control)).toBeUndefined()
     expect(shortcutFor(key("ArrowLeft"), control)).toBe("rewind")
     expect(shortcutFor(key("f"), control)).toBe("fullscreen")
   })
 
   it("las flechas sobre el volumen o un menú son suyas", () => {
-    const arrows = { onArrows: true, onControl: true, typing: false }
+    const arrows = { byPointer: false, onArrows: true, onControl: true, typing: false }
     expect(shortcutFor(key("ArrowDown"), arrows)).toBeUndefined()
     expect(shortcutFor(key("ArrowRight"), arrows)).toBeUndefined()
     expect(shortcutFor(key("m"), arrows)).toBe("mute")
+  })
+
+  it("tras tocar el volumen con el ratón, ← → retroceden y avanzan; ↑ ↓ siguen siendo suyas", () => {
+    const touched = { byPointer: true, onArrows: true, onControl: false, typing: false }
+    expect(shortcutFor(key("ArrowLeft"), touched)).toBe("rewind")
+    expect(shortcutFor(key("ArrowRight"), touched)).toBe("forward")
+    expect(shortcutFor(key("ArrowUp"), touched)).toBeUndefined()
+    expect(shortcutFor(key("ArrowDown"), touched)).toBeUndefined()
   })
 
   it("con modificadores son atajos del navegador", () => {
@@ -92,5 +100,19 @@ describe("contextOf: Espacio sobre un control", () => {
     pointer("pointerdown", next)
     pointer("pointerup", next)
     expect(contextOf(next).onControl).toBe(false)
+  })
+
+  it("el volumen tocado con el ratón no se queda ← →; con el teclado, sí", () => {
+    stop = watchPointerFocus()
+    const volume = document.body.appendChild(document.createElement("input"))
+    volume.type = "range"
+    pointer("pointerdown", volume)
+    volume.focus()
+    pointer("pointerup", volume)
+    expect(shortcutFor(key("ArrowLeft"), contextOf(volume))).toBe("rewind")
+    expect(shortcutFor(key("ArrowUp"), contextOf(volume))).toBeUndefined()
+    volume.blur()
+    volume.focus() // con Tab
+    expect(shortcutFor(key("ArrowLeft"), contextOf(volume))).toBeUndefined()
   })
 })

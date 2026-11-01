@@ -1066,3 +1066,129 @@ de Android y dos que también tenía la extensión; cada uno se comprobó antes 
 - **Pruebas:** las unitarias (436), `test:interfaz` en Chrome (45 pasos) y Firefox (41), y las 10 e2e de la tele (con
   `E2E_CHANNELS`: de su lista, a esa hora solo emitía uno).
 
+## El audio desincronizado y saltar en vez de acelerar (D34)
+
+29 de octubre, en `mini-agentes` (scripts y datos en `.lab/audio-jaime/`, no se suben; el medidor de sincronía quedó
+después en `herramientas/laboratorio/sincronia/`, [REN-4](#hlsjs-174-ren-4)). `jaimemellado_` no emitía.
+- **El desfase, medido.** Un directo sintético (ffmpeg: H.264 a 60 fps y AAC, fragmentos TS de 2 s) con un destello y
+  un pitido a la vez cada segundo, reproducido con hls.js 1.7.3 (carga progresiva) en una ventana de la sesión GNOME.
+  Cada destello se fecha con `requestVideoFrameCallback` y cada pitido, grabando lo que sale por PipeWire; el desfase
+  es pitido menos destello (positivo: el sonido va detrás). Fases: 60 s a 1×, 300 s alternando 14 s a 1,05× y 6 s a
+  1× (como recuperaba el margen el reproductor), y 110 s a 1×:
+
+  | Navegador | A 1× al empezar | Tras 5 min alternando | A 1× al final |
+  | --- | --- | --- | --- |
+  | Zen 1.23.4b | 28 ms | 2,9 s (crece en cada vuelta) | 2,9 s |
+  | Chrome 156 | −18 ms | 8-15 ms | 7 ms |
+  | Zen, 5 min a 1,05× fija | 26 ms | 51-56 ms | 59 ms |
+
+  En Zen, el desfase sube con cada cambio de velocidad y no vuelve al quedarse en 1×; a velocidad fija apenas se mueve.
+  Es el fallo abierto de Firefox [1762617](https://bugzilla.mozilla.org/show_bug.cgi?id=1762617).
+- **Antes y ahora en un directo de verdad** (`vigilar.mjs` en Zen, a la vez, `opoartstudy`, cuyo VOD es solo para
+  suscriptores, como el de `jaimemellado_`; *Adaptativo* y una pausa de 10 s a los 90 s): con la versión de antes, tras
+  un salto del empalme (abajo) la latencia bajó de 51 a 43 s en 150 s, es decir, acelerando a 1,05× todo ese rato, y
+  aún le quedaban ~13 min; con la nueva, tras la pausa, 15,7 s fijos, sin cambios de velocidad.
+- **El salto del empalme.** En las dos vigías, a los 51-52 s, `nueva-emision` con motivo `LIVE-SEQUENCE 0` al entrar
+  una sesión en anuncio, y luego ~8.370 `hueco`: la imagen saltó 30 s adelante en una y quedó 40 s atrás en la otra.
+  Esa sesión había tenido anuncio de entrada (numeraba desde 0) y su desplazamiento pasó de −8371 a 11 y vuelta. Una
+  sonda de una hora en ese canal (`sonda-anuncios.ts`: las cuatro sesiones cada 2 s, guardando sin URLs las listas con
+  anuncio) vio dos anuncios a mitad de emisión (11:22 y 11:41 UTC, uno cada ~18,5 min) y ninguna `LIVE-SEQUENCE` 0,
+  pero sí la causa de fondo: al acabar el anuncio, la lista lleva una segunda `LIVE-SEQUENCE` para el directo de
+  después, y se leía esa. En las 212 listas guardadas, el desplazamiento del primer tramo en directo saltaba a
+  −8830…−8835 en las de dos etiquetas (10 por sesión) y, con la etiqueta de delante, se queda en −8819/−8820, como en
+  las de alrededor (`desplazamientos.ts`). Las pruebas nuevas (de la lista y del empalme) tienen esa forma; la de
+  `LIVE-SEQUENCE` 0, la que se dedujo del registro.
+- **Un fin de anuncio, antes y ahora** (`vigilar.mjs` en Zen, a la vez, 11 min en `opoartstudy` con el anuncio de las
+  ~12:00 UTC): con la versión de antes, 9 `nueva-numeracion` falsas (−9880, −9879, … y vuelta), 222 `url-distinta`,
+  29 s de paradas y un salto de 33 s hacia atrás (contenido repetido); la latencia, de 5,9 a 13 s, y luego bajando a
+  1,05× durante 3 min. Con la final, solo las 2 renumeraciones de verdad (de −9865 a −9864), ninguna `url-distinta`,
+  ninguna parada y la latencia en ~5 s todo el rato.
+- **Los VOD solo para suscriptores:** el token de invitado de los de `jaimemellado_` restringe todas las calidades
+  (`restricted_bitrates` con las seis), y el de uno público, ninguna. `liveArchive` da sin VOD en `opoartstudy` y con
+  él en `el_yuste`.
+- **← → con teclas de verdad** (Chrome for Testing, `flechas.mjs`): sin foco o tras un clic en el vídeo, ← retrocede
+  10 s antes y ahora; tras tocar el volumen con el ratón, antes no se movía (el volumen pasaba del 50 al 49 %) y ahora
+  retrocede 10,2 s sin tocar el volumen. Igual en un directo (`el_yuste`) y en un VOD.
+- **Rendimiento, sin cambios** (`rendimiento.mjs`, antes y ahora a la vez en dos Weston 14 sin pantalla, cambiando de
+  Weston entre las dos rondas; `cahos_gaming`, `x9nium`, `elbokeron` y `maximocuevas`, 35 s): primer fotograma, mediana
+  de 832 y 780 ms antes frente a 881 y 831 ahora, sin tendencia canal a canal (±50-70 ms en los dos sentidos); latencia
+  2,2-2,4 s, búfer 1,8-2,0 s, CPU del navegador 21,4-21,7 % y el hilo de la página 2,5-2,6 % en las dos; ninguna
+  parada. Los fotogramas perdidos (32,5 % en las dos) son los de Weston 14.
+- **Una pausa de un instante no es retroceder.** Con la primera versión del arreglo, `test:interfaz` fallaba en Chrome
+  3 de 9 veces en «otro clic reanuda» (la de antes, 5 de 5 bien): tras la pausa de 0,3 s de Espacio, si el margen ya
+  pasaba de 1 s, salía «Ir al directo», y en la ventana pequeña de Chrome sin pantalla la barra de controles, con él,
+  tapaba el centro del vídeo, donde hace clic la prueba. Ahora solo cuenta una pausa de más de 1 s: 4 de 4 bien, sin
+  «Ir al directo» tras las pausas cortas. Con una de 5 s en Chrome (`pausa.mjs`), la latencia pasa de 5,9 a 10,9 s y
+  se queda, con «Ir al directo», y Fin la devuelve a 5,2 s.
+- **Pruebas:** las unitarias (451), `bun run verify`, las 10 e2e de la tele y `test:interfaz` en Chrome (45 pasos) y
+  Zen (41).
+- **El usuario lo probó en Zen** (29 oct, el `.xpi` de D34 en el sobremesa): va bien. No en `jaimemellado_`, que no
+  emitía.
+- **En `jaimemellado_`** (REP-8, el 29 de 17:15 a 17:35 UTC): `vigilar.mjs` 20 min en Zen (en un Weston) y en
+  *Adaptativo*, la compilación de D34 y la de REN-4 a la vez. Ni un cambio de velocidad ni una parada, ninguna
+  `nueva-emision`, y en el fin del anuncio de mitad de emisión (a los ~8 min) una sola `nueva-numeracion` por sesión.
+  Sin relleno, porque el VOD es solo para suscriptores. El retraso real, fijo en 2,1 s con la de D34; con la de REN-4,
+  en 2,45 s hasta el fin del anuncio, donde saltó una vez 1,2 s adelante (lo que sobraba) y siguió en 1,2 s. La sonda
+  de anuncios, a la vez, no vio ninguna `LIVE-SEQUENCE` 0 ni caída de la numeración en las cuatro sesiones (guardó 134
+  listas con anuncio, sin URLs).
+
+## hls.js 1.7.4 (REN-4)
+
+29 de octubre, en `mini-agentes`, frente a la 1.7.3 (scripts y datos en `.lab/ren4/` y `.lab/sincronia/`, no se
+suben). De lo que trae la 1.7.4, dos arreglos tocaban lo nuestro: en fMP4, la carga progresiva conserva el tiempo de
+cada trozo ([#8058](https://github.com/video-dev/hls.js/pull/8058)), y en MPEG-TS una discontinuidad ya no suma su
+desfase de composición al retraso ([#8083](https://github.com/video-dev/hls.js/pull/8083); el empalme pone una en
+cada hueco y en cada relleno).
+- **fMP4 vuelve a la carga progresiva.** Medido con compilaciones aparte que la dejan también en fMP4
+  (`.lab/ren4/variantes.sh`), con `vigilar.mjs` en *Sin paradas* y las tres a la vez en `cohhcarnage` (fMP4):
+  - con la 1.7.3, el fallo de octubre ([arriba](#fmp4-saltos-con-la-carga-progresiva)): el retraso real cae de 21 a
+    ~3 s en 40 s, y el vídeo pasa 68 s parado de 174;
+  - con la 1.7.4, en Chrome y en Zen (en un Weston), el retraso real fijo en 21,0 y 20,5 s, con ~20,6 s de búfer en un
+    solo rango, sin una parada ni un `seeking`. A los 177 s, las tres vigías se pausaron por una prueba mía con
+    PipeWire (abajo), así que se repitió con la versión final 10 min en `t2x2`, en Zen y en Chrome: fijo en 23,1 y
+    21,6 s, igual de limpio.
+- **Con el margen de MPEG-TS, 2,5 fragmentos.** Sin carga progresiva, el último fragmento solo contaba al llegar entero
+  y hacían falta 3 ([arriba](#fmp4-paradas-con-el-margen-de-25-fragmentos)). Con `rendimiento.mjs` en *Adaptativo*, las
+  tres variantes a la vez en tres Weston, en 10 canales fMP4 (dos tandas: `strogo`, `gorgc`, `handofblood`,
+  `glorious_e` y `kanonxo`; `pgl`, `afoninje`, `sasavot`, `bysl4m` y `skywhywalker`), 2 rondas de 60 s:
+
+  | Con fMP4 | Visitas | Paradas | Búfer mínimo (mediana; el peor) | Latencia |
+  | --- | --- | --- | --- | --- |
+  | Sin carga progresiva, 3 fragmentos (antes) | 19 | 0 | 0,87 s; 0,20 s | — |
+  | Con carga progresiva, 3 fragmentos | 19 | 0 | 2,24 s; 1,71 s | igual |
+  | Con carga progresiva, 2,5 fragmentos (ahora) | 20 | 0 | 1,25 s; 0,74 s | 1,03 s menos (0,44-1,40 canal a canal) |
+
+  Una visita de `glorious_e` se descartó en dos variantes, porque el vídeo se quedó en pausa por lo de PipeWire. Con la
+  final, 10 min en Zen en *Adaptativo* (`strogo`): ninguna parada, búfer de 0,7-1,2 s todo el rato, y solo los dos
+  saltos del principio (el retraso, de 64,3 a 61,9 s), los de D34 tras arrancar desde el VOD por un anuncio de entrada.
+  El precio: el hilo de la página trabaja algo más en fMP4 (de 1,2 a 1,8 %, mediana; MPEG-TS va en ~2,3 %).
+- **El VOD en fMP4 sigue sin carga progresiva** (`useVodPlayer`): con la 1.7.3 el primer trozo no llegaba a verse, y
+  con la 1.7.4 no se ha medido. Sus fragmentos ya llegan enteros, así que ganaría poco.
+- **Rendimiento, antes y ahora** (`rendimiento.mjs`, a la vez en dos Weston 14 sin pantalla, cambiando de Weston entre
+  las dos rondas; `caedrel`, `mastu` y `kopsteep` en MPEG-TS, `t2x2`, `sasavot` y `handofblood` en fMP4, 35 s):
+  ninguna parada en las dos. En MPEG-TS, la latencia igual (2,25 frente a 2,21 s en `caedrel`, 1,81 frente a 1,80 en
+  `kopsteep`); en fMP4, 0,8-1,3 s menos. Primer fotograma, mediana de 696 ms antes y 731 ahora: canal a canal, de −8 a
+  +36 ms, salvo `t2x2`, con una visita de 1086 ms. CPU del navegador, 19,2 y 19,4 %. Los fotogramas perdidos (34,2 % en
+  las dos) son los de Weston 14.
+- **#8083 no cambia nada medible.** `vigilar.mjs` en *Sin paradas* con cuatro pausas globales simuladas (`150,45`,
+  620 s), antes y ahora a la vez en `thebausffs` (MPEG-TS): 13 y 14 trozos del VOD, cero paradas, y el retraso real
+  fijo todo el rato, en 21,73 y 21,88 s, igual antes y después de cada relleno. En la de ahora, la sesión `site` dio
+  otras rutas que las demás desde el principio (79 `url-distinta`, que el empalme descarta, sin efecto); el empalme es
+  el mismo en las dos. `test:modos` en Chrome, a la vez: `arranque` (`elajjaz`), bien en las dos, con 0 s de salto;
+  `adaptativo`, bien en las dos, con la parada de la primera pausa de 10 s antes y 20 s ahora. Repetida la primera
+  pausa con `vigilar.mjs` en `elajjaz` y `zarbex`, antes y ahora a la vez: 14-16 s en las cuatro, con el primer trozo
+  del VOD a los ~20 s de la pausa. Lo que varía es cuándo llega ese trozo.
+- **La sincronía en Zen, igual.** Con el medidor de D34 ya versionado (`herramientas/laboratorio/sincronia/`): el
+  mismo directo sintético, regenerado idéntico byte a byte, y un análisis que da lo mismo que el de D34 con sus
+  grabaciones. Zen a 1×, una medida tras otra con la máquina tranquila: 27, 32 y 32 ms (al empezar, en medio y al
+  final) con la 1.7.3, y 31, 30 y 32 ms con la 1.7.4 (el 29 a primera hora, 28 ms). Saltando 1 s cada 20 s, como ahora
+  lo que sobra: 27, 15 y 32 ms, sin acumularse. Con seis navegadores de las pruebas a la vez, la misma medida dio
+  −61 ms desde el principio: solo se comparan medidas hechas en las mismas condiciones.
+- **Crear un sumidero de PipeWire pausa el vídeo de todos los navegadores.** Para aislar la grabación, una primera
+  versión del medidor creaba un sumidero nulo propio: al aparecer pasó a ser el de por defecto, y en ese instante
+  pausaron su vídeo todos los navegadores de la máquina (las vigías y una visita de `rendimiento.mjs`, en Weston y sin
+  ventana). El medidor graba el de por defecto, con un cerrojo para que haya una sola medida a la vez.
+- **Pruebas:** las unitarias (451, con la de la carga progresiva en fMP4 cambiada), `bun run verify`, las 10 e2e de la
+  tele (el recorrido crítico, en `t2x2` y `sasavot`, en fMP4) y `test:interfaz` en Chrome (45 pasos) y Zen (41), en
+  `t2x2`. Android no usa hls.js (Media3), así que no cambia.
+

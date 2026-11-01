@@ -180,7 +180,8 @@ export class Empalme {
   >()
   private readonly published = new Map<number, string>()
   // Reloj común: el PDT de cada sesión se desplaza con sus anuncios y deriva algo incluso sin ellos; se mide cada
-  // sesión contra una de referencia fija sobre el mismo índice (encadenar medidas hace que se corrijan sin fin).
+  // sesión contra una de referencia sobre el mismo índice (encadenar medidas hace que se corrijan sin fin), que solo
+  // cambia si su reloj se mueve o se queda solo (moveClockRef).
   private readonly clock = new Map<string, number>()
   private clockRef: string | null = null
   private readonly refPdt = new Map<number, number>()
@@ -539,20 +540,31 @@ export class Empalme {
   // Cada anuncio desplaza MEDIA-SEQUENCE de forma distinta en cada sesión. Twitch da en LIVE-SEQUENCE el índice
   // común del primer fragmento en directo de la lista; con él se sitúa el tramo en directo que empieza ahí. La ruta
   // de cada fragmento normal se contrasta con la ya vista para ese índice.
-  ingest(session: Session, segments: readonly MediaSegment[], liveSequence: number | null): void {
-    if (liveSequence !== null && this.nextSeq !== null && liveSequence < this.nextSeq - 150) {
-      this.resetTimeline(`LIVE-SEQUENCE ${liveSequence}`, session)
-    }
+  ingest(session: Session, segments: readonly MediaSegment[], given: number | null): void {
     const last = segments.at(-1)
+    let liveSequence = given
+    const anchor = segments.findIndex((s) => !s.prefetch && s.title === "live")
+    const anchorSegment = segments[anchor]
+    // Si otra sesión (o esta) ya vio el fragmento ancla, su índice es el de esa ruta, diga lo que diga LIVE-SEQUENCE.
+    // Al entrar en un anuncio, una sesión que ya tuvo uno de entrada puede traer LIVE-SEQUENCE 0 (D34), y tras una
+    // emisión nueva los índices son tan pequeños que ese 0 no queda lo bastante por detrás para descartarlo abajo.
+    const byPath = anchorSegment === undefined ? null : this.offsetByPath(anchorSegment)
+    if (anchorSegment !== undefined && byPath !== null) liveSequence = anchorSegment.seq - byPath
+    if (liveSequence !== null && this.nextSeq !== null && liveSequence < this.nextSeq - 150) {
+      // Al entrar en un anuncio, la lista de una sesión que ya tuvo uno de entrada puede traer LIVE-SEQUENCE 0 (29 oct,
+      // opoartstudy). No es una emisión nueva: reiniciar la línea de tiempo saltaba miles de índices y el vídeo daba un
+      // salto de 30-40 s. Esa lista no sirve para numerar; su tramo en directo sigue la numeración de antes.
+      if (last?.ad === true) liveSequence = null
+      else this.resetTimeline(`LIVE-SEQUENCE ${liveSequence}`, session)
+    }
     const wasAd = session.state === "anuncio"
     session.state = last?.ad === true ? "anuncio" : "directo"
     if (session.state === "anuncio" && !wasAd) {
       session.ads++
       this.log({ ev: "anuncio", type: session.type })
+      if (this.clockRef === session.type) this.moveClockRef()
     } else if (wasAd && session.state === "directo")
       this.log({ ev: "fin-anuncio", type: session.type })
-    const anchor = segments.findIndex((s) => !s.prefetch && s.title === "live")
-    const anchorSegment = segments[anchor]
     if (anchorSegment !== undefined && liveSequence !== null) {
       const offset = anchorSegment.seq - liveSequence
       if (session.offset !== null && offset !== session.offset) {
@@ -572,10 +584,19 @@ export class Empalme {
     const rejected = new Set<number>()
     const offset = session.offset
     if (offset !== null && anchor >= 0) {
+      // Tras un anuncio en medio de la lista, el tramo de después lleva otra numeración (su LIVE-SEQUENCE no llega:
+      // parseMedia da la del primero). Se sitúa por la ruta de su primer fragmento, si otra sesión ya lo vio; si no,
+      // espera, como antes, a que el tramo de antes salga de la lista.
+      let tramo: number | null = offset
       for (const segment of segments.slice(anchor)) {
-        if ((!segment.prefetch && segment.title !== "live") || (segment.prefetch && segment.ad))
-          break
-        const index = segment.seq - offset
+        if (segment.prefetch && segment.ad) break
+        if (!segment.prefetch && segment.title !== "live") {
+          tramo = null
+          continue
+        }
+        tramo ??= this.offsetByPath(segment)
+        if (tramo === null) break
+        const index = segment.seq - tramo
         session.liveEdge = Math.max(session.liveEdge ?? index, index)
         if (segment.ad) continue
         if (!segment.prefetch && !this.acceptsSegment(session, segment, index)) {
@@ -607,6 +628,12 @@ export class Empalme {
     this.advance()
   }
 
+  private offsetByPath(segment: MediaSegment): number | null {
+    const path = new URL(segment.url).pathname
+    for (const [index, known] of this.urls) if (known.path === path) return segment.seq - index
+    return null
+  }
+
   // Contraste por ruta (sin host ni consulta) y medida del reloj de la sesión contra la de referencia.
   private acceptsSegment(session: Session, segment: MediaSegment, index: number): boolean {
     const { host, pathname } = new URL(segment.url)
@@ -620,12 +647,54 @@ export class Empalme {
     if (pdt !== null) {
       this.clockRef ??= session.type
       const ref = this.refPdt.get(index)
+      const before = session.live.get(index - 1)
+      const jumped =
+        before?.pdt != null &&
+        !before.prefetch &&
+        Math.abs(pdt - Date.parse(before.pdt) - before.duration * 1000) > 100
+      // Si salta el reloj de la referencia (respecto de su fragmento anterior o, tras un hueco, del de otra sesión),
+      // arrastraría la hora común: pasa a serlo otra.
+      const moved = before === undefined ? this.otherPdtAfter(session, index - 1) : null
+      if (
+        session.type === this.clockRef &&
+        ref === undefined &&
+        (jumped || (moved != null && Math.abs(pdt - moved) > 100))
+      )
+        this.moveClockRef(true)
       if (session.type === this.clockRef) {
         this.refPdt.set(index, pdt)
         this.clock.set(session.type, 0)
       } else if (ref !== undefined) this.clock.set(session.type, pdt - ref)
+      else if (
+        jumped ||
+        (moved != null && Math.abs(pdt - (this.clock.get(session.type) ?? 0) - moved) > 100)
+      )
+        // Su hora salta respecto del fragmento anterior, o tras un hueco no casa con la de otra sesión (un anuncio le
+        // movió el reloj): lo medido ya no vale hasta que la de referencia llegue a este índice.
+        this.clock.delete(session.type)
     }
     return true
+  }
+
+  // La de referencia entra en un anuncio con un reloj que no tiene ninguna otra en directo (a 0,25 s o más), o su reloj
+  // acaba de moverse (force): pasa a serlo la otra en directo con el reloj más cercano, y la hora común, la suya.
+  private moveClockRef(force = false): void {
+    const live = this.sessions.flatMap((s) => {
+      const shift = this.clock.get(s.type)
+      return s.state === "directo" && s.type !== this.clockRef && shift !== undefined
+        ? [{ s, shift }]
+        : []
+    })
+    if (!force && live.some((x) => Math.abs(x.shift) < 250)) return
+    const group = (x: { shift: number }): number =>
+      live.filter((y) => Math.abs(y.shift - x.shift) < 250).length
+    const next = live.sort(
+      (a, b) => group(b) - group(a) || Math.abs(a.shift) - Math.abs(b.shift),
+    )[0]
+    if (next === undefined) return
+    this.clockRef = next.s.type
+    for (const [type, value] of this.clock) this.clock.set(type, value - next.shift)
+    for (const [index, value] of this.refPdt) this.refPdt.set(index, value + next.shift)
   }
 
   // Publica en orden. Un índice sin directo en ninguna sesión se salta con discontinuidad, salvo en una pausa
@@ -654,9 +723,11 @@ export class Empalme {
     }
     for (;;) {
       const seq: number = this.nextSeq
-      const found = active
-        .map((s) => ({ s, segment: s.live.get(seq) }))
-        .find((x) => x.segment !== undefined)
+      // Mejor la versión normal que el prefetch de otra sesión: su duración es la real, no la supuesta.
+      const candidates = active.map((s) => ({ s, segment: s.live.get(seq) }))
+      const found =
+        candidates.find((x) => x.segment?.prefetch === false) ??
+        candidates.find((x) => x.segment !== undefined)
       // Hueco: todas tienen directo situado más allá (una sesión en anuncio no cuenta), o alguna lo tiene 3 o más
       // fragmentos por delante (para no esperar a una sesión atrasada).
       const liveAhead = Math.max(-1, ...active.flatMap((s) => [...s.live.keys()]))
@@ -688,10 +759,14 @@ export class Empalme {
   private emit(segment: LiveEntry, source: string): void {
     const previous = this.out.at(-1)
     const discontinuity = this.pendingDiscontinuity
-    // Hora en el reloj común; si aún no se conoce el de esta sesión, sigue la del fragmento anterior.
+    // Hora en el reloj común; si aún no se conoce el de esta sesión, se deduce de otra que sí lo tenga, y si no, sigue
+    // la del fragmento anterior.
     const shift = this.clock.get(source)
     let pdt = segment.pdt
-    if (pdt !== null && shift !== undefined) pdt = new Date(Date.parse(pdt) - shift).toISOString()
+    const guessed = segment.prefetch || shift === undefined ? this.derivedPdt(segment.index) : null
+    if (guessed !== null) pdt = new Date(guessed).toISOString()
+    else if (pdt !== null && shift !== undefined)
+      pdt = new Date(Date.parse(pdt) - shift).toISOString()
     else if (previous?.pdt != null && !discontinuity) {
       pdt = new Date(Date.parse(previous.pdt) + previous.duration * 1000).toISOString()
     }
@@ -707,6 +782,45 @@ export class Empalme {
       url: segment.url,
     })
     this.published.set(segment.index, source)
+  }
+
+  // Hora común del final de un índice según otra sesión que lo tenga como fragmento normal y con el reloj medido.
+  private otherPdtAfter(session: Session, index: number): number | undefined {
+    for (const other of this.sessions) {
+      const entry = other.live.get(index)
+      const shift = this.clock.get(other.type)
+      if (other === session || entry?.pdt == null || entry.prefetch || shift === undefined) continue
+      return Date.parse(entry.pdt) - shift + entry.duration * 1000
+    }
+    return undefined
+  }
+
+  // Hora común de un prefetch (o de un fragmento de una sesión sin reloj medido). parseMedia suma a todos los prefetch
+  // la duración del último normal de su lista, que puede ser de 1 s: la hora saltaba hasta 2 s y volvía. Se cuenta
+  // desde el último fragmento normal de cualquier sesión, con la duración típica para los que aún son prefetch.
+  private derivedPdt(index: number): number | null {
+    // Primero la de referencia: su hora es la común sin desfase medido que pueda haberse quedado viejo.
+    const sessions = [...this.sessions].sort(
+      (a, b) => Number(b.type === this.clockRef) - Number(a.type === this.clockRef),
+    )
+    for (let known = index - 1; known >= index - 40; known--) {
+      for (const session of sessions) {
+        const entry = session.live.get(known)
+        const shift = this.clock.get(session.type)
+        if (entry === undefined || entry.prefetch || entry.pdt === null || shift === undefined)
+          continue
+        // Si los dos últimos duran lo mismo, esa es la típica aunque no sea la de la ventana: el emisor se reconectó
+        // con otra configuración (de 2 a 4 s). Uno suelto distinto no cambia nada.
+        const before = session.live.get(known - 1)
+        const typical =
+          before?.prefetch === false && Math.abs(before.duration - entry.duration) < 0.01
+            ? entry.duration
+            : (this.liveSegmentDuration() ?? 2)
+        const ahead = entry.duration + (index - known - 1) * typical
+        return Date.parse(entry.pdt) - shift + ahead * 1000
+      }
+    }
+    return null
   }
 
   private push(entry: Published): void {
@@ -755,7 +869,13 @@ export class Empalme {
         const time = last.from ?? (await this.probe(last.url, last.map))
         if (!fill.alive()) return
         fill.anchor = { pdtMs: Date.parse(last.pdt ?? ""), time }
-        fill.cursor = time + last.duration
+        // Si se publicó como prefetch, su duración era supuesta: la real, si ya la da alguna sesión. Con la supuesta, el
+        // VOD empezaba unas décimas antes o después del final de lo publicado, sin discontinuidad.
+        const seq = last.seq
+        const real = this.sessions
+          .map((s) => (seq === null ? undefined : s.live.get(seq)))
+          .find((entry) => entry !== undefined && !entry.prefetch)
+        fill.cursor = time + (real?.duration ?? last.duration)
       }
       while (fill.alive()) {
         if (await this.tryReturn(fill)) return
@@ -825,7 +945,17 @@ export class Empalme {
       const end = start + segment.duration
       // El cursor cae dentro: se recorta en el corte comprobado (normalmente, el cursor).
       if (this.vodTrimmer != null && start < fill.cursor - 0.05 && end - fill.cursor > 0.5) {
-        const cut = await this.vodTrimmer(segment.url, fill.cursor, segment.map).catch(() => null)
+        const { map, url } = segment
+        const trimmer = this.vodTrimmer
+        const trim = (from: number): Promise<number | null> =>
+          trimmer(url, from, map).catch(() => null)
+        // Sin fotograma clave en el cursor (el fragmento que empieza ahí no lo vio ninguna sesión y su borde no cae
+        // donde se suponía), se prueba en el siguiente borde de fragmento: el trozo son fragmentos del directo
+        // seguidos desde su principio, de la duración típica. Se pierde menos que saltando al trozo siguiente.
+        const typical = this.liveSegmentDuration() ?? 2
+        const cut =
+          (await trim(fill.cursor)) ??
+          (await trim(start + Math.ceil((fill.cursor - start) / typical) * typical))
         if (!fill.alive()) return
         if (cut !== null && Number.isFinite(cut) && cut > fill.cursor - 0.1 && cut < end - 0.5) {
           if (Math.abs(cut - fill.cursor) > 0.1) this.pendingDiscontinuity = true
@@ -836,8 +966,8 @@ export class Empalme {
         }
         this.log({ desde: fill.cursor, ev: "recorte-fallido" })
       }
-      // Si no: repetir lo que sobra de este o saltar al siguiente, lo que sea más corto.
-      if (start < fill.cursor - 0.05 && end - fill.cursor < fill.cursor - start) {
+      // Si no, se salta al siguiente: repetir lo que ya se vio se nota más que perder un trozo.
+      if (start < fill.cursor - 0.05) {
         segment = segments[at + 1]
         if (segment === undefined || !slack()) return // esperar al siguiente
       }

@@ -11,25 +11,29 @@ tres comparten el código que quita los anuncios, la cuenta y el chat.
 
 | App | Para qué | Estado |
 | --- | --- | --- |
-| [Navegador](#navegador) (`apps/navegador`) | Chrome, Chromium, Firefox y Zen, con ratón y teclado | 0.4.0 |
-| [Android](#android) (`apps/android`) | Teléfonos con Android 13 o posterior | 0.4.0, experimental |
-| [Tele](#tele) (`apps/tele`) | Un mini PC Linux conectado a la tele, con un mando | 0.4.0, ya no se prueba en una tele |
+| [Navegador](#navegador) (`apps/navegador`) | Chrome, Chromium, Firefox y Zen, con ratón y teclado | 0.4.1 |
+| [Android](#android) (`apps/android`) | Teléfonos con Android 13 o posterior | 0.4.1, experimental |
+| [Tele](#tele) (`apps/tele`) | Un mini PC Linux conectado a la tele, con un mando | 0.4.1, ya no se prueba en una tele |
 
 ![Extensión: un canal con los controles encima del vídeo, su ficha y el chat; a la izquierda, los seguidos en directo](docs/media/escritorio-canal.jpg)
 
-## Lo nuevo de la 0.4.0
+## Lo nuevo de la 0.4.1
 
-- **Solo audio con la pantalla apagada,** en Android: el canal pasa a la versión de solo audio de Twitch sin cortarse,
-  y al desbloquear ya está la imagen. Unos 0,4 Mbit/s en vez de 8: unos 175 MB por hora en vez de 3,7 GB.
-- **El chat cuesta menos de pintar:** con mucho movimiento, el hilo de la página de la extensión pasa del 10,5 % al
-  7,6 % de un núcleo, y la WebView de Android, del 30 % al 24 %.
-- **Android abre antes el último canal que viste,** en ~0,5 s en vez de 1,6 s: lo va preparando al abrir la app.
-- **La calidad se recuerda,** como el volumen, con «Auto» en el menú, y al retroceder al VOD sigue en ella.
-- **La pantalla completa, con su propio chat:** `C` lo pone al lado del vídeo y se recuerda. El modo teatro es de la
-  ventana. En Android, el chat en horizontal también se recuerda.
-- **Imagen en imagen** en la extensión, en Chrome, Firefox y Zen.
-- **Arreglos:** las pausas largas e «Ir al directo», los VOD en fMP4 que empezaban en baja calidad, Espacio tras un
-  clic y, en Android, retroceder a pantalla completa y la velocidad de los VOD.
+- **Retroceder del directo al VOD va casi el doble de rápido** en la extensión: con `←`, el primer fotograma tarda
+  ~0,84 s en vez de 1,55 s (medido en local, con una red como la de Twitch), y 0,19 s en vez de 0,44 s en un canal real
+  en Chrome. Además, abre donde pediste: podía empezar hasta 10 s antes, en al menos 4 de cada 20 veces en Zen.
+- **`←` y `→` van al fotograma clave más cercano** en la extensión, como ya hacían en Android: cada salto es de 9-11 s
+  en vez de 10 exactos, y la imagen vuelve a moverse en 127 ms en vez de 161.
+- **Los anuncios se empalman mejor,** en todas las versiones. Al acabar uno, algunas sesiones provocaban unos 30 s de
+  paradas y un salto atrás con contenido repetido, y al entrar en otro se podían saltar 30-40 s. Ya no pasa, tampoco
+  justo después de una emisión nueva.
+- **El reloj de la emisión es más estable,** y de él sale la sincronía del chat: en la reproducción de 58 visitas
+  grabadas, sus saltos suman un 45 % menos, y al rellenar una pausa global con el VOD ya no se repite lo ya visto.
+- **El audio no se desincroniza en Zen y Firefox:** el reproductor salta el margen que sobra en vez de acelerar, porque
+  cada cambio de velocidad dejaba el sonido algo más atrás de la imagen.
+- **Los VOD solo para suscriptores ya no se ofrecen para retroceder,** en la extensión y en Android.
+- **hls.js 1.7.4,** que devuelve la carga progresiva a los canales en fMP4.
+- **Arreglos:** `←` y `→` también funcionan después de tocar el volumen con el ratón.
 
 ## Cómo quita los anuncios
 
@@ -76,12 +80,12 @@ Chrome y para Firefox.
 
 **Instalarla:** no está en las tiendas. Descárgala de las
 [releases](https://github.com/mateozariquiey/GoodTTV/releases).
-- **Zen** (y Firefox Developer Edition o Nightly), con `goodttv-0.4.0.xpi`: en `about:config`, pon
+- **Zen** (y Firefox Developer Edition o Nightly), con `goodttv-0.4.1.xpi`: en `about:config`, pon
   `xpinstall.signatures.required` a `false`. Después, en `about:addons`, menú del engranaje → «Instalar complemento
   desde archivo…».
 - **Firefox:** solo admite complementos sin firmar de forma temporal: `about:debugging` → «Este Firefox» → «Cargar
   complemento temporal…» y el `.xpi`. Se quita al cerrar Firefox.
-- **Chrome y Chromium,** también en Windows, con `goodttv-0.4.0-chrome.zip`:
+- **Chrome y Chromium,** también en Windows, con `goodttv-0.4.1-chrome.zip`:
   1. Descomprímelo en una carpeta que vayas a conservar.
   2. En `chrome://extensions`, activa el «Modo Desarrollador» (arriba a la derecha).
   3. Pulsa «Cargar descomprimida» y elige esa carpeta.
@@ -110,11 +114,11 @@ una esquina, deslizar hacia abajo sobre el vídeo vuelve atrás, y al salir de l
 Solo se ha probado en un teléfono (un Galaxy S25 Ultra con Android 16). Que el chat vaya a la par de la imagen se ha
 comprobado a ojo, sin medirlo.
 
-**Instalarla** (Android 13 o posterior): descarga `GoodTTV-0.4.0.apk` de las
+**Instalarla** (Android 13 o posterior): descarga `GoodTTV-0.4.1.apk` de las
 [releases](https://github.com/mateozariquiey/GoodTTV/releases) en el teléfono y ábrelo. Android te pedirá permiso para
 instalar apps desde el navegador o el gestor de archivos, y Play Protect puede avisar de que no conoce al
 desarrollador. Las versiones nuevas se instalan encima de la anterior y conservan la cuenta, porque van firmadas con la
-misma clave. Desde un ordenador, `adb install -r GoodTTV-0.4.0.apk` hace lo mismo. La huella SHA-256 del certificado de
+misma clave. Desde un ordenador, `adb install -r GoodTTV-0.4.1.apk` hace lo mismo. La huella SHA-256 del certificado de
 la firma es `38:CF:EA:F9:1C:2F:8C:C4:B8:35:27:11:BD:77:7F:56:0E:A8:D5:4F:87:37:C4:91:6C:B6:BA:C8:27:32:5A:D6` (la enseña `apksigner verify --print-certs`).
 
 Para compilarla hacen falta el SDK de Android y un JDK 21: lo explica [apps/android/README.md](apps/android/README.md).
@@ -159,7 +163,7 @@ x86_64) y ejecútalo; arranca a pantalla completa y necesita `libfuse2`. Para co
 ```bash
 bun install --frozen-lockfile
 bun run build && bun run start   # en una ventana, para probar
-bun run package:appimage         # apps/tele/dist/GoodTTV-0.4.0-x86_64.AppImage
+bun run package:appimage         # apps/tele/dist/GoodTTV-0.4.1-x86_64.AppImage
 ```
 
 ## El código

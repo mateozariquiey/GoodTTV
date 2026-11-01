@@ -21,8 +21,8 @@ import { WAITS } from "./escritorio/sonido"
 // tarda en volver a ella desde cada escalón. ?twitchfalso[=ms]: una cuenta y un Helix falsos, con esa espera por
 // petición, para medir el arranque de Inicio con cuenta (twitch-falso.ts); no guarda recientes, como el chat de abajo.
 
-// Campos del empalme que se pueden guardar (los mismos que registra la tele, más los de nueva-numeracion): los
-// errores y las URL pueden llevar el token de Twitch.
+// Campos del empalme que se pueden guardar (los mismos que registra la tele, más los de nueva-numeracion y
+// url-distinta): los errores y las URL pueden llevar el token de Twitch.
 const SAFE_FIELDS = new Set([
   "ahora",
   "antes",
@@ -30,8 +30,10 @@ const SAFE_FIELDS = new Set([
   "duracionS",
   "ev",
   "fragmentosVod",
+  "index",
   "motivo",
   "ms",
+  "otra",
   "publicados",
   "saltoS",
   "segundos",

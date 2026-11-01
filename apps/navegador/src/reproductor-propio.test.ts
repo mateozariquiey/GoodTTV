@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-// useHlsPlayer (@goodttv/interfaz) con un hls.js falso: la recuperación de errores de medios, el salto del arranque,
+// useHlsPlayer (@goodttv/interfaz) con un hls.js falso: la recuperación de errores de medios, el margen que sobra,
 // retroceder dentro de la lista y el plazo de un canal que no arranca. Va aquí porque este paquete trae react-dom y jsdom.
 import { useHlsPlayer } from "@goodttv/interfaz"
 import { act, createElement, useRef } from "react"
@@ -23,10 +23,17 @@ const { FakeHls, players } = vi.hoisted(() => {
     readonly handlers = new Map<string, Handler[]>()
     latency = 0
     // El objetivo (5 s del final de la lista, con su edad), en 32.
-    latestLevelDetails: { age: number; edge: number; fragmentStart: number } | null = {
+    // Sin fragmentos: ← y → van al punto exacto (con ellos, al fotograma clave más cercano).
+    latestLevelDetails: {
+      age: number
+      edge: number
+      fragmentStart: number
+      fragments: { start: number; startPTS?: number }[]
+    } | null = {
       age: 0.5,
       edge: 36.5,
       fragmentStart: 0,
+      fragments: [],
     }
     playingDate = null
     targetLatency: number | null = 5
@@ -79,9 +86,11 @@ let root: Root | undefined
 let paused = false
 let phase = ""
 let current: ReturnType<typeof useHlsPlayer> | undefined
+let mode: "adaptativo" | "directo" = "adaptativo"
+let canGoLive = true
 const Player = ({ channel }: { readonly channel: string }) => {
   const surface = useRef<HTMLDivElement>(null)
-  current = useHlsPlayer(surface, channel, true, "adaptativo")
+  current = useHlsPlayer(surface, channel, true, mode, canGoLive)
   phase = current.state.phase
   return createElement("div", { ref: surface })
 }
@@ -118,7 +127,9 @@ const fire = (video: HTMLVideoElement, type: string): void => {
 }
 
 beforeEach(() => {
-  vi.useFakeTimers({ toFake: ["setInterval", "clearInterval", "setTimeout", "clearTimeout"] })
+  vi.useFakeTimers({
+    toFake: ["setInterval", "clearInterval", "setTimeout", "clearTimeout", "performance"],
+  })
   vi.stubGlobal("api", { player: { setWatching: async () => undefined } })
   vi.stubGlobal(
     "fetch",
@@ -136,6 +147,8 @@ beforeEach(() => {
   vi.spyOn(HTMLMediaElement.prototype, "pause").mockImplementation(() => undefined)
   vi.spyOn(HTMLMediaElement.prototype, "load").mockImplementation(() => undefined)
   paused = false
+  mode = "adaptativo"
+  canGoLive = true
 })
 afterEach(() => {
   act(() => root?.unmount())
@@ -171,13 +184,13 @@ describe("error fatal de medios", () => {
 })
 
 describe("carga progresiva", () => {
-  it("con fMP4 (EXT-X-MAP) se quita antes de empezar a cargar, y el margen sube a 3 fragmentos; con MPEG-TS se queda", async () => {
+  it("se queda con fMP4 (EXT-X-MAP), con el mismo margen que con MPEG-TS (hls.js 1.7.4, REN-4)", async () => {
     const { player: fmp4 } = await open()
     expect(fmp4.config.progressive).toBe(true)
     fmp4.emit("levelLoaded", { details: { edge: 30, fragments: [{ initSegment: {} }] } })
-    expect(fmp4.config.progressive).toBe(false)
-    expect(fmp4.calls).toEqual(["startLoad 24"]) // 3 fragmentos de 2 s
-    expect(fmp4.config.liveSyncDuration).toBe(6)
+    expect(fmp4.config.progressive).toBe(true)
+    expect(fmp4.calls).toEqual(["startLoad 25"]) // 2,5 fragmentos de 2 s
+    expect(fmp4.config.liveSyncDuration).toBe(5)
 
     await show("b")
     const ts = players.at(-1)
@@ -188,7 +201,7 @@ describe("carga progresiva", () => {
   })
 })
 
-describe("salto del arranque", () => {
+describe("margen que sobra", () => {
   it("salta el margen que sobra en los primeros segundos", async () => {
     const { player, video } = await open()
     fire(video, "playing")
@@ -197,23 +210,85 @@ describe("salto del arranque", () => {
     expect(video.currentTime).toBe(12)
   })
 
-  it("tras una pausa no salta lo que se pausó: lo recupera acelerando", async () => {
+  // En Firefox y Zen, cada cambio de velocidad deja el sonido algo más atrás de la imagen, y no vuelve.
+  it("también más tarde (una parada): lo salta, sin acelerar", async () => {
     const { player, video } = await open()
     fire(video, "playing")
+    wait(60_000)
+    player.latency = 7
+    second()
+    expect(video.currentTime).toBe(12)
+    expect(video.playbackRate).toBe(1)
+  })
+
+  const pauseFor = (video: HTMLVideoElement, ms = 5000): void => {
     paused = true
     fire(video, "pause")
+    wait(ms)
     paused = false
     fire(video, "playing")
+  }
+
+  it("tras una pausa no salta lo que se pausó: lo conserva, como lo retrocedido, y sin acelerar", async () => {
+    const { player, video } = await open()
+    fire(video, "playing")
+    pauseFor(video)
     player.latency = 10 // los 5 s de la pausa
     second()
     expect(video.currentTime).toBe(10)
-    expect(video.playbackRate).toBe(1.05)
+    expect(video.playbackRate).toBe(1)
+    expect(current?.rewound).toBe(true)
+    expect(player.config.liveMaxLatencyDuration).toBe(Number.POSITIVE_INFINITY)
+  })
+
+  it("una pausa de un instante no es retroceder: lo que sobra se salta", async () => {
+    const { player, video } = await open()
+    fire(video, "playing")
+    pauseFor(video, 300)
+    player.latency = 7
+    second()
+    expect(video.currentTime).toBe(12)
+    expect(current?.rewound).toBe(false)
+  })
+
+  it("una pausa de un instante justo después de una larga no la borra", async () => {
+    const { player, video } = await open()
+    fire(video, "playing")
+    pauseFor(video)
+    pauseFor(video, 300) // antes de que lo mire el intervalo
+    player.latency = 10
+    second()
+    expect(video.currentTime).toBe(10)
+    expect(current?.rewound).toBe(true)
+  })
+
+  // La tele no tiene «Ir al directo»: conservarlo la dejaría atrás para siempre.
+  it("sin «Ir al directo», tras una pausa, lo salta", async () => {
+    canGoLive = false
+    const { player, video } = await open()
+    fire(video, "playing")
+    pauseFor(video)
+    player.latency = 8
+    second()
+    expect(video.currentTime).toBe(13)
+    expect(current?.rewound).toBe(false)
+  })
+
+  it("en el modo directo, tras una pausa, lo salta", async () => {
+    mode = "directo"
+    const { player, video } = await open()
+    fire(video, "playing")
+    pauseFor(video)
+    player.latency = 8
+    second()
+    expect(video.currentTime).toBe(13)
+    expect(current?.rewound).toBe(false)
   })
 
   it("con la lista parada no salta: ese retraso no es margen que sobre", async () => {
     const { player, video } = await open()
     fire(video, "playing")
-    player.latestLevelDetails = { age: 8, edge: 36.5, fragmentStart: 0 }
+    player.latestLevelDetails = { age: 8, edge: 36.5, fragmentStart: 0, fragments: [] }
     player.latency = 8
     second()
     expect(video.currentTime).toBe(10)
@@ -256,6 +331,31 @@ describe("retroceder dentro de la lista", () => {
     expect(player.config.liveMaxLatencyDuration).toBe(65) // objetivo + 60
   })
 
+  it("← y → caen en el fotograma clave más cercano; Fin y lo que llega al objetivo, exactos", async () => {
+    const { player, video } = await open()
+    // Fragmentos de 2 s; el de 20 empieza (según hls.js) un poco antes de su fotograma clave.
+    player.latestLevelDetails = {
+      age: 0.5,
+      edge: 36.5,
+      fragmentStart: 0,
+      fragments: Array.from({ length: 18 }, (_, index) => ({
+        start: index * 2,
+        startPTS: index * 2 - 0.02,
+      })),
+    }
+    video.currentTime = 30.7
+    expect(seekBy(-10)).toBeCloseTo(-10.62) // 20,08: el de 20, algo después de su principio
+    expect(video.currentTime).toBeCloseTo(20.08)
+    expect(current?.rewound).toBe(true)
+    seekBy(11.5) // 31,58 está a menos de 1 s del objetivo (32): exacto
+    expect(video.currentTime).toBeCloseTo(31.58)
+    video.currentTime = 25.9
+    seekBy(-10) // 15,9: el de 16 (16,08)
+    expect(video.currentTime).toBeCloseTo(16.08)
+    seekBy(Number.POSITIVE_INFINITY)
+    expect(video.currentTime).toBe(32)
+  })
+
   it("más atrás de la lista no se mueve, salvo que se pida su principio (3 fragmentos dentro)", async () => {
     const { video } = await open()
     video.currentTime = 30
@@ -267,7 +367,7 @@ describe("retroceder dentro de la lista", () => {
 
   it("con la lista aún corta, retroceder no adelanta aunque su principio quede por delante", async () => {
     const { player, video } = await open()
-    player.latestLevelDetails = { age: 0.5, edge: 8, fragmentStart: 0 } // el objetivo, en 3,5; el principio, en 6
+    player.latestLevelDetails = { age: 0.5, edge: 8, fragmentStart: 0, fragments: [] } // el objetivo, en 3,5; el principio, en 6
     video.currentTime = 3.5
     expect(seekBy(-10)).toBeNull()
     expect(seekBy(-10, true)).not.toBeNull()

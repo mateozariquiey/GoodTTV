@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { AUDIO_ONLY_WANT, listVariants, pickVariant } from "./playlist"
+import { AUDIO_ONLY_WANT, listVariants, parseMedia, pickVariant } from "./playlist"
 
 // Una lista maestra como las de Twitch: cada variante con su grupo de vídeo y su nombre.
 const master = (...variants: readonly (readonly [string, number, number])[]): string =>
@@ -62,5 +62,49 @@ describe("solo audio", () => {
 
   it("si el canal no la da, el vídeo que menos gasta", () => {
     expect(pickVariant(at30, AUDIO_ONLY_WANT)?.name).toBe("480p")
+  })
+})
+
+describe("LIVE-SEQUENCE", () => {
+  const list = (...lines: string[]): string =>
+    ["#EXTM3U", "#EXT-X-TARGETDURATION:5", ...lines]
+      .flatMap((line) => (line.startsWith("#EXTINF") ? [line, "https://x/s.ts"] : [line]))
+      .join("\n")
+  const live = (n: number): string[] => Array.from({ length: n }, () => "#EXTINF:2.000,live")
+  const ads = (n: number): string[] => Array.from({ length: n }, () => "#EXTINF:2.002,Amazon|1")
+
+  // Como las del 29 de octubre en opoartstudy, al acabar un anuncio a mitad de emisión.
+  it("la que va delante del primer fragmento en directo, aunque haya otra después del anuncio", () => {
+    const parsed = parseMedia(
+      list(
+        "#EXT-X-MEDIA-SEQUENCE:128",
+        "#EXT-X-TWITCH-LIVE-SEQUENCE:8948",
+        ...live(5),
+        "#EXT-X-DISCONTINUITY",
+        ...ads(11),
+        "#EXT-X-DISCONTINUITY",
+        "#EXT-X-TWITCH-LIVE-SEQUENCE:8963",
+        ...live(2),
+      ),
+    )
+    expect(parsed.liveSequence).toBe(8948)
+    expect(parsed.segments[0]?.seq).toBe(128)
+  })
+
+  it("tras un anuncio de entrada, la que va delante del directo", () => {
+    const parsed = parseMedia(
+      list(
+        "#EXT-X-MEDIA-SEQUENCE:0",
+        ...ads(3),
+        "#EXT-X-DISCONTINUITY",
+        "#EXT-X-TWITCH-LIVE-SEQUENCE:8573",
+        ...live(2),
+      ),
+    )
+    expect(parsed.liveSequence).toBe(8573)
+  })
+
+  it("sin fragmentos en directo, la última", () => {
+    expect(parseMedia(list("#EXT-X-TWITCH-LIVE-SEQUENCE:5", ...ads(2))).liveSequence).toBe(5)
   })
 })

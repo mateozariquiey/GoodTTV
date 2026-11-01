@@ -125,16 +125,19 @@ const VOD_TOKEN_QUERY = `query($id: ID!) {
   videoPlaybackAccessToken(id: $id, params: {platform: "web", playerBackend: "mediaplayer", playerType: "site"}) { value signature }
 }`
 
-// La lista maestra del vídeo en usher, con su token de invitado: se le da a hls.js (o a Media3) tal cual. Los VOD solo
-// para suscriptores no se pueden ver así: usher contesta 403.
-export const vodMasterUrl = async (id: string, red: Fetch = globalFetch): Promise<string> => {
-  const token = tokenOf(
+const vodToken = async (id: string, red: Fetch) =>
+  tokenOf(
     pick(
       await gqlRequest({ query: VOD_TOKEN_QUERY, variables: { id } }, deviceId(), red),
       "data",
       "videoPlaybackAccessToken",
     ),
   )
+
+// La lista maestra del vídeo en usher, con su token de invitado: se le da a hls.js (o a Media3) tal cual. Los VOD solo
+// para suscriptores no se pueden ver así: usher contesta 403.
+export const vodMasterUrl = async (id: string, red: Fetch = globalFetch): Promise<string> => {
+  const token = await vodToken(id, red)
   if (token === null) throw new Error("sin token del vídeo")
   const params = new URLSearchParams({
     allow_source: "true",
@@ -266,8 +269,23 @@ export const commentsFrom = async (
     .filter((comment): comment is VideoComment => comment !== null)
 }
 
+// Un VOD solo para suscriptores: su token de invitado restringe sus calidades (chansub.restricted_bitrates, vacío en uno
+// público), y usher contesta 403. Comprobado el 29 de octubre con los de jaimemellado_. Si no se sabe (no hay token
+// legible o la petición falla), se da por visible, como antes.
+const guestCanWatch = async (id: string, red: Fetch): Promise<boolean> => {
+  try {
+    const token = await vodToken(id, red)
+    if (token === null) return true
+    const restricted = pick(JSON.parse(token.value), "chansub", "restricted_bitrates")
+    return !Array.isArray(restricted) || restricted.length === 0
+  } catch {
+    return true
+  }
+}
+
 // La emisión en curso de un canal y su VOD (DVR-1, retroceder el directo): cuándo empezó y el vídeo que la graba, si el
-// canal guarda sus emisiones. null si no emite.
+// canal guarda sus emisiones y se pueden ver sin suscripción (si no, retroceder abriría un VOD que no se puede ver).
+// null si no emite.
 export type LiveArchive = {
   readonly startedAt: string // ISO, cuándo empezó la emisión
   readonly archiveId: string | null
@@ -289,9 +307,11 @@ export const liveArchive = async (
   const stream = pick(data, "data", "user", "stream")
   const startedAt = text(pick(stream, "createdAt"))
   if (startedAt === null) return null
-  const archiveId = text(pick(stream, "archiveVideo", "id"))
+  const id = text(pick(stream, "archiveVideo", "id"))
+  const archiveId =
+    id !== null && /^\d{1,20}$/.test(id) && (await guestCanWatch(id, red)) ? id : null
   return {
-    archiveId: archiveId !== null && /^\d{1,20}$/.test(archiveId) ? archiveId : null,
+    archiveId,
     recordedAt: text(pick(stream, "archiveVideo", "recordedAt")),
     startedAt,
   }

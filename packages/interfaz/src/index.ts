@@ -58,7 +58,16 @@ export { useReplayChat } from "./player/useReplayChat"
 export type { PlayerPhase, PlayerState } from "./player/useTwitchPlayer"
 export { chooseVolume, chosenVolume, type Volume } from "./player/volume"
 export { LATENCY_MODES, LATENCY_ORDER } from "./screens/AccountScreen"
-export { prefetchVod, renewVod, VOD_WARM_MS, vodDetail, vodPlayback } from "./vod-cache"
+export {
+  prefetchedVodMaster,
+  prefetchVod,
+  prefetchVodMaster,
+  renewVod,
+  VOD_WARM_MS,
+  type VodMaster,
+  vodDetail,
+  vodPlayback,
+} from "./vod-cache"
 export { formatAgo, formatClock } from "./vod-format"
 export {
   forgetVodProgress,

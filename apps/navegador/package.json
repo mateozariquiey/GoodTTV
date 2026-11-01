@@ -1,6 +1,6 @@
 {
   "name": "@goodttv/navegador",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "private": true,
   "description": "GoodTTV en el navegador: extensión de Chrome y Firefox con el reproductor propio sin anuncios",
   "type": "module",
@@ -21,7 +21,7 @@
     "@goodttv/servicios": "workspace:*",
     "@goodttv/sin-anuncios": "workspace:*",
     "@phosphor-icons/react": "2.1.10",
-    "hls.js": "^1.7.3",
+    "hls.js": "^1.7.4",
     "qrcode.react": "^4.2.0",
     "react": "19.2.8",
     "react-dom": "19.2.8"
