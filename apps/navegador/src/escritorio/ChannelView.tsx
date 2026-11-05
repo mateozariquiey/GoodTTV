@@ -12,10 +12,12 @@ import {
   prewarmStream,
   renewVod,
   TWITCH_VIEWER_LATENCY,
+  t,
   toRecent,
   useBehind,
   useChat,
   useHlsPlayer,
+  useIdioma,
   useWatchTime,
   VOD_WARM_MS,
 } from "@goodttv/interfaz"
@@ -33,18 +35,20 @@ import {
   PlayIcon,
   SpeakerHighIcon,
   SpeakerSimpleXIcon,
+  SquaresFourIcon,
   UserIcon,
 } from "@phosphor-icons/react"
 import { type CSSProperties, memo, useCallback, useEffect, useRef, useState } from "react"
 import { Avatar } from "./Avatar"
 import { ChatPanel, type ChatWriting } from "./ChatPanel"
+import { huecoOf } from "./cuadricula"
 import { useFullscreen } from "./fullscreen"
 import { PictureInPictureButton } from "./PictureInPictureButton"
 import { navigate } from "./routes"
 import { SeekBar } from "./SeekBar"
 import { SKIP_S, SkipButton } from "./SkipButton"
 import { contextOf, shortcutFor } from "./shortcuts"
-import { useSoleSound } from "./sonido"
+import { SoundElsewhere, useSoleSound } from "./sonido"
 import { ChannelVideos } from "./Videos"
 
 // Un canal: el vídeo manda. Los controles salen al mover el ratón sobre él y se ocultan solos, con el cursor, mientras
@@ -63,6 +67,7 @@ type Props = {
   readonly canChat: boolean // la cuenta tiene permiso para escribir en el chat
   readonly channel: Channel
   readonly lineup: readonly Channel[]
+  readonly onGrid?: (() => void) | undefined // con la cuadrícula activada (EXT-6), el botón para pasar a ella
   readonly onOpen: (channel: Channel) => void
   readonly onPreferences: (patch: PreferencesPatch) => void
   readonly onTheater: (on: boolean) => void
@@ -76,6 +81,7 @@ export const ChannelView = ({
   canChat,
   channel,
   lineup,
+  onGrid,
   onOpen,
   onPreferences,
   onTheater,
@@ -90,12 +96,15 @@ export const ChannelView = ({
   // Con varias pestañas, suena una sola (sonido.ts): las demás se silencian y, ocultas un rato, se paran.
   const [stoppable, setStoppable] = useState(true)
   const sole = useSoleSound(channel.login, stoppable)
+  const hueco = onGrid === undefined ? 0 : huecoOf(channel.login)
   const player = useHlsPlayer(
     surface,
     channel.login,
     preferencesLoaded && sole.standby !== "parado",
     preferences.latencyMode,
     true,
+    // Con la cuadrícula activada (EXT-6), el vídeo puede seguir al pasar a ella.
+    onGrid === undefined ? undefined : { hueco, inCell: false, silent: false },
   )
   const { latency, state } = player
   // Los minutos que suena (en la pestaña que suena), para ordenar tus seguidos por los que más ves.
@@ -123,11 +132,11 @@ export const ChannelView = ({
   const { latencyMode } = preferences
   useEffect(() => {
     if (sole.standby !== "parado" || !sole.warm || !preferencesLoaded) return undefined
-    const ping = (): void => prewarmStream(channel.login, latencyMode)
+    const ping = (): void => prewarmStream(channel.login, latencyMode, hueco)
     ping()
     const timer = setInterval(ping, WARM_PING_MS)
     return () => clearInterval(timer)
-  }, [channel.login, latencyMode, preferencesLoaded, sole.standby, sole.warm])
+  }, [channel.login, hueco, latencyMode, preferencesLoaded, sole.standby, sole.warm])
   // Tocar el reproductor de una pestaña en silencio (otra ventana a la vista) la hace sonar. Con el silencio o el
   // volumen (choosing), lo que haga la persona manda: no se vuelve a como estaba antes de silenciarla.
   const { claim, standby } = sole
@@ -365,7 +374,9 @@ export const ChannelView = ({
       openRewind(paused.shown)
     else togglePlayback()
   }, [canRewind, openRewind, togglePlayback])
+  const clickTookSound = useRef(false)
   const onSurfaceClick = (): void => {
+    if (clickTookSound.current) return // ver onPointerDownCapture
     clearTimeout(clickTimer.current)
     clickTimer.current = setTimeout(() => {
       toggledAt.current = performance.now()
@@ -466,12 +477,17 @@ export const ChannelView = ({
       <div className="watch__main">
         <div
           className={`stage${showControls ? "" : " stage--idle"}${phase === "offline" ? " stage--offline" : ""}`}
-          onPointerDownCapture={(event) =>
+          onPointerDownCapture={(event) => {
+            // Un clic en el vídeo de una ventana en silencio le da el sonido, sin pausarla.
+            clickTookSound.current =
+              standby !== "no" &&
+              event.target instanceof Node &&
+              surface.current?.contains(event.target) === true
             // En el silencio o el volumen, lo que elija la persona; en lo demás, como estaba.
             takeSound(
               event.target instanceof Element && event.target.closest("[data-sonido]") !== null,
             )
-          }
+          }}
           onPointerLeave={() => setAwake(false)}
           onPointerMove={wake}
         >
@@ -483,6 +499,7 @@ export const ChannelView = ({
             onDoubleClick={onSurfaceDoubleClick}
             ref={surface}
           />
+          {standby === "silencio" ? <SoundElsewhere /> : null}
           <Notice
             channel={details}
             onPlay={player.play}
@@ -491,10 +508,32 @@ export const ChannelView = ({
             blocked={state.blocked}
             twitchUrl={twitchUrl}
           />
+          {canStep ? (
+            <>
+              <button
+                aria-label={t("Canal anterior")}
+                className="icon-button icon-button--light channel-step channel-step--prev"
+                onClick={() => step(-1)}
+                title={t("Canal anterior (↑)")}
+                type="button"
+              >
+                <CaretLeftIcon />
+              </button>
+              <button
+                aria-label={t("Canal siguiente")}
+                className="icon-button icon-button--light channel-step channel-step--next"
+                onClick={() => step(1)}
+                title={t("Canal siguiente (↓)")}
+                type="button"
+              >
+                <CaretRightIcon />
+              </button>
+            </>
+          ) : null}
           <div
             className={`controls${dvr === null ? "" : " controls--seek"}`}
             role="toolbar"
-            aria-label="Controles del reproductor"
+            aria-label={t("Controles del reproductor")}
           >
             {dvr === null ? null : (
               <SeekBar
@@ -502,7 +541,7 @@ export const ChannelView = ({
                 duration={dvr.duration}
                 label={(at) =>
                   dvr.duration - at < DVR_MIN_BACK_S
-                    ? "En directo"
+                    ? t("En directo")
                     : `−${formatClock(dvr.duration - at)}`
                 }
                 onSeek={(to) => {
@@ -517,10 +556,10 @@ export const ChannelView = ({
             <div className="controls__row">
               <div className="controls__group">
                 <button
-                  aria-label={state.playing ? "Pausa" : "Reproducir"}
+                  aria-label={state.playing ? t("Pausa") : t("Reproducir")}
                   className="icon-button icon-button--light"
                   onClick={toggle}
-                  title={state.playing ? "Pausa (Espacio)" : "Reproducir (Espacio)"}
+                  title={state.playing ? t("Pausa (Espacio)") : t("Reproducir (Espacio)")}
                   type="button"
                 >
                   {state.playing ? <PauseIcon weight="fill" /> : <PlayIcon weight="fill" />}
@@ -528,17 +567,17 @@ export const ChannelView = ({
                 <SkipButton forward={false} onSkip={() => skip(-SKIP_S)} />
                 <SkipButton disabled={!player.rewound} forward onSkip={() => skip(SKIP_S)} />
                 <button
-                  aria-label={muted ? "Quitar el silencio" : "Silenciar"}
+                  aria-label={muted ? t("Quitar el silencio") : t("Silenciar")}
                   className="icon-button icon-button--light"
                   data-sonido
                   onClick={muted && volume === 0 ? () => changeVolume(0.5) : toggleMuted}
-                  title={muted ? "Quitar el silencio (M)" : "Silenciar (M)"}
+                  title={muted ? t("Quitar el silencio (M)") : t("Silenciar (M)")}
                   type="button"
                 >
                   {muted ? <SpeakerSimpleXIcon /> : <SpeakerHighIcon />}
                 </button>
                 <input
-                  aria-label="Volumen"
+                  aria-label={t("Volumen")}
                   className="volume"
                   data-sonido
                   max={1}
@@ -553,50 +592,28 @@ export const ChannelView = ({
                   <button
                     className="go-live"
                     onClick={goLive}
-                    title="Volver al directo, con el retraso de tu modo (Fin)"
+                    title={t("Volver al directo, con el retraso de tu modo (Fin)")}
                     type="button"
                   >
-                    <i aria-hidden="true" />
-                    Ir al directo
+                    <i aria-hidden="true" /> {t("Ir al directo")}
                   </button>
                 ) : live ? (
                   <span className="live">
-                    <i aria-hidden="true" />
-                    En directo
+                    <i aria-hidden="true" /> {t("En directo")}
                   </span>
                 ) : null}
                 {live && behind !== null ? (
                   <span
                     className="behind"
-                    title="Lo que va por detrás de lo que ve un espectador normal de Twitch: el precio de no ver anuncios. El modo se elige en Ajustes."
+                    title={t(
+                      "Lo que va por detrás de lo que ve un espectador normal de Twitch: el precio de no ver anuncios. El modo se elige en Ajustes.",
+                    )}
                   >
-                    {behind} s por detrás
+                    {behind} {t("s por detrás")}
                   </span>
                 ) : null}
               </div>
               <div className="controls__group">
-                {canStep ? (
-                  <>
-                    <button
-                      aria-label="Canal anterior"
-                      className="icon-button icon-button--light"
-                      onClick={() => step(-1)}
-                      title="Canal anterior (↑)"
-                      type="button"
-                    >
-                      <CaretLeftIcon />
-                    </button>
-                    <button
-                      aria-label="Canal siguiente"
-                      className="icon-button icon-button--light"
-                      onClick={() => step(1)}
-                      title="Canal siguiente (↓)"
-                      type="button"
-                    >
-                      <CaretRightIcon />
-                    </button>
-                  </>
-                ) : null}
                 {state.qualities.length > 0 ? (
                   <div className="quality">
                     <button
@@ -604,7 +621,7 @@ export const ChannelView = ({
                       aria-haspopup="menu"
                       className="quality__button"
                       onClick={() => setQualityOpen((open) => !open)}
-                      title="Calidad"
+                      title={t("Calidad")}
                       type="button"
                     >
                       {quality}
@@ -634,36 +651,51 @@ export const ChannelView = ({
                   </div>
                 ) : null}
                 <button
-                  aria-label={chatShown ? "Ocultar el chat" : "Mostrar el chat"}
+                  aria-label={chatShown ? t("Ocultar el chat") : t("Mostrar el chat")}
                   aria-pressed={chatShown}
                   className="icon-button icon-button--light"
                   onClick={toggleChat}
-                  title={chatShown ? "Ocultar el chat (C)" : "Mostrar el chat (C)"}
+                  title={chatShown ? t("Ocultar el chat (C)") : t("Mostrar el chat (C)")}
                   type="button"
                 >
                   <ChatTextIcon />
                 </button>
+                {onGrid === undefined ? null : (
+                  <button
+                    aria-label={t("Añadir otro canal")}
+                    className="icon-button icon-button--light"
+                    onClick={onGrid}
+                    title={t("Añadir otro canal")}
+                    type="button"
+                  >
+                    <SquaresFourIcon />
+                  </button>
+                )}
                 <PictureInPictureButton
                   active={player.pictureInPicture}
                   onToggle={player.togglePictureInPicture}
                 />
                 {fullscreen ? null : (
                   <button
-                    aria-label="Modo teatro"
+                    aria-label={t("Modo teatro")}
                     aria-pressed={theater}
                     className="icon-button icon-button--light icon-button--toggle"
                     onClick={() => onTheater(!theater)}
-                    title="Modo teatro (T): el vídeo y el chat ocupan la ventana"
+                    title={t("Modo teatro (T): el vídeo y el chat ocupan la ventana")}
                     type="button"
                   >
                     {theater ? <ArrowsInLineHorizontalIcon /> : <ArrowsOutLineHorizontalIcon />}
                   </button>
                 )}
                 <button
-                  aria-label={fullscreen ? "Salir de la pantalla completa" : "Pantalla completa"}
+                  aria-label={
+                    fullscreen ? t("Salir de la pantalla completa") : t("Pantalla completa")
+                  }
                   className="icon-button icon-button--light"
                   onClick={toggleFullscreen}
-                  title={fullscreen ? "Salir de la pantalla completa (F)" : "Pantalla completa (F)"}
+                  title={
+                    fullscreen ? t("Salir de la pantalla completa (F)") : t("Pantalla completa (F)")
+                  }
                   type="button"
                 >
                   {fullscreen ? <CornersInIcon /> : <CornersOutIcon />}
@@ -689,13 +721,13 @@ export const ChannelView = ({
           </div>
           <div className="channel-info__stats">
             {details.viewerCount === undefined ? null : (
-              <span className="stat stat--live" title="Espectadores">
+              <span className="stat stat--live" title={t("Espectadores")}>
                 <UserIcon aria-hidden="true" />
                 {formatViewers(details.viewerCount)}
               </span>
             )}
             {details.startedAt === undefined ? null : (
-              <span className="stat" title="Tiempo en directo">
+              <span className="stat" title={t("Tiempo en directo")}>
                 {formatUptime(details.startedAt)}
               </span>
             )}
@@ -707,28 +739,28 @@ export const ChannelView = ({
                 target="_blank"
                 title={
                   following
-                    ? "Lo sigues. Para dejar de seguirlo, en twitch.tv"
-                    : "Seguirlo en twitch.tv"
+                    ? t("Lo sigues. Para dejar de seguirlo, en twitch.tv")
+                    : t("Seguirlo en twitch.tv")
                 }
               >
                 <HeartIcon aria-hidden="true" weight={following ? "fill" : "regular"} />
                 {following ? (
                   <>
-                    <span className="follow__label">Siguiendo</span>
-                    <span className="follow__hover">Dejar de seguir</span>
+                    <span className="follow__label">{t("Siguiendo")}</span>
+                    <span className="follow__hover">{t("Dejar de seguir")}</span>
                   </>
                 ) : (
-                  "Seguir"
+                  t("Seguir")
                 )}
               </a>
             )}
             <a
-              aria-label="Abrir en twitch.tv"
+              aria-label={t("Abrir en twitch.tv")}
               className="icon-button"
               href={twitchUrl}
               rel="noreferrer"
               target="_blank"
-              title="Abrir en twitch.tv"
+              title={t("Abrir en twitch.tv")}
             >
               <ArrowSquareOutIcon aria-hidden="true" />
             </a>
@@ -753,7 +785,7 @@ export const ChannelView = ({
 // El chat, aparte del resto del canal: cada lote de mensajes (unas 10 veces por segundo en un chat con mucho movimiento)
 // solo vuelve a pintar el chat, no los controles, la ficha ni los vídeos de debajo. Solo con la pestaña a la vista
 // (connected): EventSub admite tres conexiones por cuenta, y hay más pestañas.
-const ChannelChat = memo(
+export const ChannelChat = memo(
   ({
     broadcasterId,
     canChat,
@@ -771,6 +803,7 @@ const ChannelChat = memo(
     readonly signedIn: boolean
     readonly visible: boolean
   }) => {
+    useIdioma() // con memo no se vuelve a pintar solo al cambiar el idioma
     const chat = useChat(broadcasterId, visible, delay, connected)
     const writing: ChatWriting =
       !signedIn || chat.send === undefined ? "no" : canChat ? "si" : "vincular"
@@ -797,39 +830,40 @@ const Notice = ({
   readonly phase: string
   readonly twitchUrl: string
 }) => {
-  if (phase === "loading") return <div aria-label="Cargando" className="spinner" role="status" />
+  if (phase === "loading")
+    return <div aria-label={t("Cargando")} className="spinner" role="status" />
   const body =
     phase === "offline" ? (
       <>
         <p>
-          {channel.displayName} no está en directo ahora.
-          {window.api.vods === undefined ? null : " Sus emisiones anteriores, debajo."}
+          {channel.displayName} {t("no está en directo ahora.")}{" "}
+          {window.api.vods === undefined ? null : t("Sus emisiones anteriores, debajo.")}
         </p>
         <a className="button" href="#/">
-          Volver a Inicio
+          {t("Volver a Inicio")}
         </a>
       </>
     ) : phase === "error" || phase === "stalled" ? (
       <>
         <p>
           {phase === "error"
-            ? "No se pudo preparar el directo sin anuncios."
-            : "Twitch no responde."}
+            ? t("No se pudo preparar el directo sin anuncios.")
+            : t("Twitch no responde.")}
         </p>
         <span className="stage__actions">
           <button className="button button--primary" onClick={onRetry} type="button">
-            Reintentar
+            {t("Reintentar")}
           </button>
           <a className="button" href={twitchUrl} rel="noreferrer" target="_blank">
-            Abrir en twitch.tv
+            {t("Abrir en twitch.tv")}
           </a>
         </span>
       </>
     ) : blocked ? (
       <>
-        <p>El navegador no ha dejado empezar la reproducción.</p>
+        <p>{t("El navegador no ha dejado empezar la reproducción.")}</p>
         <button className="button button--primary" onClick={onPlay} type="button">
-          Reproducir
+          {t("Reproducir")}
         </button>
       </>
     ) : null

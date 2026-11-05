@@ -1,5 +1,5 @@
 import type { ChatEmote, ChatEmoteGroups } from "@goodttv/contratos"
-import { emoteThumb, NO_EMOTES } from "@goodttv/interfaz"
+import { emoteThumb, NO_EMOTES, t } from "@goodttv/interfaz"
 import { CopyIcon, MagnifyingGlassIcon, PaperPlaneTiltIcon } from "@phosphor-icons/react"
 import { useEffect, useRef, useState } from "react"
 import { android } from "../api"
@@ -110,27 +110,27 @@ export const ListaEmotes = ({
   const secciones = SECCIONES.map(([clave, titulo]) => ({
     clave,
     emotes: groups[clave].filter((emote) => emote.name.toLowerCase().includes(texto)),
-    titulo,
+    titulo: t(titulo),
   })).filter((seccion) => seccion.emotes.length > 0)
   return (
     <div className="lista-emotes">
       <label className="lista-emotes__buscar">
         <MagnifyingGlassIcon aria-hidden="true" />
         <input
-          aria-label="Buscar emotes"
+          aria-label={t("Buscar emotes")}
           autoComplete="off"
           enterKeyHint="search"
           onChange={(event) => setBusqueda(event.currentTarget.value)}
-          placeholder="Buscar emotes"
+          placeholder={t("Buscar emotes")}
           type="search"
           value={busqueda}
         />
       </label>
       <div className="lista-emotes__cuerpo" ref={cuerpo}>
         {cargando ? (
-          <p className="nota">Cargando emotes…</p>
+          <p className="nota">{t("Cargando emotes…")}</p>
         ) : secciones.length === 0 ? (
-          <p className="nota">{texto === "" ? "No hay emotes." : "Ninguno se llama así."}</p>
+          <p className="nota">{texto === "" ? t("No hay emotes.") : t("Ninguno se llama así.")}</p>
         ) : (
           secciones.map((seccion) => (
             <section key={seccion.clave}>
@@ -157,7 +157,7 @@ export const ListaEmotes = ({
       </div>
       <p className="lista-emotes__ultimo">
         {ultimo === null ? (
-          "Toca un emote para ponerlo en el mensaje."
+          t("Toca un emote para ponerlo en el mensaje.")
         ) : (
           <>
             <strong>{ultimo.name}</strong> · {PROVEEDOR[ultimo.provider]}
@@ -205,7 +205,7 @@ export const FichaEmote = ({
   const [copiado, setCopiado] = useState(false)
   const datos = [
     emote.provider === undefined ? null : PROVEEDOR[emote.provider],
-    emote.overlays.length > 0 ? `con ${emote.overlays.join(", ")}` : null,
+    emote.overlays.length > 0 ? t("con {overlays}", { overlays: emote.overlays.join(", ") }) : null,
   ].filter((each) => each !== null)
   return (
     <Hoja onClose={onCerrar} titulo="Emote">
@@ -228,8 +228,7 @@ export const FichaEmote = ({
             }}
             type="button"
           >
-            <PaperPlaneTiltIcon aria-hidden="true" size={20} />
-            Al mensaje
+            <PaperPlaneTiltIcon aria-hidden="true" size={20} /> {t("Al mensaje")}
           </button>
         )}
         <button
@@ -241,7 +240,7 @@ export const FichaEmote = ({
           type="button"
         >
           <CopyIcon aria-hidden="true" size={20} />
-          {copiado ? "Copiado" : "Copiar el nombre"}
+          {copiado ? t("Copiado") : t("Copiar el nombre")}
         </button>
       </div>
     </Hoja>

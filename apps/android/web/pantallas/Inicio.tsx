@@ -1,14 +1,18 @@
 import {
   type Channel,
+  type Clave,
   type FollowedOrder,
   formatViewers,
   type HomeData,
   type HomeSketch,
   previewAt,
   type Resource,
+  t,
+  tMensaje,
   unfinishedVods,
+  useGuestPopular,
 } from "@goodttv/interfaz"
-import { CaretDownIcon, MagnifyingGlassIcon, UserIcon } from "@phosphor-icons/react"
+import { ArrowsDownUpIcon, MagnifyingGlassIcon, UserIcon } from "@phosphor-icons/react"
 import { type ReactNode, useEffect, useState } from "react"
 import { Avatar, Reintentar } from "./comun"
 import { Opciones } from "./controles"
@@ -16,6 +20,8 @@ import { useAtrasCierra } from "./rutas"
 import { VideoItem } from "./Videos"
 
 type Open = (channel: Channel) => void
+
+const GUEST_PLACEHOLDERS = 8 // la forma de «Populares ahora» sin cuenta, mientras llega
 type Account = { readonly displayName: string; readonly profileImageUrl?: string | undefined }
 
 // Inicio: arriba el logo, la búsqueda y el avatar (la cuenta y los ajustes); debajo, los seguidos en directo (por
@@ -42,16 +48,16 @@ const Directo = ({ channel, onOpen }: { readonly channel: Channel; readonly onOp
           <span className="directo__espectadores">
             <i aria-hidden="true" />
             {formatViewers(channel.viewerCount)}
-            <span className="oculto"> espectadores</span>
+            <span className="oculto">{t("espectadores")}</span>
           </span>
         )}
       </span>
       <span className="directo__texto">
         <b className="directo__nombre">{channel.displayName}</b>
+        <span className="directo__titulo">{channel.title}</span>
         {channel.category === undefined || channel.category === "" ? null : (
           <span className="directo__categoria">{channel.category}</span>
         )}
-        <span className="directo__titulo">{channel.title}</span>
       </span>
     </a>
   </li>
@@ -67,8 +73,8 @@ const Huecos = ({ count }: { readonly count: number }) => (
           <span className="directo__miniatura" />
           <span className="directo__texto">
             <b className="directo__nombre">&nbsp;</b>
-            <span className="directo__categoria">&nbsp;</span>
             <span className="directo__titulo">&nbsp;</span>
+            <span className="directo__categoria">&nbsp;</span>
           </span>
         </span>
       </li>
@@ -110,7 +116,7 @@ const Recientes = ({
             <span className="reciente__nombre">{channel.displayName}</span>
             {known ? (
               <span className="oculto">
-                {channel.live === true ? "En directo" : "Desconectado"}
+                {channel.live === true ? t("En directo") : t("Desconectado")}
               </span>
             ) : null}
           </a>
@@ -157,15 +163,25 @@ export const Inicio = ({
   useEffect(() => {
     if (!hidden) setVods(aMedias())
   }, [hidden])
+  // Con vídeos a medias, se elige arriba qué ver: debajo de la lista de canales hacía falta recorrerla entera.
+  const [vista, setVista] = useState<"directo" | "videos">("directo")
+  const enVideos = vista === "videos" && vods.length > 0
+  const enDirecto = (
+    <>
+      {t("En directo")}
+      {following.length > 0 ? <span className="seccion__cuenta">{following.length}</span> : null}
+    </>
+  )
+  const guest = useGuestPopular(!signedIn && resource.kind === "ready" && unreachable === undefined)
   // Sin poder comprobar la cuenta no se pide nada a Twitch: lo que se ve, si hay algo, es lo de la última vez.
   const notice =
     unreachable === undefined ? null : (
       <div className="aviso aviso--alerta" role="alert">
         <p>
-          No se pudo comprobar tu cuenta ({unreachable}).{" "}
+          {t("No se pudo comprobar tu cuenta ({error}).", { error: unreachable })}{" "}
           {resource.kind === "ready"
-            ? "Lo que ves es de la última vez."
-            : "La sesión no se ha cerrado."}
+            ? t("Lo que ves es de la última vez.")
+            : t("La sesión no se ha cerrado.")}
         </p>
         <Reintentar onRetry={onRetryAccount} />
       </div>
@@ -174,78 +190,103 @@ export const Inicio = ({
   if (resource.kind === "error") {
     body = (
       <div className="aviso">
-        <p>No se pudo cargar Inicio ({resource.message}).</p>
+        <p>{t("No se pudo cargar Inicio ({error}).", { error: tMensaje(resource.message) })}</p>
         <button className="boton" onClick={onRetry} type="button">
-          Reintentar
+          {t("Reintentar")}
         </button>
       </div>
     )
   } else if (resource.kind === "loading" && !signedIn) {
     // Sin cuenta, o sin saber aún si la hay: ni la bienvenida ni «Seguir viendo» hasta tener lo de verdad.
-    body = notice ?? <p className="nota">Cargando…</p>
+    body = notice ?? <p className="nota">{t("Cargando…")}</p>
   } else {
     body = (
       <>
         {notice}
-        {signedIn ? (
-          <section>
-            <div className="seccion seccion--con-boton">
-              <h2>Seguidos en directo</h2>
-              <Orden onOrder={onOrder} order={order} />
-            </div>
-            {resource.kind === "loading" && (sketch?.following ?? 0) > 0 ? (
-              <Huecos count={sketch?.following ?? 0} />
-            ) : resource.kind === "loading" ? (
-              <p className="nota">Cargando…</p>
-            ) : following.length === 0 ? (
-              <p className="nota">Ninguno de tus seguidos está en directo ahora.</p>
+        {signedIn || vods.length > 0 ? (
+          <div className="seccion seccion--con-boton">
+            {vods.length === 0 ? (
+              <h2>{enDirecto}</h2>
             ) : (
-              <Lista channels={following} onOpen={onOpen} />
+              <div className="titulos">
+                <button
+                  aria-pressed={!enVideos}
+                  className="titulo"
+                  onClick={() => setVista("directo")}
+                  type="button"
+                >
+                  {enDirecto}
+                </button>
+                <button
+                  aria-pressed={enVideos}
+                  className="titulo"
+                  onClick={() => setVista("videos")}
+                  type="button"
+                >
+                  {t("Vídeos")}
+                  <span className="seccion__cuenta">{vods.length}</span>
+                </button>
+              </div>
             )}
-          </section>
-        ) : (
-          <div className="bienvenida">
-            <h1>Twitch sin anuncios</h1>
-            <p>
-              Busca un canal por su nombre, o vincula tu cuenta para ver aquí a quién sigues y leer
-              el chat.
-            </p>
-            <a className="boton boton--principal" href="#/cuenta">
-              Vincular la cuenta
-            </a>
+            {signedIn && !enVideos ? <Orden onOrder={onOrder} order={order} /> : null}
           </div>
-        )}
-        {recents.length === 0 ? null : (
-          <section>
-            <h2 className="seccion">Seguir viendo</h2>
-            <Recientes
-              channels={recents}
-              known={signedIn && sketch === undefined}
-              onOpen={onOpen}
-            />
-          </section>
-        )}
-        {vods.length === 0 ? null : (
-          <section>
-            <h2 className="seccion">Vídeos a medias</h2>
-            <ul className="directos">
-              {vods.map((entry) => (
-                <VideoItem channel={entry.displayName} key={entry.id} video={entry} />
-              ))}
-            </ul>
-          </section>
-        )}
-        {popular.length > 0 ? (
-          <section>
-            <h2 className="seccion">Populares ahora</h2>
-            <Lista channels={popular} onOpen={onOpen} />
-          </section>
-        ) : (sketch?.popular ?? 0) > 0 ? (
-          <section>
-            <h2 className="seccion">Populares ahora</h2>
-            <Huecos count={sketch?.popular ?? 0} />
-          </section>
         ) : null}
+        {enVideos ? (
+          <ul className="directos">
+            {vods.map((entry) => (
+              <VideoItem channel={entry.displayName} key={entry.id} video={entry} />
+            ))}
+          </ul>
+        ) : (
+          <>
+            {signedIn ? (
+              <section>
+                {resource.kind === "loading" && (sketch?.following ?? 0) > 0 ? (
+                  <Huecos count={sketch?.following ?? 0} />
+                ) : resource.kind === "loading" ? (
+                  <p className="nota">{t("Cargando…")}</p>
+                ) : following.length === 0 ? (
+                  <p className="nota">{t("Ninguno de tus seguidos está en directo ahora.")}</p>
+                ) : (
+                  <Lista channels={following} onOpen={onOpen} />
+                )}
+              </section>
+            ) : (
+              <div className="bienvenida">
+                <h1>{t("Twitch sin anuncios")}</h1>
+                <p>
+                  {t(
+                    "Busca un canal por su nombre, o vincula tu cuenta para ver aquí a quién sigues y leer el chat.",
+                  )}
+                </p>
+                <a className="boton boton--principal" href="#/cuenta">
+                  {t("Vincular la cuenta")}
+                </a>
+              </div>
+            )}
+            {recents.length === 0 ? null : (
+              <section>
+                <h2 className="seccion">{t("Seguir viendo")}</h2>
+                <Recientes
+                  channels={recents}
+                  known={signedIn && sketch === undefined}
+                  onOpen={onOpen}
+                />
+              </section>
+            )}
+            {popular.length + guest.channels.length > 0 ? (
+              <section>
+                <h2 className="seccion">{t("Populares ahora")}</h2>
+                <Lista channels={signedIn ? popular : guest.channels} onOpen={onOpen} />
+              </section>
+            ) : (sketch?.popular ?? 0) > 0 || guest.loading ? (
+              <section>
+                <h2 className="seccion">{t("Populares ahora")}</h2>
+                <Huecos count={guest.loading ? GUEST_PLACEHOLDERS : (sketch?.popular ?? 0)} />
+              </section>
+            ) : null}
+          </>
+        )}
       </>
     )
   }
@@ -254,10 +295,10 @@ export const Inicio = ({
       <header className="barra barra--inicio">
         <span aria-hidden="true" className="logo" />
         <span className="marca">GoodTTV</span>
-        <a aria-label="Buscar un canal" className="boton-icono" href="#/buscar">
+        <a aria-label={t("Buscar un canal")} className="boton-icono" href="#/buscar">
           <MagnifyingGlassIcon />
         </a>
-        <a aria-label="Cuenta y ajustes" className="boton-icono" href="#/cuenta">
+        <a aria-label={t("Cuenta y ajustes")} className="boton-icono" href="#/cuenta">
           {account === undefined ? (
             <UserIcon />
           ) : (
@@ -274,7 +315,7 @@ export const Inicio = ({
   )
 }
 
-const ORDENES: Readonly<Record<FollowedOrder, string>> = {
+const ORDENES: Readonly<Record<FollowedOrder, Clave>> = {
   espectadores: "Espectadores",
   recomendado: "Recomendado para ti",
 }
@@ -305,17 +346,16 @@ const Orden = ({
       <button
         aria-expanded={abierto}
         aria-haspopup="menu"
-        aria-label={`Ordenar: ${ORDENES[order]}`}
+        aria-label={t("Ordenar: {orden}", { orden: t(ORDENES[order]) })}
         className="orden__boton"
         onClick={() => setAbierto(!abierto)}
         type="button"
       >
-        {ORDENES[order]}
-        <CaretDownIcon aria-hidden="true" />
+        <ArrowsDownUpIcon aria-hidden="true" />
       </button>
       {abierto ? (
         <div className="orden__menu">
-          <p className="orden__titulo">Ordenar por</p>
+          <p className="orden__titulo">{t("Ordenar por")}</p>
           <Opciones
             elegida={order}
             onElegir={(valor) => {
@@ -323,11 +363,13 @@ const Orden = ({
               setAbierto(false)
             }}
             opciones={(["recomendado", "espectadores"] as const).map((valor) => ({
-              nombre: ORDENES[valor],
+              nombre: t(ORDENES[valor]),
               valor,
             }))}
           />
-          <p className="orden__nota">«Recomendado para ti»: primero los que más ves en GoodTTV.</p>
+          <p className="orden__nota">
+            {t("«Recomendado para ti»: primero los que más ves en GoodTTV.")}
+          </p>
         </div>
       ) : null}
     </div>

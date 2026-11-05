@@ -18,6 +18,7 @@ import {
   channelByLogin,
   commentsFrom,
   liveArchive,
+  popularStreams,
   searchChannels,
   storyboardOf,
   videoById,
@@ -30,6 +31,7 @@ import {
 // (media3.ts). La pausa, la esquina y la pantalla completa valen para los dos.
 export type Android = {
   mantenerPantalla(activa: boolean): void
+  fijarIdioma(idioma: string): void
   canalAbrir(canal: string, modo: string): void
   canalMinimizar(): void
   canalPantallaCompleta(activa: boolean): void
@@ -86,6 +88,7 @@ export const createAndroidApi = (android: Android): AppApi => {
     // Buscar canales con la relevancia de twitch.tv y sin cuenta, como invitado y por la red nativa, como la extensión.
     channels: {
       byLogin: (login) => channelByLogin(login),
+      popular: (language) => popularStreams({ language }),
       search: (query, first) => searchChannels(query, { first }),
     },
     // Un fork compila con VITE_TWITCH_CLIENT_ID; si no, el del proyecto.

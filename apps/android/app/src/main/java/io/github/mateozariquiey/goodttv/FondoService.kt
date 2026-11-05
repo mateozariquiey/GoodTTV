@@ -29,7 +29,7 @@ class FondoService : Service() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         getSystemService(NotificationManager::class.java).createNotificationChannel(
-            NotificationChannel("reproduccion", "Reproducción", NotificationManager.IMPORTANCE_LOW),
+            NotificationChannel("reproduccion", Idioma.texto("Reproducción", "Playback"), NotificationManager.IMPORTANCE_LOW),
         )
         enPrimerPlano()
         actual = WeakReference(this)

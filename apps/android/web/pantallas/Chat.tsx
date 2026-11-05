@@ -6,6 +6,7 @@ import {
   Message,
   replaceWord,
   suggestEmotes,
+  t,
   useChatAtBottom,
   useChatCompose,
   useChatEmotes,
@@ -60,14 +61,17 @@ export const Chat = ({
   const waiting = chat.status === "connected" && chat.messages.length === 0
   const status = replay
     ? chat.status === "error"
-      ? "No se pudo cargar el chat del vídeo."
+      ? t("No se pudo cargar el chat del vídeo.")
       : chat.status === "connecting"
-        ? "Cargando el chat del vídeo…"
+        ? t("Cargando el chat del vídeo…")
         : undefined
     : (CHAT_STATUS_TEXT[chat.status] ??
-      (waiting && delay === null ? "Sincronizando el chat con la imagen…" : undefined) ??
+      (waiting && delay === null ? t("Sincronizando el chat con la imagen…") : undefined) ??
       (waiting && delay !== null && delay >= 5
-        ? `El chat va a la par de la imagen: cada mensaje aparece unos ${delay} s después de llegar.`
+        ? t(
+            "El chat va a la par de la imagen: cada mensaje aparece unos {delay} s después de llegar.",
+            { delay },
+          )
         : undefined))
   // Lo propio sale abajo: la lista vuelve a seguir los mensajes nuevos.
   const onSent = useCallback(() => {
@@ -150,8 +154,7 @@ export const Chat = ({
             }}
             type="button"
           >
-            <ArrowDownIcon aria-hidden="true" size={16} />
-            Últimos mensajes
+            <ArrowDownIcon aria-hidden="true" size={16} /> {t("Últimos mensajes")}
           </button>
         </div>
       )}
@@ -159,7 +162,7 @@ export const Chat = ({
         <Escribir emotes={chat.emotes} handle={composer} onSent={onSent} send={send} />
       ) : writing === "vincular" ? (
         <p className="chat__nota">
-          Para escribir, vuelve a vincular la cuenta (el avatar, arriba).
+          {t("Para escribir, vuelve a vincular la cuenta (el avatar, arriba).")}
         </p>
       ) : null}
       {ficha === null ? null : (
@@ -249,7 +252,7 @@ const Escribir = ({
         {suggestions.length === 0 ? null : <Sugerencias emotes={suggestions} onElegir={pick} />}
         <div className="chat__caja">
           <input
-            aria-label="Enviar un mensaje"
+            aria-label={t("Enviar un mensaje")}
             autoComplete="off"
             enterKeyHint="send"
             maxLength={CHAT_MESSAGE_MAX}
@@ -268,7 +271,7 @@ const Escribir = ({
               if (document.activeElement === event.currentTarget)
                 setCaret(event.currentTarget.selectionStart ?? 0)
             }}
-            placeholder="Enviar un mensaje"
+            placeholder={t("Enviar un mensaje")}
             ref={input}
             spellCheck
             value={text}
@@ -287,7 +290,7 @@ const Escribir = ({
             <SmileyIcon aria-hidden="true" weight={picking ? "fill" : "regular"} />
           </button>
           <button
-            aria-label="Enviar"
+            aria-label={t("Enviar")}
             className="boton-icono"
             disabled={text.trim() === ""}
             onMouseDown={(event) => event.preventDefault()}

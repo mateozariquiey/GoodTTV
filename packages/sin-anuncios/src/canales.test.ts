@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest"
-import { channelByLogin, searchChannels } from "./canales"
+import { channelByLogin, popularStreams, searchChannels } from "./canales"
 
 const fakeRed = (gql: unknown) => {
   const bodies: unknown[] = []
@@ -72,5 +72,60 @@ describe("channelByLogin", () => {
     const { red } = fakeRed({})
     expect(await channelByLogin("no-vale", red)).toBeNull()
     expect(red).not.toHaveBeenCalled()
+  })
+})
+
+describe("popularStreams", () => {
+  const node = {
+    broadcaster: {
+      displayName: "Rubius",
+      id: "39276140",
+      login: "rubius",
+      profileImageURL: "https://static-cdn.jtvnw.net/rubius-70x70.png",
+    },
+    createdAt: "2026-11-04T18:09:17Z",
+    game: { displayName: "Minecraft" },
+    title: "Directo",
+    viewersCount: 29605,
+  }
+
+  it("pide el idioma como lo quiere Twitch y descarta lo que no sea un directo válido", async () => {
+    const { bodies, red } = fakeRed({
+      data: {
+        streams: { edges: [{ node }, { node: { ...node, viewersCount: "x" } }, { node: null }] },
+      },
+    })
+    expect(await popularStreams({ first: 3, language: "es" }, red)).toEqual([
+      {
+        avatar: node.broadcaster.profileImageURL,
+        category: "Minecraft",
+        displayName: "Rubius",
+        id: "39276140",
+        login: "rubius",
+        startedAt: node.createdAt,
+        title: "Directo",
+        viewers: 29605,
+      },
+    ])
+    expect(bodies).toHaveLength(1)
+    expect(bodies[0]).toMatchObject({ variables: { first: 3, languages: ["ES"] } })
+  })
+
+  it("sin directos en ese idioma, los de todos", async () => {
+    const empty = { data: { streams: { edges: [] } } }
+    const full = { data: { streams: { edges: [{ node }] } } }
+    const red = vi
+      .fn<(input: RequestInfo | URL, init?: RequestInit) => Promise<Response>>()
+      .mockResolvedValueOnce(Response.json(empty))
+      .mockResolvedValueOnce(Response.json(full))
+    expect((await popularStreams({ language: "xx" }, red))[0]?.login).toBe("rubius")
+    expect(red).toHaveBeenCalledTimes(2)
+  })
+
+  it("un idioma raro no llega a Twitch", async () => {
+    const { bodies, red } = fakeRed({ data: { streams: { edges: [{ node }] } } })
+    await popularStreams({ language: "es-ES" }, red)
+    expect(bodies[0]).toMatchObject({ variables: { first: 24 } })
+    expect(JSON.stringify(bodies[0])).not.toContain("es-ES")
   })
 })

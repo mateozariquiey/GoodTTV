@@ -4,6 +4,7 @@ import android.content.Context
 import android.net.Uri
 import android.os.Handler
 import android.os.Looper
+import android.os.PowerManager
 import android.os.SystemClock
 import androidx.annotation.OptIn
 import androidx.media3.common.C
@@ -73,6 +74,23 @@ private const val TIC_VOD_MS = 250L
 private const val PRIMER_ANCHO_BPS = 20_000_000L
 private const val ANCHO_DE_BANDA = "vod-ancho-de-banda"
 
+// Tras un fallo (AND-6), lo que se espera antes de cada intento: unos 2 min en total, y luego se avisa y se deja, para
+// no gastar batería sin fin. Sin red no se cuenta ni se intenta nada: se espera a que Android avise (AvisoDeRed), como
+// mucho SIN_RED_MAX_MS. Lo que lleva sonando ESTABLE_MS ya no cuenta como el mismo fallo.
+private val ESPERAS_MS = longArrayOf(2_000, 4_000, 8_000, 15_000, 30_000, 60_000)
+private const val ESTABLE_MS = 30_000L
+private const val SIN_RED_MAX_MS = 30 * 60_000L
+// La pantalla apagada y sin sonar, el teléfono se puede dormir y parar las esperas: se mantiene despierto solo mientras
+// se reconecta. Cubre todas las esperas y lo que tarda cada intento.
+private const val DESPIERTO_MAX_MS = 5 * 60_000L
+// Una parada mientras la red acaba de cambiar es de las conexiones de antes, que pueden tardar en fallar (con una VPN, Android
+// no las cierra): se vuelve a abrir sin esperar a que se agoten sus plazos. Este plazo cubre el búfer de cualquier modo.
+private const val TRAS_CAMBIO_DE_RED_MS = 30_000L
+// Si las paradas han añadido más retraso que esto en directo, se vuelve a abrir, porque Media3 no lo recorta: se quedaría así
+// para siempre. Hasta aquí, se conserva como margen, como en la extensión (D36). Se cuenta el retraso y no lo que dura cada
+// parada, porque una sola puede partirse en dos cortas si llega un fragmento suelto.
+private const val RETRASO_MAX_MS = 12_000L
+
 val MODOS = setOf("sin-paradas", "adaptativo", "directo")
 
 // Media3 (ExoPlayer) con el directo sin anuncios calculado en el propio teléfono: el empalme corre en una WebView sin
@@ -113,6 +131,14 @@ class Reproductor(
     private var sesion: MediaSession? = null
     private var mando: Mando? = null
     private var datos: Pair<String, MediaMetadata>? = null // lo que mandó la página para los mandos, y de qué (clave())
+    // Reconectar tras un fallo (fallo()): los intentos seguidos, si se está en ello y lo que hay que hacer al intentarlo.
+    private var intentos = 0
+    private var reconectando = false
+    private var alReintentar: (() -> Unit)? = null
+    private val red = AvisoDeRed(contexto, handler) { alReintentar?.invoke() }
+    private val cambiosDeRed = AvisoDeRed(contexto, handler) { redCambiada() }
+    private val despierto = contexto.getSystemService(PowerManager::class.java)
+        .newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "goodttv:reconectar").apply { setReferenceCounted(false) }
 
     // El VOD abierto (su id), para la página, que lo pregunta desde el hilo de la WebView (MainActivity.vodPreparar).
     @Volatile var vodAbierto: String? = null
@@ -139,7 +165,12 @@ class Reproductor(
         val pausado = pausa != null // al abrir
         val visita: String = UUID.randomUUID().toString().replace("-", "")
         val marcas = JSONObject()
-        var fase = "cargando" // cargando, reproduciendo, sin-directo, solo-suscriptores, error
+        // cargando, reproduciendo, sin-directo, solo-suscriptores, error; tras un fallo, reconectando o sin-red.
+        var fase = "cargando"
+        var sonandoDesde: Long? = null // desde cuándo avanza sin parar; null si no avanza
+        var parado = false // ha esperado datos, ya empezado, desde la última vez que avanzaba
+        var desfaseAlEmpezar: Long? = null // el desfase con el directo la primera vez que avanzó (ms)
+        var redCambio: Long? = null // cuándo cambió la red por última vez, sonando
         var etiqueta: String? = null // la calidad que suena, como la nombra Twitch (1080p60)
         var colocado = false
         var esperas = 0
@@ -166,15 +197,23 @@ class Reproductor(
         calidad: String? = null,
         fondo: Boolean = false,
         inicio: Long = SystemClock.elapsedRealtime(),
-    ) = abrirDirecto(Directo(canal, modo, motor, calidad), fondo, inicio, null)
+    ): Unit {
+        dejarDeReconectar()
+        intentos = 0
+        abrirDirecto(Directo(canal, modo, motor, calidad), fondo, inicio, null)
+    }
 
-    private fun abrirDirecto(que: Directo, fondo: Boolean, inicio: Long, pausa: Pausa?) {
+    // «deCero»: tras un fallo, con un empalme nuevo (web/motor.ts).
+    private fun abrirDirecto(que: Directo, fondo: Boolean, inicio: Long, pausa: Pausa?, deCero: Boolean = false) {
         val canal = que.canal
         val modo = que.modo
         val calidad = que.calidad
         val visita = empezarVisita(que, fondo, inicio, pausa)
+        // Sin red no hay nada que preguntar: se dice ya, sin esperar el plazo de la petición.
+        if (recuperar && !red.hayRed()) return fallo(visita)
         arranque = thread {
             val info = try {
+                if (deCero) leer(que.motor, "/motor/reiniciar")
                 JSONObject(
                     leer(que.motor, "/stream/$canal/info?modo=$modo&visita=${visita.visita}" + (calidad?.let { "&q=$it" } ?: "")),
                 )
@@ -182,7 +221,7 @@ class Reproductor(
                 handler.post {
                     if (abierto !== visita) return@post // interrumpido por soltar()
                     registrar(JSONObject().put("error", "info").put("causa", error.javaClass.simpleName))
-                    fase(visita, "error")
+                    fallo(visita)
                 }
                 return@thread
             }
@@ -193,6 +232,8 @@ class Reproductor(
 
     // Un VOD desde «desdeMs», con su lista maestra de usher (window.api.vods.playback, en la página).
     fun abrirVod(id: String, lista: String, desdeMs: Long, fondo: Boolean = false) {
+        dejarDeReconectar()
+        intentos = 0
         val visita = empezarVisita(Vod(id, lista, desdeMs), fondo, SystemClock.elapsedRealtime(), null)
         reproducirVod(visita, lista, desdeMs)
     }
@@ -200,7 +241,9 @@ class Reproductor(
     private fun empezarVisita(que: Que, fondo: Boolean, inicio: Long, pausa: Pausa?): Abierto {
         soltarReproductor()
         val visita = Abierto(que, fondo, inicio, pausa)
+        if (reconectando) visita.fase = "reconectando"
         abierto = visita
+        if (recuperar) cambiosDeRed.escuchar()
         vodAbierto = (que as? Vod)?.id
         // Entre un canal y otro con «fondo», el servicio sigue, y los mandos también, ya con lo que se abre.
         if (!fondo) {
@@ -218,19 +261,121 @@ class Reproductor(
     // mandos. Si Android no lo deja arrancar (la app ya no está a la vista), se vuelve a intentar al volver a ella
     // (MainActivity.onStart).
     fun asegurarServicio() {
-        if (abierto?.fondo != true || conServicio?.get() === this) return
+        val visita = abierto ?: return
+        if (!visita.fondo || visita.fase in FINALES || conServicio?.get() === this) return
         if (!FondoService.empezar(contexto)) return
         conServicio = WeakReference(this)
         sesion?.let { FondoService.mandos(it.platformToken) }
     }
 
-    // Lo mismo que había abierto, desde el principio (un canal; un VOD lo vuelve a pedir la página, con su lista al día).
-    // Con «pausado», en pausa y con la pausa de antes.
-    fun reabrir(pausado: Boolean = false) {
+    // El botón «Reintentar»: otra vez desde el principio, con todos los intentos (un canal; un VOD lo vuelve a pedir la
+    // página, con su lista al día).
+    fun reintentar() {
+        dejarDeReconectar()
+        intentos = 0
+        reabrir(deCero = true)
+    }
+
+    // Lo mismo que había abierto, desde el principio. Con «pausado», en pausa y con la pausa de antes.
+    private fun reabrir(pausado: Boolean = false, deCero: Boolean = false) {
         val antes = abierto ?: return
         val que = antes.que as? Directo ?: return
         val pausa = if (pausado) enOtroReproductor(antes.pausa) else null
-        abrirDirecto(que, antes.fondo, SystemClock.elapsedRealtime(), pausa)
+        abrirDirecto(que, antes.fondo, SystemClock.elapsedRealtime(), pausa, deCero)
+    }
+
+    // Algo ha fallado (la red, Twitch, el motor): se vuelve a abrir solo, con esperas crecientes y un límite, y antes si
+    // cambia la red. Sin red, se espera a que vuelva. Sirve tanto con la app a la vista como con la pantalla apagada: el
+    // servicio en primer plano sigue mientras tanto.
+    private fun fallo(visita: Abierto) {
+        if (abierto !== visita) return
+        if (!recuperar) return fase(visita, "error")
+        contarSonado(visita)
+        // Tras el fallo, el reproductor aún dice si estaba en pausa o sonando; sin reproductor, como se abrió.
+        val pausado = player?.playWhenReady?.not() ?: visita.pausado
+        val intento = { if (abierto === visita) reintentarAhora(visita, pausado) }
+        reconectando = true
+        alReintentar = intento
+        red.escuchar()
+        if (!red.hayRed()) {
+            intentos = 0 // con la red de vuelta, es otro intento desde el principio
+            if (despierto.isHeld) despierto.release() // lo despierta el aviso de la red
+            handler.postDelayed({ if (abierto === visita) rendirse(visita, "error") }, SIN_RED_MAX_MS)
+            return fase(visita, "sin-red")
+        }
+        if (intentos >= ESPERAS_MS.size) return rendirse(visita, "error")
+        despierto.acquire(DESPIERTO_MAX_MS)
+        handler.postDelayed(intento, ESPERAS_MS[intentos++])
+        fase(visita, "reconectando")
+    }
+
+    // La red ha cambiado mientras sonaba. Si ya está parado, no va a arreglarse solo pronto; si no, queda apuntado por si
+    // se para (se gasta el búfer con las conexiones de antes colgadas). Si no se para, nada: no hay corte que evitar.
+    private fun redCambiada() {
+        val visita = abierto ?: return
+        // Aún volviendo a abrir: lo que espera sigue en la red de antes, y si esa era lenta, empezaría ~25 s por detrás y se
+        // quedaría así (en el S25, de datos otra vez a wifi). Tras un fallo, ya lo hace el aviso de «red».
+        if (reconectando) {
+            if (visita.fase == "reconectando" && !red.escuchando) {
+                reintentarAhora(visita, pausado = player?.playWhenReady?.not() ?: visita.pausado)
+            }
+            return
+        }
+        if (player?.playbackState == Player.STATE_BUFFERING) reconectarYa(visita)
+        else visita.redCambio = SystemClock.elapsedRealtime()
+    }
+
+    // Una parada que Media3 no da por fallo, pero de la que ya se sabe que no compensa esperar a que vuelva sola: otra vez
+    // desde el principio, con un empalme nuevo. No cuenta como intento, y si falla, sigue como cualquier fallo. Lo retrocedido
+    // se queda donde está, porque volver a abrir lo perdería.
+    private fun reconectarYa(visita: Abierto) {
+        val p = player ?: return
+        if (abierto !== visita || reconectando || visita.fase != "reproduciendo" || !p.playWhenReady) return
+        if (visita.que is Directo && visita.directoMs != null) return
+        reconectando = true
+        reintentarAhora(visita, pausado = false)
+    }
+
+    // Solo un tramo seguido sonando demuestra que ha vuelto: si no, una lista que se atasca tras sonar 2 s reintentaría sin
+    // fin. Media3 avisa del error antes de dejar de sonar, así que se mira en los dos sitios.
+    private fun contarSonado(visita: Abierto) {
+        val desde = visita.sonandoDesde ?: return
+        if (SystemClock.elapsedRealtime() - desde >= ESTABLE_MS) intentos = 0
+        visita.sonandoDesde = null
+    }
+
+    private fun reintentarAhora(visita: Abierto, pausado: Boolean) {
+        despierto.acquire(DESPIERTO_MAX_MS)
+        red.dejar() // lo soltaría al abrir; y si este intento falla, fallo() vuelve a escuchar
+        when (val que = visita.que) {
+            is Directo -> reabrir(pausado, deCero = true)
+            is Vod -> {
+                val p = player
+                val velocidad = p?.playbackParameters?.speed ?: 1f
+                val desdeMs = p?.currentPosition ?: que.desdeMs
+                val nueva = empezarVisita(Vod(que.id, que.lista, desdeMs), visita.fondo, SystemClock.elapsedRealtime(), null)
+                reproducirVod(nueva, que.lista, desdeMs)
+                player?.playWhenReady = !pausado
+                player?.setPlaybackSpeed(velocidad)
+            }
+        }
+    }
+
+    // Se deja de intentar: se avisa en la página y, si no se ve, nada sigue en marcha ni en la notificación.
+    private fun rendirse(visita: Abierto, final: String) {
+        dejarDeReconectar()
+        cambiosDeRed.dejar()
+        visita.fase = final
+        soltarMandos()
+        pararServicio()
+        cambio()
+    }
+
+    private fun dejarDeReconectar() {
+        reconectando = false
+        alReintentar = null
+        red.dejar()
+        if (despierto.isHeld) despierto.release()
     }
 
     // La pausa de un reproductor que se vuelve a abrir: lo que se veía queda fuera de la ventana del nuevo.
@@ -414,14 +559,14 @@ class Reproductor(
     fun tiene(canal: String, modo: String): Boolean {
         val visita = abierto ?: return false
         val que = visita.que as? Directo ?: return false
-        return que.canal == canal && que.modo == modo && visita.fase != "error" && visita.fase != "sin-directo"
+        return que.canal == canal && que.modo == modo && visita.fase !in FINALES
     }
 
     // El canal abierto, o null si no hay o es un VOD.
     val canal: String? get() = (abierto?.que as? Directo)?.canal
 
     // Si hay algo que ver (o que está por llegar): lo que vale la pena dejar en la esquina o en el PiP.
-    val enMarcha: Boolean get() = abierto?.fase.let { it == "cargando" || it == "reproduciendo" }
+    val enMarcha: Boolean get() = abierto?.let { it.fase !in FINALES } == true
 
     // El estado otra vez, ahora (para la página que vuelve al canal).
     fun avisar() = cambio()
@@ -559,7 +704,7 @@ class Reproductor(
 
     // Lo que mandó la página para eso o, si no, el nombre del canal.
     private fun datosDe(que: Que): MediaMetadata = datos?.takeIf { it.first == clave(que) }?.second
-        ?: MediaMetadata.Builder().setTitle(if (que is Directo) que.canal else "Vídeo").setArtist("GoodTTV").build()
+        ?: MediaMetadata.Builder().setTitle(if (que is Directo) que.canal else Idioma.texto("Vídeo", "Video")).setArtist("GoodTTV").build()
 
     // La sesión es la misma para todo lo que se abra hasta soltar(): así la notificación no cambia de sesión al pasar de un
     // canal a otro. Su id, el de la visita: dos sesiones con el mismo id no pueden convivir (ReproductorActivity, al medir).
@@ -575,14 +720,20 @@ class Reproductor(
 
     // Suelta el reproductor y para la petición de info si aún no ha vuelto (el motor la contaría como del canal actual).
     fun soltar() {
+        cambiosDeRed.dejar()
         soltarReproductor()
         soltarMandos()
         pararServicio()
+        dejarDeReconectar()
     }
 
     // Deja de verse lo abierto, sin soltar el servicio ni los mandos: lo que se abre después (el VOD al retroceder) los
     // sigue usando, como entre un canal y otro.
-    fun parar() = soltarReproductor()
+    fun parar() {
+        cambiosDeRed.dejar()
+        dejarDeReconectar()
+        soltarReproductor()
+    }
 
     private fun soltarMandos() {
         sesion?.release()
@@ -688,7 +839,7 @@ class Reproductor(
         marca(visita, "info", llegada)
         if (info.optBoolean("offline")) {
             registrar(JSONObject().put("fin", "sin directo"))
-            return fase(visita, "sin-directo")
+            return rendirse(visita, "sin-directo")
         }
         val que = visita.que as Directo
         val lista = leerInfo(visita, info)
@@ -828,8 +979,17 @@ class Reproductor(
                 if (isPlaying) {
                     marca(visita, "reproduciendo")
                     visita.fase = "reproduciendo"
+                    visita.sonandoDesde = SystemClock.elapsedRealtime()
+                    if (reconectando) dejarDeReconectar()
+                    val desfaseAlEmpezar = visita.desfaseAlEmpezar ?: desfase(nuevo).also { visita.desfaseAlEmpezar = it }
+                    if (recuperar && visita.que is Directo && visita.parado && desfase(nuevo) - desfaseAlEmpezar > RETRASO_MAX_MS) {
+                        handler.post { reconectarYa(visita) }
+                    }
+                    visita.parado = false
                     // Si mientras se abría se dejó de ver la app (o volvió a verse), ahora toca.
                     handler.post { if (abierto === visita) ajustarAudio() }
+                } else {
+                    contarSonado(visita)
                 }
                 cambio()
             }
@@ -838,7 +998,18 @@ class Reproductor(
             // aunque no avance.
             override fun onPlaybackStateChanged(eventTime: AnalyticsListener.EventTime, state: Int) {
                 if (state == Player.STATE_BUFFERING && visita.marcas.has("fotograma")) visita.esperas++
-                if (state == Player.STATE_READY && !nuevo.playWhenReady) visita.fase = "reproduciendo"
+                // Ya sonando: en solo audio no se pinta ningún fotograma, y con la pantalla apagada también puede pararse.
+                if (state == Player.STATE_BUFFERING && visita.marcas.has("reproduciendo")) {
+                    visita.parado = true
+                    val cambio = visita.redCambio
+                    if (cambio != null && SystemClock.elapsedRealtime() - cambio < TRAS_CAMBIO_DE_RED_MS) {
+                        handler.post { reconectarYa(visita) }
+                    }
+                }
+                if (state == Player.STATE_READY && !nuevo.playWhenReady) {
+                    visita.fase = "reproduciendo"
+                    if (reconectando) dejarDeReconectar()
+                }
                 cambio()
             }
 
@@ -849,15 +1020,21 @@ class Reproductor(
                 registrar(
                     JSONObject().put("error", error.errorCodeName).put("causa", error.cause?.javaClass?.simpleName),
                 )
+                val codigo = (error.cause as? InvalidResponseCodeException)?.responseCode
                 when {
-                    recuperar && visita.que is Directo &&
+                    // Sin esperar, porque no es un fallo: lo que se veía ya no está. Cuenta, por si no dejara de pasar.
+                    recuperar && visita.que is Directo && intentos < ESPERAS_MS.size &&
                         error.errorCode == PlaybackException.ERROR_CODE_BEHIND_LIVE_WINDOW -> {
+                        intentos++
                         val pausado = !nuevo.playWhenReady
-                        handler.post { reabrir(pausado) }
+                        handler.post { if (abierto === visita) reabrir(pausado) }
                     }
-                    visita.que is Vod && (error.cause as? InvalidResponseCodeException)?.responseCode == 403 &&
-                        visita.fase == "cargando" -> fase(visita, "solo-suscriptores")
-                    else -> fase(visita, "error")
+                    visita.que is Vod && codigo == 403 && visita.fase == "cargando" ->
+                        rendirse(visita, "solo-suscriptores")
+                    // La lista de un VOD caduca o el vídeo ya no está: otro intento con la misma daría lo mismo. La pide de
+                    // nuevo la página, con «Reintentar».
+                    visita.que is Vod && codigo in 400..499 -> rendirse(visita, "error")
+                    else -> fallo(visita)
                 }
             }
 
@@ -915,6 +1092,8 @@ class Reproductor(
         handler.post(object : Runnable {
             override fun run() {
                 if (abierto !== visita) return // tras un relevo, el del nuevo
+                // Nada que contar: sin esto seguiría despertando a la página cada segundo sin que pase nada.
+                if (visita.fase in FINALES || visita.fase == "sin-red") return
                 if (!vod) muestra(visita)
                 cambio()
                 handler.postDelayed(this, if (vod) TIC_VOD_MS else 1000)
@@ -932,6 +1111,7 @@ class Reproductor(
         val posicion = desdeElFinalMs?.let { ventana.durationMs - it }
             ?: (ventana.currentUnixTimeMs - ventana.windowStartTimeMs - OBJETIVO_MS)
         val destino = posicion.coerceIn(0, maxOf(0, ventana.durationMs - 1000))
+        registrar(JSONObject().put("colocar", ventana.durationMs - posicion).put("ventana", ventana.durationMs))
         if (abs(destino - p.currentPosition) > 100) p.seekTo(destino)
     }
 
@@ -983,6 +1163,9 @@ class Reproductor(
     }
 
     companion object {
+        // Las fases sin nada en marcha ni que esperar.
+        private val FINALES = setOf("sin-directo", "solo-suscriptores", "error")
+
         // El último que arrancó FondoService (hilo principal). Débil: lo suelta al cerrarse, pero así no lo retiene.
         private var conServicio: WeakReference<Reproductor>? = null
 

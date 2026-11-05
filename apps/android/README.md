@@ -7,7 +7,8 @@ y sus vídeos, los VOD y retroceder el directo, y la cuenta y los ajustes. El v�
 transparente en su sitio y pinta encima los controles. Como en la app de Twitch, al volver a Inicio el canal sigue en
 una esquina, al salir de la app pasa al PiP de Android, deslizar hacia abajo sobre el vídeo vuelve atrás, y un botón lo
 pone a pantalla completa en horizontal. Lo que suena se maneja desde la notificación, la pantalla de bloqueo y los
-auriculares. B (hls.js en la página, como la extensión) queda solo para medir.
+auriculares. Si falla la red o Twitch, vuelve a conectar sola, con un límite, y sin red espera a que vuelva sin gastar batería.
+B (hls.js en la página, como la extensión) queda solo para medir.
 
 ```text
 web/                     las páginas (Vite, TypeScript); Gradle las compila y las mete en los assets del APK
@@ -33,6 +34,7 @@ app/src/main/…/goodttv/  el proyecto de Android (Kotlin)
 ├── RedNativa.kt         /red: la petición a Twitch, sin Origin, solo a sus hosts
 ├── Reproductor.kt       Media3 con el motor, colocado a 2 s del directo, o con un VOD; uno cada vez
 ├── ReproductorActivity.kt  Media3 a pantalla completa, solo para medir: una muestra por segundo en logcat
+├── AvisoDeRed.kt        avisa si cambian las redes (sin contar una VPN), para reconectar sin sondear
 ├── Motor.kt             la WebView sin mostrar con motor.html, y los mensajes con ella
 ├── MotorDataSource.kt   el DataSource de Media3 que pide al motor la lista, info y los trozos del VOD
 ├── Mando.kt             lo que ven los mandos del sistema (la notificación, el bloqueo, los auriculares): reproducir y pausar

@@ -1,14 +1,14 @@
-import { type Channel, type FollowedOrder, formatViewers } from "@goodttv/interfaz"
-import { ArrowsDownUpIcon, CheckIcon, SidebarSimpleIcon } from "@phosphor-icons/react"
+import { type Channel, type FollowedOrder, formatViewers, t } from "@goodttv/interfaz"
+import { ArrowsDownUpIcon, CheckIcon, PlusIcon, SidebarSimpleIcon } from "@phosphor-icons/react"
 import { useCallback, useEffect, useRef, useState } from "react"
 import { Avatar } from "./Avatar"
 
 // Tus seguidos en directo, siempre a mano para cambiar de canal. Plegada, solo avatares (el nombre, al pasar el
 // ratón). El canal que ves, en blanco: la marca de selección de GoodTTV. Se ordenan por espectadores o, como el
 // «Recomendado para ti» de Twitch, primero los que más ves (watch-time.ts).
-const ORDERS: readonly (readonly [FollowedOrder, string, string])[] = [
-  ["recomendado", "Recomendado para ti", "Primero los que más ves en GoodTTV"],
-  ["espectadores", "Espectadores", "De más a menos espectadores"],
+const orders = (): readonly (readonly [FollowedOrder, string, string])[] => [
+  ["recomendado", t("Recomendado para ti"), t("Primero los que más ves en GoodTTV")],
+  ["espectadores", t("Espectadores"), t("De más a menos espectadores")],
 ]
 
 export const Sidebar = ({
@@ -17,6 +17,7 @@ export const Sidebar = ({
   current,
   failed,
   loading,
+  onAdd,
   onCollapse,
   onOpen,
   onOrder,
@@ -29,6 +30,7 @@ export const Sidebar = ({
   readonly current: string | undefined
   readonly failed: boolean
   readonly loading: boolean
+  readonly onAdd?: ((channel: Channel) => void) | undefined // con la cuadrícula activada (EXT-6)
   readonly onCollapse: () => void
   readonly onOpen: (channel: Channel) => void
   readonly onOrder: (order: FollowedOrder) => void
@@ -36,16 +38,16 @@ export const Sidebar = ({
   readonly placeholders: number // los huecos que pintar mientras carga: los que había la última vez
   readonly signedIn: boolean
 }) => (
-  <aside aria-label="Siguiendo" className="sidebar">
+  <aside aria-label={t("Siguiendo")} className="sidebar">
     <div className="sidebar__head">
-      <h2 className="sidebar__title">Siguiendo</h2>
+      <h2 className="sidebar__title">{t("Siguiendo")}</h2>
       {signedIn && !collapsed ? <OrderMenu onOrder={onOrder} order={order} /> : null}
       <button
         aria-expanded={!collapsed}
-        aria-label={collapsed ? "Desplegar la columna" : "Plegar la columna"}
+        aria-label={collapsed ? t("Desplegar la columna") : t("Plegar la columna")}
         className="icon-button icon-button--small"
         onClick={onCollapse}
-        title={collapsed ? "Desplegar la columna" : "Plegar la columna"}
+        title={collapsed ? t("Desplegar la columna") : t("Plegar la columna")}
         type="button"
       >
         <SidebarSimpleIcon aria-hidden="true" />
@@ -65,15 +67,15 @@ export const Sidebar = ({
         ))}
       </ul>
     ) : loading && channels.length === 0 ? (
-      <p className="sidebar__note">Cargando…</p>
+      <p className="sidebar__note">{t("Cargando…")}</p>
     ) : failed && channels.length === 0 ? (
-      <p className="sidebar__note">No se pudo cargar.</p>
+      <p className="sidebar__note">{t("No se pudo cargar.")}</p>
     ) : !signedIn ? (
       <p className="sidebar__note">
-        <a href="#/ajustes">Vincula tu cuenta</a> para ver aquí a quién sigues.
+        <a href="#/ajustes">{t("Vincula tu cuenta")}</a> {t("para ver aquí a quién sigues.")}
       </p>
     ) : channels.length === 0 ? (
-      <p className="sidebar__note">Ninguno de tus seguidos está en directo.</p>
+      <p className="sidebar__note">{t("Ninguno de tus seguidos está en directo.")}</p>
     ) : (
       <ul className="sidebar__list">
         {channels.map((channel) => (
@@ -86,22 +88,31 @@ export const Sidebar = ({
                 event.preventDefault()
                 onOpen(channel)
               }}
-              title={
-                collapsed
-                  ? `${channel.displayName}: ${channel.category ?? ""}`.replace(/: $/, "")
-                  : undefined
-              }
+              title={`${channel.displayName}: ${channel.category ?? ""}`.replace(/: $/, "")}
             >
               <Avatar name={channel.displayName} url={channel.profileImageUrl} />
               <span className="sidebar__text">
                 <b className="sidebar__name">{channel.displayName}</b>
-                <span className="sidebar__category">{channel.category}</span>
-              </span>
-              <span className="live-count">
-                <i aria-hidden="true" />
-                {channel.viewerCount === undefined ? "" : formatViewers(channel.viewerCount)}
+                <span className="sidebar__line">
+                  <span className="live-count">
+                    <i aria-hidden="true" />
+                    {channel.viewerCount === undefined ? "" : formatViewers(channel.viewerCount)}
+                  </span>
+                  <span className="sidebar__category">{channel.category}</span>
+                </span>
               </span>
             </a>
+            {onAdd === undefined ? null : (
+              <button
+                aria-label={`${t("Añadir a la cuadrícula")}: ${channel.displayName}`}
+                className="sidebar__add"
+                onClick={() => onAdd(channel)}
+                title={t("Añadir a la cuadrícula")}
+                type="button"
+              >
+                <PlusIcon />
+              </button>
+            )}
           </li>
         ))}
       </ul>
@@ -149,19 +160,19 @@ const OrderMenu = ({
       <button
         aria-expanded={open}
         aria-haspopup="menu"
-        aria-label="Ordenar"
+        aria-label={t("Ordenar")}
         className="icon-button icon-button--small"
         onClick={() => setOpen((value) => !value)}
         ref={trigger}
-        title="Ordenar"
+        title={t("Ordenar")}
         type="button"
       >
         <ArrowsDownUpIcon aria-hidden="true" />
       </button>
       {open ? (
         <div className="order__menu" ref={menu} role="menu">
-          <p className="order__title">Ordenar por</p>
-          {ORDERS.map(([value, label, hint]) => (
+          <p className="order__title">{t("Ordenar por")}</p>
+          {orders().map(([value, label, hint]) => (
             <button
               aria-checked={value === order}
               className="order__option"

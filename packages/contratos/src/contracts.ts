@@ -210,6 +210,8 @@ export interface AppApi {
     // Un canal por su nombre, sin cuenta (la extensión y Android): para completar uno abierto por la dirección. null
     // si no existe.
     readonly channel?: (login: string) => Promise<ChannelCard | null>
+    // Los directos más vistos, sin cuenta (la extensión y Android): para la primera pantalla.
+    readonly popularSinCuenta?: (language: string) => Promise<readonly StreamCard[]>
   }
   readonly chat: {
     readonly close: () => Promise<void>

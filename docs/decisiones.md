@@ -321,7 +321,7 @@ medidas de 100 a 200 %, eligió:
   y 871 del 200 % en adelante.
 - **Los controles se adaptan al ancho del vídeo** (container queries sobre `.stage`, también a
   pantalla completa). Por debajo de 700 px CSS se quita «x s por detrás» y, por debajo de 580 px,
-  «En directo»: solo informan. La barra de volumen y los botones se quedan.
+  «En directo»: solo informan. La barra de volumen y los botones se quedan. (Esos umbrales cambiaron en D41.)
 - **Las tarjetas de Inicio siguen rellenando la fila.** Como la columna de seguidos ya no crece en
   pantalla, entre un número de columnas y otro encogen como mucho un 3 %, y al caber una menos
   crecen. Antes retrocedían hasta un 18 %.
@@ -367,6 +367,43 @@ Descartado:
   su historial.
 - **Publicar sin el reproductor sin anuncios:** el público se quedaría en la tele con el reproductor oficial, sin
   extensión.
+
+**D19-D29. Las decisiones de Android, en resumen.** El detalle completo no se publica, porque está lleno de datos de los
+equipos con los que se desarrolla:
+- **D19. Una WebView con la interfaz y Media3 para el vídeo.** El objetivo es que siga sonando con la pantalla apagada o
+  en segundo plano. La interfaz web va en una WebView, el empalme en JavaScript (`sin-anuncios`) en otra oculta, el
+  «motor», y el vídeo con Media3, con un servicio en primer plano. Así hay una sola implementación del empalme (D12).
+  Descartadas: todo en la WebView, porque Chromium pausa el vídeo en segundo plano y Android corta la red de la app a los
+  ~2 s; una app nativa con Compose, que obliga a reescribir las pantallas y a portar los servicios; y portar el empalme a
+  Kotlin, que serían dos implementaciones. No hay versión para Android TV.
+- **D20. El proyecto.** Gradle en Kotlin en `apps/android`, con `minSdk` 33. No es un espacio de trabajo de bun: Gradle
+  compila la página con el `tsc` y el Vite de la raíz, y `bun run verify` no necesita el SDK de Android. Las versiones
+  publicadas se firman con una clave propia que vive fuera del repo.
+- **D21. Media3 confirmado midiendo en el teléfono.** Frente a reproducir en la WebView, gastó un 16 % menos de energía en
+  12 parejas de visitas (121 frente a 155 % de un núcleo de CPU), sin paradas detectadas, y es la única opción que suena
+  con la pantalla apagada. En fotogramas perdidos no ganó: 18 de ~40 000, frente a 0.
+- **D22. La cuenta.** Corre en la página, con el mismo `window.api` que la extensión (`createPageApi`). La sesión la guarda
+  la app, cifrada con una clave del Keystore que no sale del teléfono, y lo demás va en el `localStorage` de la WebView.
+  Nada va a copias de seguridad. Hay una sola `MainActivity`, porque el token de renovación solo vale una vez.
+- **D23. La interfaz.** Pantallas propias para el dedo, sin barra de pestañas, con Media3 debajo de una WebView transparente
+  en el sitio del vídeo, de modo que hay una sola página y girar el teléfono no recarga nada. Como en la app de Twitch, el
+  canal que se deja sigue en una esquina, y al salir de la app, en imagen en imagen.
+- **D24. Funciones nuevas sin paridad obligatoria.** Los arreglos y las mejoras de reproducción, del empalme y del
+  rendimiento siguen yendo a las tres versiones, con el código común en `packages/`. Lo nuevo va a la extensión y a Android,
+  y a la tele solo si se decide. Seguir y dejar de seguir canales queda descartado: la API oficial lo quitó en 2021, y la
+  única vía conocida pide una sesión con mucho más poder sobre la cuenta.
+- **D25. Los VOD, retroceder el directo y los emotes en el teléfono.** Lo mismo que la extensión, adaptado al dedo. Un VOD
+  va con Media3 y sin el motor. Se retrocede dentro de la lista del empalme y, más atrás, en el VOD de la emisión. Los saltos
+  van al fotograma clave (0,05-0,2 s frente a 0,4-1,5 s), a cambio de hasta 1 s de precisión en un VOD y 2 s en directo.
+- **D26. Inicio al abrir, sin esperas en cadena (en las tres versiones).** La cuenta se guarda con el token, así que lo que
+  se pide a Twitch ya no espera a validar la sesión: lo de ahora llega en ~0,2 s en vez de ~0,7 s. Lo guardado solo se
+  enseña tal cual si es de hace menos de 5 min; si no, se pinta la forma de las listas, vacía, que no enseña nada falso.
+- **D27. Los mandos del sistema.** Lo que suena se ve en la notificación y en la pantalla de bloqueo, y se pausa desde ahí y
+  con los auriculares. Va con una sesión de medios sobre el reproductor de la app, sin `MediaSessionService`, porque este sale
+  del primer plano como mucho a los 10 min de pausa, y sin primer plano Android corta la red a la app.
+- **D28. Deslizar hacia abajo sobre el vídeo para volver,** como en la app de Twitch, solo con el dedo.
+- **D29. Android se publica desde la 0.3.0, como experimental,** y la tele se sigue publicando sin comprobarla en una tele de
+  verdad, solo con las pruebas automáticas.
 
 **D30. La extensión, en las tiendas (24 oct).** Para que la instale y la actualice cualquiera sin el modo de
 desarrollador de Chrome ni `about:config`. El usuario asume que una tienda la rechace o la retire. Cambia D18 («sin
@@ -499,6 +536,175 @@ desincronizado en el canal de `jaimemellado_` con la 0.4.0, y pidió ← → par
 - **← → tras tocar el volumen con el ratón.** Desde la 0.3.0 retroceden y avanzan 10 s en el directo y en un VOD, pero
   el volumen tocado con el ratón se quedaba con el foco, y ← lo bajaba un 1 %, que ni se nota. Ahora ← → son de un
   control solo si se llegó a él con el teclado, como Espacio; ↑ ↓ siguen moviendo el volumen.
+
+**D35. El idioma a mano, en la extensión y en Android (3 nov).** Lo pidió el
+[issue #1](https://github.com/mateozariquiey/GoodTTV/issues/1) del repo público, de alguien que no lee español. Todo el
+texto estaba escrito en español en el código, así que hacía falta traducir (al inglés) además del selector:
+- **Sistema, Español o English, en los ajustes.** «Sistema» es español si el del navegador o el teléfono lo es, y si no,
+  inglés. Es lo que trae por defecto, así que quien tenga el sistema en inglés pasa a verla en inglés sin tocar nada.
+- **El español sigue en el código, y es la clave de su traducción:** `t("Ajustes")` da «Settings» (`idioma.ts`,
+  `idioma-en.ts`). Las pantallas se siguen leyendo igual, y los tipos no dejan usar una frase sin traducir. Una prueba
+  avisa si queda texto en una pantalla sin pasar por `t()`, porque eso los tipos no lo ven.
+- **Se guarda en el `localStorage` de la página, y no en las preferencias:** se lee sin esperar, para no pintar Inicio primero
+  en el otro idioma, el evento `storage` avisa a las demás pestañas, y no cambia nada en el contrato que comparte la tele.
+- **Se aplica sin recargar:** la raíz vuelve a pintar todo, y el vídeo sigue sonando. Los componentes con `memo` piden
+  `useIdioma()`. Lo que no pasa por la página se lo dice ella: el menú contextual del fondo, por `chrome.storage`, y lo poco que
+  pinta la app de Android (la esquina, la imagen en imagen, el nombre del canal de notificaciones), por el puente.
+- **«Populares» va en el idioma elegido;** con «Sistema», en el del sistema, aunque la interfaz no esté traducida a él.
+- **La tele sigue en español:** no llama a `activarIdioma`, y hasta entonces `t()` devuelve la frase tal cual (D24).
+
+- **Los mensajes de `@goodttv/servicios` (4 nov) también van en español en el código,** y la pantalla los traduce al pintarlos
+  con `tMensaje`, porque servicios no conoce el idioma: en la tele corre en el proceso principal. Llegan como texto, así que los
+  tipos no los ven, y una prueba los busca en el código de servicios. Lo que no es nuestro (el motivo que da Twitch para no enviar
+  un mensaje, los errores de red) se queda como viene. Antes llegaban en inglés con la interfaz en español (AND-2).
+- **La descripción del manifest (4 nov) va en `_locales`,** con `en` por defecto: un navegador en alemán la ve en inglés, como
+  «Sistema» en la interfaz.
+
+Sin traducir: los nombres de categoría, que los da Twitch.
+
+Descartado:
+- **i18next o similares:** una dependencia para `t()`, que aquí son pocas líneas.
+- **Claves abstractas** (`t("ajustes.titulo")`): obligan a ir al diccionario para saber qué dice una pantalla.
+- **Recargar al cambiar:** cortaría el vídeo en las demás pestañas.
+
+**D36. Adaptativo conserva lo que añade una parada de unos segundos (REN-2, 4 nov).** Algunos canales entregan a trompicones: su
+lista se queda quieta 4-7 s de vez en cuando, y con 1-2 s de búfer eso es una parada. Subir el margen a todos cuesta 3 s en los
+canales regulares, que son casi todos, para nada ([verificación](verificacion.md#las-paradas-el-margen-y-el-dns-de-los-fragmentos-rep-2-rep-5-ren-2-ren-3)).
+Así que, en Adaptativo, tras una parada de 1 a 12 s en pleno directo, el retraso que ha añadido se conserva durante esa visita,
+en vez de saltárselo: es justo el margen que le faltaba al canal, sin elegir ninguna cifra, igual que tras el primer relleno con el
+VOD (`keepMargin`). Por debajo de 1 s es un tropiezo. Por encima de 12 s es una pausa global sin VOD, o que la emisión se ha caído,
+y dejaría un retraso enorme para siempre. No cuentan la espera del arranque, las de un salto ni las de una pausa. En *Directo* y
+*Sin paradas*, nada cambia. La visita siguiente vuelve a empezar con el margen corto; recordarlo por canal se deja hasta ver si hace falta.
+Android no lo necesita: Media3 va a velocidad fija y no salta tras una parada, así que ya conserva ese retraso (`sinAcelerar` en
+`Reproductor.kt`, leído en el código). Por encima de 12 s, sí: D40.
+
+**D37. La conexión de los fragmentos se abre al ver la lista (REN-3, 4 nov).** Lo que tarda el primer fragmento de un host nuevo es
+casi todo DNS: ~310 ms, con cualquier resolvedor, porque Twitch da TTL 0. La vía no era otra red, como se suponía
+(la diferencia de ~0,4 s de Android era más probablemente esto, aunque ya no se puede comprobar: hoy los fragmentos los baja
+Media3 por la red nativa). Así que el empalme, al ver un host nuevo en una lista, le pide un `HEAD` de un fragmento ya hecho, sin usar la
+respuesta y por la misma red que el reproductor: en la extensión, el `fetch` de la página; en Android, `RedNativa`, que usa
+`HttpURLConnection`, como Media3 (`red-nativa.ts` le pasa los `HEAD`). Baja ~300 ms el primer fotograma si se ha precalentado
+~0,5-0,9 s antes, y sin precalentar no cambia.
+- **La tele no gana:** su empalme corre en el proceso principal y hls.js en la página, con redes distintas. Haría falta
+  `session.preconnect`, y la tele está retirada, así que se queda como está; el `HEAD` no le hace daño.
+- **Descartado, `<link rel="preconnect">`:** va igual de rápido, pero solo existe en una página, y el empalme no siempre está en ella.
+- **Descartado, abrir conexiones por adelantado a los hosts de otras veces:** cambian con cada emisión, y sería adivinar.
+
+**D38. Tras un fallo, Android reconecta sola y con un límite; «no emite» solo si lo dice Twitch (AND-6, 4 nov).** En el
+emulador, un corte de red dejaba el canal en error para siempre, también con la pantalla apagada, y un 500 de Twitch o
+abrir sin red decían que el canal «no está en directo», sin forma de reintentar. La extensión aguantaba porque hls.js
+reintenta solo.
+- **Reconectar (`Reproductor.fallo`):** se vuelve a abrir tras 2, 4, 8, 15, 30 y 60 s. Con Twitch fallando, 4:40
+  hasta el aviso con «Reintentar», medido. Lo que lleva 30 s seguidos sonando empieza la cuenta de nuevo.
+- **Sin red, sin sondear:** ni se intenta ni se cuenta. Android avisa cuando hay red (`AvisoDeRed`), como mucho durante
+  30 min, y si cambia la red principal se intenta sin esperar.
+- **Con un empalme nuevo:** el de antes tiene el hueco del corte, que con la hora contada daba 30-40 s de latencia de
+  mentira (y retrasaría el chat), y sus sesiones, esperas de hasta 30 s. Vuelve en menos de 3 s con ~3 s de latencia.
+- **Despierto solo mientras reconecta:** un wake lock parcial con plazo, porque con la pantalla apagada y sin sonar el
+  teléfono se dormiría con la espera a medias. Esperando la red, no: despierta el aviso.
+- **Al rendirse o si terminó la emisión:** se sueltan el servicio y los mandos, y la esquina se quita. Antes seguían la
+  notificación y un tic por segundo a la página.
+- **«No emite» (`NotLiveError`, común):** usher lo rechaza con un 4xx salvo 408 y 429, el canal no existe o no hay vídeo.
+  La red y los 5xx no dicen nada del canal. Vale también con lo ya publicado, para enterarse del fin de la emisión.
+- **Fin de la emisión en la extensión y la tele:** la lista se queda como estaba, sin error, y hls.js no salía de la
+  espera. Parado 20 s sin pausa, `useHlsPlayer` pregunta si sigue.
+- **Si el sistema mata la app** parada, vuelve a la misma dirección. Tras caerse la página, no: si fue por lo que había
+  en ella, se caería sin fin.
+
+Descartado: subir los reintentos de Media3 como hls.js, porque no cubre la lista atascada ni el empalme con hueco, y
+reintentar sin fin, que gastaría batería sin nadie mirando.
+
+**D39. Las conexiones de gql, usher y las listas se abren por adelantado (4 nov).** Abrir un canal encadena tres hosts con TTL 0: gql,
+luego usher y luego los `*.playlist`, y cada uno que no tenga la conexión hecha pierde ~310 ms en DNS, uno tras otro. Por eso el
+primer canal tardaba ~1,4 s hasta `info` y los siguientes ~0,42. Las conexiones ociosas se cierran entre los 30 y los 60 s, así que
+también lo pagaba cambiar de canal tras un rato viendo otro. Ahora `conexiones.ts` pide un `HEAD` sin usar su respuesta, como en D37:
+- **Al abrir la página (o la app):** a gql, usher y los hosts de listas de otras veces. Es lo que más gana: el primer clic baja
+  de ~1,93 a ~0,98 s hasta el primer fotograma ([verificación](verificacion.md#la-primera-apertura-d39)).
+- **Al crear un empalme,** también al precalentar: a usher y a esas listas, en paralelo a gql, si no se han usado en los últimos 30 s.
+  Gana ~320 ms tras más de un minuto viendo otro canal.
+- **Los hosts de listas sí se recuerdan** (hasta 3, en `localStorage`), a diferencia de los de los fragmentos que descartó D37: son unos
+  pocos por región (`eus21` a `eus23` en las 9 aperturas medidas). Si cambian, se pierde un `HEAD`.
+- **La tele** no los recuerda (su proceso principal no tiene `localStorage`) ni abre al arrancar, porque está retirada; sí adelanta usher al
+  crear el empalme, y como allí la red es una sola, debería ganar igual.
+- **Descartado, mantener las conexiones abiertas con un `HEAD` cada 25 s:** quitaría los ~310 ms que le quedan a gql al cambiar de
+  canal, a cambio de tráfico constante a Twitch para algo que el precalentado con el ratón ya tapa en parte.
+
+**D40. Android: una VPN no es red, y una parada no se queda para siempre (4 nov).** En el S25, con Tailscale, salió lo que el emulador no
+podía enseñar ([verificación](verificacion.md)): en modo avión la app no decía «sin conexión», reintentaba con el móvil despierto, y un VOD
+tardó 60 s en volver con la red ya de vuelta. Y de wifi a datos, con la 0.4.1 y la 0.5.0, ~30 s parado y ~30 s por detrás del directo el resto de la visita, sin botón.
+- **Una VPN no cuenta (`AvisoDeRed`):** sin nada debajo sigue siendo la red activa y dice tener internet. Ahora mira las redes que no son VPN.
+- **Avisa si aparece una red o si se pierde una y queda otra.** `registerDefaultNetworkCallback` sigue a la VPN, y `registerBestMatchingNetworkCallback` da `onLost` del wifi
+  y nada de los datos, que ya estaban conectados (en el emulador, con un registro temporal). De wifi a datos no «llega» ninguna red: solo se pierde una.
+- **Si cambia la red con el vídeo parado, o se para en los 30 s siguientes, se vuelve a abrir ya** (`reconectarYa`), con un empalme nuevo, sin esperar a que se agoten los plazos de
+  las conexiones de antes. Si no se para, no se toca: de wifi a datos sin corte sigue sin corte, y volver al wifi no corta.
+- **Si cambia mientras ya vuelve a abrir, se abre otra vez en la red nueva.** Si no, con una red lenta empezaba ~25 s por detrás y se quedaba así (en el S25, 3 de 6 veces).
+- **Si las paradas han añadido más de 12 s de retraso en directo, al volver a avanzar se vuelve a abrir:** Media3 no lo recorta, y es el mismo límite de D36. Corta ~2 s una sola vez, frente a quedarse
+  20 s detrás. Hasta 12 s se conserva como margen. Cuenta el retraso y no lo que dura cada parada: mirando la duración, una parada que se partió en dos dejó 20 s de latencia sin reabrir. Se prefirió a un botón porque quien lo sufre suele llevar el móvil en el bolsillo.
+- **No aplica** a lo retrocedido o pausado (se perdería dónde iba) ni a `ReproductorActivity`, que mide sin recuperar. **Paridad (D24):** solo Android, porque hls.js ya salta y reintenta en
+  la extensión y en la tele. Allí no se ha probado con una VPN.
+- **La causa exacta del atasco en el S25 es una suposición:** con la VPN, Android no cerraría los sockets al perder el wifi. En el emulador, sin VPN, sí los cierra, y de wifi a datos no hay corte.
+  Se reprodujo el mecanismo con `iptables` (`datos-colgado` y `parada`), no el caso del S25.
+
+**D41. La interfaz de la extensión y de Android, tras una subida con jueces (4 nov).** Lo pidió el usuario: comparar con Twitch,
+Kick y Xtra, puntuar a ciegas con dos modelos, y no copiar a nadie. Sigue valiendo D14 (casi negro, Atkinson Hyperlegible, el
+blanco como única marca de selección y el rojo solo para «en directo»): no se añade ningún color.
+- **La columna de seguidos:** el nombre entero y debajo los espectadores. A 1440 px, el nombre tenía 41 px y hacía falta recortar
+  26 textos. La categoría sale por debajo de 1760 px de ventana («Just…» no decía nada) y sigue en el `title`.
+- **La tarjeta de un directo:** primero quién emite, como ya hacía Android, luego el título y la categoría. Sin foto (está en la
+  columna) y, en la imagen, solo el punto rojo y los espectadores.
+- **Tipografía:** cuerpo a 15 y titulares grandes con el espaciado ajustado, sin medios puntos.
+- **Sin cuenta, «Populares ahora»** en la extensión y en Android (`catalog.popularSinCuenta`, por el GraphQL público, como la
+  búsqueda). Va aparte de `loadHome`, así que no retrasa la bienvenida ni toca la ruta con cuenta. En la extensión, el primero
+  va como cartel. La tele no: no pasa `channels`.
+- **Controles del reproductor:** con más fondo, botones de 40 px, y las flechas de canal a los lados del vídeo, como en Android
+  (fuera de la fila: son hijas de `.stage`, centradas a cualquier proporción, y se ocultan con ella).
+  **Cambia lo que decía D17:** «por detrás» se quita por debajo de 860 px de vídeo y «En directo» por debajo de 780. Los saltos de
+  10 s, por debajo de 620. La barra de volumen se queda, por lo que explica D17. Antes la fila se salía (41 px con una ventana de
+  1100 y chat, cortando pantalla completa), y ahora no se sale a ningún ancho.
+
+Descartado:
+- **El cartel en la lista de seguidos:** a los jueces les da unas décimas, pero a 1440×900 deja a la vista 9 canales en vez de 12,
+  en la lista que más se usa. Es un solo `poster` en `HomeView.tsx`, si el usuario lo prefiere.
+- **Miniaturas grandes en Android:** las piden los jueces, pero es la opción C que el usuario rechazó (D23).
+- **Iconos «bold» en Android:** hundieron esa categoría (de 7,2 a 6,0 y 5,9). En la extensión se quedan.
+- **Un color de marca:** es lo que más subiría «carácter», según los propios jueces, pero contradice D14. Lo decide el usuario.
+
+**D42. Varios canales en una cuadrícula, con uno grande (EXT-6, 4 nov).** Hasta 4 canales en una pestaña, con una opción de
+Ajustes, sin que cambie nada para quien no la active. El usuario eligió «uno grande» entre las maquetas: el que suena arriba, con
+su chat, y los demás debajo. Un clic en una celda la hace la grande, y el vídeo no se corta porque solo cambia dónde la coloca el CSS.
+- **Sin «todos iguales»:** el prototipo tenía los dos repartos, con la misma CPU (52 y 54 %). Quitarlo elimina un botón, el cálculo de
+  columnas y su CSS, y nadie lo iba a usar teniendo «uno grande». Si un día se quiere, está en el historial del repo de trabajo.
+- **Un directo por celda** (`directo-huecos.ts`): cada `createDirecto` sigue atendiendo un canal más uno precalentado, sin saber nada
+  de esto. Una petición sin `?hueco=` va al principal, así que sin cuadrícula todo va como antes. Las pausas globales se rellenan
+  cada una con su VOD, y sus trozos los atiende el directo que los publicó.
+- **Entrar y salir sin cortar:** `useHlsPlayer` deja el reproductor esperando al desmontar, y la pantalla que se monta lo recoge en el
+  mismo commit de React, en la misma tarea. El navegador solo pausa un `<video>` que sigue fuera del documento al terminar la tarea.
+  Va en un efecto de layout, porque el de después de pintar llegaría tarde, y todo lo que el reproductor toca de la pantalla pasa
+  por `visit.owner`, que cambia al recogerlo. Lo que nadie recoge se destruye en la tarea siguiente. Solo con la cuadrícula activada:
+  sin ella, `grid` no llega al hook y al desmontar se destruye como siempre. Un canal visto solo sigue en su hueco
+  (`huecoOf`), porque es el mismo reproductor y al volver no debe pisar el del que se ha quedado con el principal.
+- **Cuando termina o falla una celda:** su aviso se queda en ella y los demás siguen. Si era la grande, pasa a serlo otra en marcha,
+  con su sonido y su chat, para no quedarse mirando un aviso. Una sin directo se vuelve a mirar cada minuto, sin enseñar el giro, y si
+  vuelve, sigue sola; no pasa a ser la grande, porque no hay por qué quitarle el sonido a lo que ya suena. Elegida a mano, se queda.
+- **Con varias pestañas (EXT-5),** la cuadrícula es una pestaña más: suena o espera entera, por los mismos escalones, con los empalmes
+  calientes como en el canal. Además, oculta más de un minuto, aunque sea la que suena, solo sigue la celda que se oye: seguir descargando
+  tres vídeos que nadie ve no compensa, y al volver tardan lo de abrir un canal.
+- **Se recuerda:** los canales están en la dirección, así que sobreviven a recargar y a reabrir la pestaña. Por pestaña, en
+  `sessionStorage`, la última cuadrícula, para volver de «Ver solo», y el que suena.
+- **Las miniaturas van a la misma calidad.** Con menos se ahorraría algo (38 % de un núcleo con tres a 720p60, frente a 47 %, en el banco), pero el
+  empalme sirve una sola calidad por lista, así que pasar a grande sería recrear el reproductor: justo el corte que este diseño evita.
+- **Sin selector de calidad, retroceder al VOD ni imagen en imagen:** para eso está «Ver solo», que además no corta el vídeo. ← → y
+  Fin sí, dentro de la lista del directo.
+- **Paridad (D24):** solo la extensión. En un móvil no cabe (la pantalla apenas da para dos, sin chat) y la tele está retirada. Lo que
+  va en `packages/` (`useHlsPlayer`, `directo-huecos.ts`) no hace nada sin `grid` ni `?hueco=`.
+- **Descartado, un `<video>` único que se mueve con una capa propia por encima de las pantallas:** obligaba a tocar `ChannelView` para
+  todo el mundo. También, dejar `ChannelView` montado debajo de la cuadrícula: gastaba lo mismo y no resolvía salir de ella.
+
+**D43. En Inicio, «En directo» o «Vídeos» (5 nov).** Lo pidió el usuario: para seguir un vídeo hacía falta recorrer toda la lista de canales. Con algún vídeo a medias, el título de Inicio es el selector
+(«En directo 12», «Vídeos 3», el elegido en blanco), y los vídeos ya no van debajo de los canales. Sin vídeos a medias queda el título de siempre. Empieza en «En directo», y lo elegido se mantiene al volver
+de un vídeo, pero no al recargar. En Android, el orden de los seguidos pasa a ser un icono, como en la columna del escritorio, para que todo quepa en una fila.
+- **Descartado:** una fila de dos botones encima del título, que era lo primero que se hizo: el usuario vio que repetía «En directo». Pestañas como las de un canal, que dejaban el orden en otra fila. Y los vídeos en una fila encima de los canales: un toque menos, pero bajaba los canales siempre.
+- **Paridad (D24):** extensión y Android, que tenían el mismo problema. La tele, no: está retirada y no tiene esa lista.
 
 ## 4. Revisión temprana
 

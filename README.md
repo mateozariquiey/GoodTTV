@@ -11,30 +11,35 @@ that removes the ads, the account and the chat.
 
 | App | For | Status |
 | --- | --- | --- |
-| [Browser](#browser) (`apps/navegador`) | Chrome, Chromium, Firefox and Zen, with mouse and keyboard | 0.4.1 |
-| [Android](#android) (`apps/android`) | Phones with Android 13 or later | 0.4.1, experimental |
-| [TV](#tv) (`apps/tele`) | A Linux mini PC connected to the TV, with a remote | 0.4.1, no longer tested on a real TV |
+| [Browser](#browser) (`apps/navegador`) | Chrome, Chromium, Firefox and Zen, with mouse and keyboard | 0.5.0 |
+| [Android](#android) (`apps/android`) | Phones with Android 13 or later | 0.5.0, experimental |
+| [TV](#tv) (`apps/tele`) | A Linux mini PC connected to the TV, with a remote | 0.5.0, no longer tested on a real TV |
 
-The interfaces are in Spanish for now.
+The extension and the Android app come in English and Spanish: they follow your system, and you can change it in the settings. The TV version is in Spanish.
 
 ![Extension: a channel with its controls on top of the video, its card and chat; on the left, followed channels that are live](docs/media/escritorio-canal.jpg)
 
-## New in 0.4.1
+## New in 0.5.0
 
-- **Rewinding from live to the VOD is about twice as fast** in the extension: with `←`, the first frame takes about
-  0.84 s instead of 1.55 s (measured locally, with a network like Twitch's), and 0.19 s instead of 0.44 s on a real
-  channel in Chrome. It also opens where you asked: it could start up to 10 s earlier, in at least 4 of 20 tries in Zen.
-- **`←` and `→` land on the nearest keyframe** in the extension, as they already did on Android: each jump is 9-11 s
-  instead of exactly 10, and the picture moves again in 127 ms instead of 161 ms.
-- **Cleaner ad breaks,** on every version. At the end of an ad, some sessions caused about 30 s of stalls and a jump
-  back with repeated content, and entering one could jump 30-40 s. Neither happens now, also right after a new broadcast.
-- **The stream's clock is steadier,** and the chat's sync comes from it: in replays of 58 recorded visits, its jumps
-  are 45 % smaller in total, and filling a global pause with the VOD no longer repeats what you already saw.
-- **Audio stays in sync in Zen and Firefox:** the player skips the extra margin instead of speeding up, because each
-  speed change left the sound a little further behind the picture.
-- **Subscriber-only VODs are no longer offered for rewinding,** in the extension and on Android.
-- **hls.js 1.7.4,** which brings progressive loading back to fMP4 channels.
-- **Fixes:** `←` and `→` also work after touching the volume with the mouse.
+- **English, and a language setting,** in the extension and on Android: System, English or Spanish, in the settings.
+  System means Spanish if your browser or phone is in Spanish, and English otherwise. The TV version stays in Spanish.
+- **The first channel opens much faster** in the extension: on the first click after opening the page, the first frame
+  takes 1.0-1.2 s instead of about 1.9 s, because the connections to Twitch are opened ahead of time. Changing
+  channels after watching one for over a minute gains about 0.3 s. Android opens its connections ahead of time too, but that hasn't been measured on a phone yet.
+- **Android reconnects by itself** after a network or Twitch failure, also with the screen off: it retries for almost
+  5 minutes and then offers "Retry". With no network it waits for it to come back without spending battery, and it comes
+  back within 3 s and about 3 s behind live. If the system closes the app, it returns to the same screen. Tested on the
+  emulator so far.
+- **"Not live" only when Twitch says so,** on every version: a network failure or a Twitch server error no longer says the
+  channel is offline. The extension and the TV app also notice when a broadcast ends, instead of waiting forever.
+- **Fewer stalls on channels that deliver in bursts,** in Adaptive mode in the extension: the delay a stall of a few
+  seconds adds is kept for that visit, so the next gap doesn't stall again. With 6 s gaps every 90 s, 1 stall instead of 5,
+  about 4 s further behind live. Measured with simulated gaps: the real channels didn't repeat theirs during the test.
+- **Several tabs:** if the tab playing sound closes or leaves its channel, another visible one takes over, and clicking
+  the video of a muted window gives it the sound without pausing it. Hidden tabs wait to refresh your followed channels until
+  you come back to them.
+- **Security:** the TV app creates its own localhost certificate on each install, instead of shipping one with its private
+  key. Electron 44.10.2, and zod and Vite updated for their advisories.
 
 ## How it removes ads
 
@@ -58,10 +63,10 @@ frames are dropped, with no stalls ([details](docs/verificacion.md#rendimiento-d
 An extension that opens GoodTTV in a tab of its own, made for mouse and keyboard. The same code runs in Chrome and
 Firefox.
 
-![Extension home: followed channels that are live, continue watching and VODs left halfway; on the left, the column of followed channels](docs/media/escritorio-inicio.jpg)
+![Extension home: thumbnails of followed channels that are live, who is streaming first; on the left, the column of followed channels](docs/media/escritorio-inicio.jpg)
 
-- **Home:** your followed channels that are live, the channels you watched last, the VODs you left halfway and popular
-  streams.
+- **Home:** your followed channels that are live, the channels you watched last, popular streams, which also show without an account, and the title at the top switches to the VODs you left
+  halfway.
 - **A column with your followed channels that are live,** sorted by viewers or, like Twitch's "Recommended for you",
   by how much you watch each one. It can be collapsed.
 - **Search always at the top** (`/`), ranked like twitch.tv's.
@@ -83,11 +88,11 @@ Firefox.
 
 **Install:** it is not in the stores. Download it from the
 [releases](https://github.com/mateozariquiey/GoodTTV/releases).
-- **Zen** (and Firefox Developer Edition or Nightly), with `goodttv-0.4.1.xpi`: in `about:config`, set
+- **Zen** (and Firefox Developer Edition or Nightly), with `goodttv-0.5.0.xpi`: in `about:config`, set
   `xpinstall.signatures.required` to `false`. Then, in `about:addons`, gear menu → "Install Add-on From File…".
 - **Firefox:** it only accepts unsigned add-ons temporarily: `about:debugging` → "This Firefox" → "Load Temporary
   Add-on…" and the `.xpi`. It is removed when Firefox closes.
-- **Chrome and Chromium,** on Windows too, with `goodttv-0.4.1-chrome.zip`:
+- **Chrome and Chromium,** on Windows too, with `goodttv-0.5.0-chrome.zip`:
   1. Unzip it into a folder you will keep.
   2. In `chrome://extensions`, turn on "Developer mode" (top right).
   3. Click "Load unpacked" and choose that folder.
@@ -113,14 +118,14 @@ app turns it into picture-in-picture.
   <img alt="Android: a channel with the video on top, its card and chat" src="docs/media/android-canal.jpg" width="270">
 </p>
 
-It has been tested on one phone only (a Galaxy S25 Ultra with Android 16). Whether chat stays in step with the picture
+It has been tested on one phone only (a Galaxy S25 Ultra with Android 17). Whether chat stays in step with the picture
 has been checked by eye, not measured.
 
-**Install** (Android 13 or later): download `GoodTTV-0.4.1.apk` from the
+**Install** (Android 13 or later): download `GoodTTV-0.5.0.apk` from the
 [releases](https://github.com/mateozariquiey/GoodTTV/releases) on the phone and open it. Android will ask you to allow
 installing apps from the browser or the file manager, and Play Protect may warn that it does not know the developer.
 New versions install over the old one and keep your account, because they are signed with the same key. From a
-computer, `adb install -r GoodTTV-0.4.1.apk` does the same. The signing certificate's SHA-256 fingerprint is
+computer, `adb install -r GoodTTV-0.5.0.apk` does the same. The signing certificate's SHA-256 fingerprint is
 `38:CF:EA:F9:1C:2F:8C:C4:B8:35:27:11:BD:77:7F:56:0E:A8:D5:4F:87:37:C4:91:6C:B6:BA:C8:27:32:5A:D6` (`apksigner verify --print-certs` shows it).
 
 To build it you need the Android SDK and JDK 21: see [apps/android/README.md](apps/android/README.md) (in Spanish).
@@ -165,7 +170,7 @@ x86_64) and run it; it starts full screen and needs `libfuse2`. To build it:
 ```bash
 bun install --frozen-lockfile
 bun run build && bun run start   # in a window, for testing
-bun run package:appimage         # apps/tele/dist/GoodTTV-0.4.1-x86_64.AppImage
+bun run package:appimage         # apps/tele/dist/GoodTTV-0.5.0-x86_64.AppImage
 ```
 
 ## The code

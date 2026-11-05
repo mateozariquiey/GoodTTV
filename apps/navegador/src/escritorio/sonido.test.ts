@@ -3,7 +3,7 @@
 import { act, createElement } from "react"
 import { createRoot, type Root } from "react-dom/client"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
-import { type Standby, useSoleSound, WAITS } from "./sonido"
+import { RELEASE_GRACE_MS, type Standby, useSoleSound, WAITS } from "./sonido"
 
 const SILENT_MS = WAITS.silentMs
 const WARM_MS = WAITS.warmMs
@@ -90,6 +90,75 @@ describe("suena una sola pestaña", () => {
     mount("dos", b)
     await setVisible(true)
     expect([a.standby, b.standby].filter((standby) => standby === "no")).toHaveLength(1)
+  })
+
+  it("si se desmonta la que suena, pasa a sonar otra a la vista; no una oculta", async () => {
+    const a: Seen = { standby: "no", warm: true }
+    const b: Seen = { standby: "no", warm: true }
+    mount("uno", a)
+    await settle()
+    advance(1)
+    const sounding = mount("dos", b)
+    await settle()
+    expect(a.standby).toBe("silencio")
+    act(() => sounding.unmount())
+    await settle()
+    expect(a.standby).toBe("silencio") // aún en el margen
+    advance(RELEASE_GRACE_MS)
+    expect(a.standby).toBe("no")
+  })
+
+  it("al cerrar la pestaña que suena (pagehide), también", async () => {
+    const a: Seen = { standby: "no", warm: true }
+    const b: Seen = { standby: "no", warm: true }
+    mount("uno", a)
+    await settle()
+    advance(1)
+    mount("dos", b)
+    await settle()
+    expect(a.standby).toBe("silencio")
+    act(() => {
+      dispatchEvent(new Event("pagehide"))
+    })
+    await settle()
+    advance(RELEASE_GRACE_MS)
+    expect(a.standby).toBe("no")
+  })
+
+  it("si la misma pestaña pasa del canal a otra vista que suena, la otra no le quita el sonido", async () => {
+    const a: Seen = { standby: "no", warm: true }
+    const b: Seen = { standby: "no", warm: true }
+    mount("uno", a)
+    await settle()
+    advance(1)
+    const channel = mount("canal", b)
+    await settle()
+    act(() => channel.unmount())
+    advance(1)
+    mount("vod:1", b)
+    await settle()
+    advance(RELEASE_GRACE_MS + 1)
+    await settle()
+    expect(b.standby).toBe("no")
+    expect(a.standby).toBe("silencio")
+  })
+
+  it("una oculta en silencio no coge el sonido libre", async () => {
+    const a: Seen = { standby: "no", warm: true }
+    const b: Seen = { standby: "no", warm: true }
+    mount("uno", a)
+    await settle()
+    advance(1)
+    const sounding = mount("dos", b)
+    await settle()
+    visibility = "hidden"
+    act(() => {
+      document.dispatchEvent(new Event("visibilitychange"))
+    })
+    act(() => sounding.unmount())
+    await settle()
+    advance(RELEASE_GRACE_MS)
+    expect(a.standby).toBe("silencio")
   })
 
   it("pausada por la persona, no se para", async () => {

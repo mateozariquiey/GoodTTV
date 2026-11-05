@@ -1,3 +1,4 @@
+import { t } from "@goodttv/interfaz"
 import { PictureInPictureIcon } from "@phosphor-icons/react"
 
 // Imagen en imagen: el navegador saca el vídeo a una ventana pequeña que se queda encima, para seguir viéndolo en otra
@@ -14,14 +15,14 @@ export const PictureInPictureButton = ({
 }) =>
   supported ? (
     <button
-      aria-label="Imagen en imagen"
+      aria-label={t("Imagen en imagen")}
       aria-pressed={active}
       className="icon-button icon-button--light icon-button--toggle pip-button"
       onClick={onToggle}
       title={
         active
-          ? "Volver a ver el vídeo aquí"
-          : "Imagen en imagen: el vídeo, en una ventana pequeña encima de todo"
+          ? t("Volver a ver el vídeo aquí")
+          : t("Imagen en imagen: el vídeo, en una ventana pequeña encima de todo")
       }
       type="button"
     >

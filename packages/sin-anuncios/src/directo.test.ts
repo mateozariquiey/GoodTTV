@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from "vitest"
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { createDirecto, type Directo, type DirectoEmpalme, parseSimulatedPause } from "./directo"
 import type { EmpalmeOptions, EmpalmeStatus } from "./empalme"
 
@@ -81,11 +81,34 @@ const open = (): { directo: Directo; empalmes: FakeEmpalme[]; events: string[] }
   return { directo, empalmes, events }
 }
 
+// Abrir un canal adelanta conexiones (conexiones.ts): sin esto, las pruebas saldrían a la red.
+beforeEach(() => {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async () => new Response()),
+  )
+})
+
 afterEach(() => {
   directo?.stop()
   directo = undefined
   vi.useRealTimers()
   vi.unstubAllGlobals()
+})
+
+describe("conexiones por adelantado", () => {
+  it("al abrir un canal, usher, sin repetir enseguida; al abrir la página, también gql", async () => {
+    const fetch = vi.fn(async () => new Response())
+    vi.stubGlobal("fetch", fetch)
+    const { directo } = open()
+    const heads = () => fetch.mock.calls.map((call: unknown[]) => call[0])
+    await directo.handle(url("/stream/canal/live.m3u8"))
+    expect(heads()).toEqual(["https://usher.ttvnw.net/"])
+    await directo.handle(url("/stream/otro/live.m3u8"))
+    expect(heads()).toEqual(["https://usher.ttvnw.net/"])
+    directo.abrirConexiones()
+    expect(heads()).toEqual(["https://usher.ttvnw.net/", "https://gql.twitch.tv/"])
+  })
 })
 
 describe("parseSimulatedPause", () => {

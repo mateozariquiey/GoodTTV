@@ -28,7 +28,8 @@ bun run start -- --fullscreen   # como en la tele
 
 Hay que usar la app compilada (`build` + `start`). El servidor de desarrollo de electron-vite
 sirve la interfaz por `http://`, y el embed de Twitch exige HTTPS. Producción usa un servidor
-`https://localhost` con certificado fijado, heredado de VacuumStream.
+`https://localhost` con certificado fijado, heredado de VacuumStream, salvo que cada instalación crea el suyo en su
+carpeta de datos (`localhost-certificate.json`, [`local-certificate.ts`](../apps/tele/src/main/local-certificate.ts)).
 
 ## Comprobaciones
 
@@ -149,7 +150,8 @@ cuenta:
 - un VOD de las emisiones del canal: lo reproduce, L salta 10 s y se guarda por dónde va. El volumen que se elige en el
   directo sigue en el VOD y al volver al directo;
 - dos pestañas a la vez, con sonido solo en la última que se abrió (EXT-5), y la nueva con el volumen elegido en la
-  otra.
+  otra. Al cerrarse la que suena, vuelve a sonar la primera; con dos ventanas, un clic en el vídeo de la muda le da el
+  sonido sin pausarla (el clic, de verdad, solo en Chrome).
 
 ```bash
 bun run build:navegador
@@ -203,7 +205,7 @@ que se abre el canal hasta el primer fotograma. Después mira unos segundos de r
 ```bash
 bun run build:navegador
 node apps/navegador/test/humo/rendimiento.mjs --canales auto:6 --rondas 2 --segundos 35 \
-  --wayland goodttv-lab                      # en el Weston del laboratorio, con la GPU
+  --wayland goodttv-lab                      # en un Weston sin pantalla, con la GPU
 node apps/navegador/test/humo/rendimiento.mjs --canales canal1 --detalle   # una muestra por segundo
 ```
 
@@ -216,10 +218,15 @@ node apps/navegador/test/humo/rendimiento.mjs --canales canal1 --detalle   # una
     (`?chatsintetico=N`).
   - `--chatreal`: el chat real del canal, leído por IRC anónimo, con sus emotes (`?chatreal`).
   - `--extension otra/dist`: otra compilación, por ejemplo la de otra rama, para compararlas.
-- **Sin ventana, el vídeo se decodifica por software:** los fotogramas perdidos solo cuentan con
-  `--wayland <socket>`, en un Weston sin pantalla, que usa la GPU sin tocar tu pantalla.
-- **Para comparar dos versiones,** lánzalas a la vez en dos Weston, con los mismos canales y en el
-  mismo orden: así comparten red y anuncios.
+- **Sin ventana, el vídeo se decodifica por software,** y los fotogramas perdidos no cuentan.
+- **Los fotogramas perdidos solo valen en un compositor que repinte a 60 Hz de verdad.** El Weston 14 de `mini-agentes`
+  no lo hace y da un ~34 % fijo con cualquier vídeo ([LAB-1](verificacion.md#los-fotogramas-perdidos-en-el-weston-del-mini-pc-lab-1)).
+  Para medirlos en `mini-agentes`, usa la sesión GNOME, una versión tras otra y alternando (A, B, A, B), con
+  `--wayland wayland-0`. Da de 0,1 a 1,3 % en total, y a 1,05× ~6,7 % (con `--detalle`, por tramos). Una visita suelta llega a un 5 %,
+  así que compara al menos 15 visitas por versión, y solo cuenta una diferencia de más de ~1,5 puntos. Comprueba que nada tapa la ventana, porque tapada da 0 %. Si dudas de un
+  compositor, `node herramientas/laboratorio/sonda-fotogramas.mjs <socket>` dice lo que pierde él solo.
+- **Para comparar lo demás entre dos versiones** (arranque, latencia, paradas, CPU), lánzalas a la vez en dos Weston, con
+  los mismos canales y en el mismo orden: así comparten red y anuncios. Eso sí, sus fotogramas perdidos no cuentan.
 - **La latencia** se mide como «ahora − hora (PDT) del fragmento en pantalla». Cada canal tiene su
   desfase, así que solo se compara canal a canal.
 - **Datos que lee:** con `?registro`, la página expone el hls.js del reproductor (`hlsPrueba`) y sus

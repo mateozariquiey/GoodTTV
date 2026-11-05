@@ -11,29 +11,37 @@ tres comparten el código que quita los anuncios, la cuenta y el chat.
 
 | App | Para qué | Estado |
 | --- | --- | --- |
-| [Navegador](#navegador) (`apps/navegador`) | Chrome, Chromium, Firefox y Zen, con ratón y teclado | 0.4.1 |
-| [Android](#android) (`apps/android`) | Teléfonos con Android 13 o posterior | 0.4.1, experimental |
-| [Tele](#tele) (`apps/tele`) | Un mini PC Linux conectado a la tele, con un mando | 0.4.1, ya no se prueba en una tele |
+| [Navegador](#navegador) (`apps/navegador`) | Chrome, Chromium, Firefox y Zen, con ratón y teclado | 0.5.0 |
+| [Android](#android) (`apps/android`) | Teléfonos con Android 13 o posterior | 0.5.0, experimental |
+| [Tele](#tele) (`apps/tele`) | Un mini PC Linux conectado a la tele, con un mando | 0.5.0, ya no se prueba en una tele |
+
+La extensión y la app de Android están en español y en inglés: siguen al sistema, y se puede cambiar en los ajustes. La de
+la tele está en español.
 
 ![Extensión: un canal con los controles encima del vídeo, su ficha y el chat; a la izquierda, los seguidos en directo](docs/media/escritorio-canal.jpg)
 
-## Lo nuevo de la 0.4.1
+## Lo nuevo de la 0.5.0
 
-- **Retroceder del directo al VOD va casi el doble de rápido** en la extensión: con `←`, el primer fotograma tarda
-  ~0,84 s en vez de 1,55 s (medido en local, con una red como la de Twitch), y 0,19 s en vez de 0,44 s en un canal real
-  en Chrome. Además, abre donde pediste: podía empezar hasta 10 s antes, en al menos 4 de cada 20 veces en Zen.
-- **`←` y `→` van al fotograma clave más cercano** en la extensión, como ya hacían en Android: cada salto es de 9-11 s
-  en vez de 10 exactos, y la imagen vuelve a moverse en 127 ms en vez de 161.
-- **Los anuncios se empalman mejor,** en todas las versiones. Al acabar uno, algunas sesiones provocaban unos 30 s de
-  paradas y un salto atrás con contenido repetido, y al entrar en otro se podían saltar 30-40 s. Ya no pasa, tampoco
-  justo después de una emisión nueva.
-- **El reloj de la emisión es más estable,** y de él sale la sincronía del chat: en la reproducción de 58 visitas
-  grabadas, sus saltos suman un 45 % menos, y al rellenar una pausa global con el VOD ya no se repite lo ya visto.
-- **El audio no se desincroniza en Zen y Firefox:** el reproductor salta el margen que sobra en vez de acelerar, porque
-  cada cambio de velocidad dejaba el sonido algo más atrás de la imagen.
-- **Los VOD solo para suscriptores ya no se ofrecen para retroceder,** en la extensión y en Android.
-- **hls.js 1.7.4,** que devuelve la carga progresiva a los canales en fMP4.
-- **Arreglos:** `←` y `→` también funcionan después de tocar el volumen con el ratón.
+- **Inglés, y un ajuste de idioma,** en la extensión y en Android: Sistema, Español o English, en los ajustes. Sistema es
+  español si el navegador o el teléfono lo están, y si no, inglés. La versión de la tele sigue en español.
+- **El primer canal abre mucho más rápido** en la extensión: en el primer clic tras abrir la página, el primer fotograma
+  tarda 1,0-1,2 s en vez de unos 1,9 s, porque las conexiones con Twitch se abren por adelantado. Cambiar de canal
+  tras ver uno más de un minuto gana unos 0,3 s. Android
+  también abre sus conexiones por adelantado, pero eso aún no se ha medido en un teléfono.
+- **Android vuelve a conectar sola** tras un fallo de la red o de Twitch, también con la pantalla apagada: lo intenta durante
+  casi 5 minutos y después ofrece «Reintentar». Sin red, espera a que vuelva sin gastar batería, y vuelve en menos de 3 s y a
+  unos 3 s del directo. Si el sistema cierra la app, vuelve a la misma pantalla. De momento, probado en el emulador.
+- **«No está en directo» solo si lo dice Twitch,** en todas las versiones: un fallo de red o un error del servidor de Twitch ya
+  no dicen que el canal no emite. La extensión y la app de la tele también se enteran de que la emisión ha terminado, en vez
+  de quedarse esperando.
+- **Menos paradas en los canales que entregan a trompicones,** en el modo Adaptativo de la extensión: el retraso que añade una
+  parada de unos segundos se conserva durante esa visita, y así el siguiente hueco no vuelve a parar. Con huecos de 6 s cada
+  90 s, 1 parada en vez de 5, a cambio de unos 4 s más de retraso. Medido con huecos simulados: los canales reales no
+  repitieron los suyos durante la prueba.
+- **Varias pestañas:** si se cierra o deja su canal la que suena, suena otra a la vista, y un clic en el vídeo de una ventana
+  en silencio le da el sonido sin pausarla. Las pestañas ocultas esperan a que vuelvas para refrescar los seguidos.
+- **Seguridad:** la app de la tele crea su propio certificado de localhost en cada instalación, en vez de traer uno con su
+  clave privada. Electron 44.10.2, y zod y Vite actualizados por sus avisos.
 
 ## Cómo quita los anuncios
 
@@ -56,9 +64,9 @@ de los fotogramas, sin paradas ([detalle](docs/verificacion.md#rendimiento-del-r
 Una extensión que abre GoodTTV en una pestaña propia, pensada para el ratón y el teclado. El mismo código sirve para
 Chrome y para Firefox.
 
-![Inicio de la extensión: los seguidos en directo, «Seguir viendo» y los vídeos a medias; a la izquierda, la columna de seguidos](docs/media/escritorio-inicio.jpg)
+![Inicio de la extensión: miniaturas de los seguidos en directo, primero quién emite; a la izquierda, la columna de seguidos](docs/media/escritorio-inicio.jpg)
 
-- **Inicio:** tus seguidos en directo, los canales que viste los últimos, los VOD que dejaste a medias y los populares.
+- **Inicio:** tus seguidos en directo, los canales que viste los últimos, los populares, también sin cuenta, y el título de arriba cambia a los VOD que dejaste a medias.
 - **Una columna con tus seguidos en directo,** por espectadores o, como el «Recomendado para ti» de Twitch, por lo que
   ves cada uno. Se puede plegar.
 - **La búsqueda siempre arriba** (`/`), por relevancia, como en twitch.tv.
@@ -80,12 +88,12 @@ Chrome y para Firefox.
 
 **Instalarla:** no está en las tiendas. Descárgala de las
 [releases](https://github.com/mateozariquiey/GoodTTV/releases).
-- **Zen** (y Firefox Developer Edition o Nightly), con `goodttv-0.4.1.xpi`: en `about:config`, pon
+- **Zen** (y Firefox Developer Edition o Nightly), con `goodttv-0.5.0.xpi`: en `about:config`, pon
   `xpinstall.signatures.required` a `false`. Después, en `about:addons`, menú del engranaje → «Instalar complemento
   desde archivo…».
 - **Firefox:** solo admite complementos sin firmar de forma temporal: `about:debugging` → «Este Firefox» → «Cargar
   complemento temporal…» y el `.xpi`. Se quita al cerrar Firefox.
-- **Chrome y Chromium,** también en Windows, con `goodttv-0.4.1-chrome.zip`:
+- **Chrome y Chromium,** también en Windows, con `goodttv-0.5.0-chrome.zip`:
   1. Descomprímelo en una carpeta que vayas a conservar.
   2. En `chrome://extensions`, activa el «Modo Desarrollador» (arriba a la derecha).
   3. Pulsa «Cargar descomprimida» y elige esa carpeta.
@@ -111,14 +119,14 @@ una esquina, deslizar hacia abajo sobre el vídeo vuelve atrás, y al salir de l
   <img alt="Android: un canal con el vídeo arriba, su ficha y el chat" src="docs/media/android-canal.jpg" width="270">
 </p>
 
-Solo se ha probado en un teléfono (un Galaxy S25 Ultra con Android 16). Que el chat vaya a la par de la imagen se ha
+Solo se ha probado en un teléfono (un Galaxy S25 Ultra con Android 17). Que el chat vaya a la par de la imagen se ha
 comprobado a ojo, sin medirlo.
 
-**Instalarla** (Android 13 o posterior): descarga `GoodTTV-0.4.1.apk` de las
+**Instalarla** (Android 13 o posterior): descarga `GoodTTV-0.5.0.apk` de las
 [releases](https://github.com/mateozariquiey/GoodTTV/releases) en el teléfono y ábrelo. Android te pedirá permiso para
 instalar apps desde el navegador o el gestor de archivos, y Play Protect puede avisar de que no conoce al
 desarrollador. Las versiones nuevas se instalan encima de la anterior y conservan la cuenta, porque van firmadas con la
-misma clave. Desde un ordenador, `adb install -r GoodTTV-0.4.1.apk` hace lo mismo. La huella SHA-256 del certificado de
+misma clave. Desde un ordenador, `adb install -r GoodTTV-0.5.0.apk` hace lo mismo. La huella SHA-256 del certificado de
 la firma es `38:CF:EA:F9:1C:2F:8C:C4:B8:35:27:11:BD:77:7F:56:0E:A8:D5:4F:87:37:C4:91:6C:B6:BA:C8:27:32:5A:D6` (la enseña `apksigner verify --print-certs`).
 
 Para compilarla hacen falta el SDK de Android y un JDK 21: lo explica [apps/android/README.md](apps/android/README.md).
@@ -163,7 +171,7 @@ x86_64) y ejecútalo; arranca a pantalla completa y necesita `libfuse2`. Para co
 ```bash
 bun install --frozen-lockfile
 bun run build && bun run start   # en una ventana, para probar
-bun run package:appimage         # apps/tele/dist/GoodTTV-0.4.1-x86_64.AppImage
+bun run package:appimage         # apps/tele/dist/GoodTTV-0.5.0-x86_64.AppImage
 ```
 
 ## El código

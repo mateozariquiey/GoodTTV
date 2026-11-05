@@ -1,4 +1,5 @@
 import { createDirecto, type Directo, type DirectoOptions } from "./directo"
+import { createDirectoHuecos } from "./directo-huecos"
 
 // En una página (la extensión, Android) no hay servidor local: las peticiones fetch de la página a sus propias rutas
 // /stream/ las atiende el directo en memoria, como un service worker. Así el reproductor pide igual que en la tele
@@ -37,10 +38,15 @@ export const createDirectoFetch = (
 }
 
 // Crea el directo y pone en la página el fetch que lo atiende. El directo pide a Twitch con el fetch original del
-// navegador, así que sus peticiones no pasan por sí mismo.
-export const installDirecto = (options: DirectoOptions = {}): Directo => {
+// navegador, así que sus peticiones no pasan por sí mismo. Con huecos, varios canales a la vez (directo-huecos.ts).
+export const installDirecto = ({
+  huecos = false,
+  ...options
+}: DirectoOptions & { readonly huecos?: boolean } = {}): Directo => {
   const nativeFetch = globalThis.fetch.bind(globalThis)
-  const directo = createDirecto({ fetch: nativeFetch, ...options })
+  const create = huecos ? createDirectoHuecos : createDirecto
+  const directo = create({ fetch: nativeFetch, ...options })
   globalThis.fetch = createDirectoFetch(directo, location.origin, nativeFetch)
+  directo.abrirConexiones() // lo normal es abrir un canal poco después de abrir la página
   return directo
 }

@@ -25,10 +25,24 @@ export {
   searchChannels,
   useAppStatus,
   useAuth,
+  useGuestPopular,
   useHome,
   usePreferences,
+  useRefreshWhileVisible,
   useResource,
 } from "./data"
+export {
+  activarIdioma,
+  type Clave,
+  elegirIdioma,
+  type Idioma,
+  type IdiomaElegido,
+  idiomaActual,
+  idiomaElegido,
+  t,
+  tMensaje,
+  useIdioma,
+} from "./idioma"
 export { type Platform, PlatformContext, TV_PLATFORM } from "./platform"
 export { CHAT_STATUS_TEXT, Message } from "./player/ChatPanel"
 export {
@@ -48,6 +62,7 @@ export { useChatCompose } from "./player/useChatCompose"
 export { useChatEmotes } from "./player/useChatEmotes"
 export {
   chosenLiveQuality,
+  type PlayerGrid,
   prewarmStream,
   TWITCH_VIEWER_LATENCY,
   useBehind,

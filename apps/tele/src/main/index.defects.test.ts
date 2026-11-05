@@ -99,6 +99,9 @@ const setup = () => {
     session: { defaultSession },
   }))
   vi.doMock("./https-server", () => ({ startStaticHttpsServer }))
+  vi.doMock("./local-certificate", () => ({
+    loadLocalCertificate: vi.fn(async () => ({ certificate: "certificate", key: "key" })),
+  }))
   vi.doMock("./input-router", () => ({ createInputRouter }))
   vi.doMock("./ipc", () => ({ registerIpc }))
   vi.doMock("@goodttv/servicios", () => ({ EmoteCatalog, EventSubChat, LocalStore, TwitchService }))

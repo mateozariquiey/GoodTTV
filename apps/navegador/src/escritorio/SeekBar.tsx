@@ -1,5 +1,5 @@
 import type { Storyboard } from "@goodttv/contratos"
-import { formatClock } from "@goodttv/interfaz"
+import { formatClock, t } from "@goodttv/interfaz"
 import { thumbnailAt } from "@goodttv/sin-anuncios"
 import { type PointerEvent as ReactPointerEvent, useRef, useState } from "react"
 import { SKIP_S } from "./SkipButton"
@@ -37,7 +37,7 @@ export const SeekBar = ({
   const thumb = preview === null || storyboard === null ? null : thumbnailAt(storyboard, preview)
   return (
     <div
-      aria-label="Posición en el vídeo"
+      aria-label={t("Posición en el vídeo")}
       aria-valuemax={Math.round(duration)}
       aria-valuemin={0}
       aria-valuenow={Math.round(shown)}

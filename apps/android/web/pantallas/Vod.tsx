@@ -1,5 +1,13 @@
 import type { Preferences, Storyboard, VideoDetail } from "@goodttv/contratos"
-import { formatAgo, formatClock, formatViewers, useReplayChat, vodDetail } from "@goodttv/interfaz"
+import {
+  formatAgo,
+  formatClock,
+  formatViewers,
+  idiomaActual,
+  t,
+  useReplayChat,
+  vodDetail,
+} from "@goodttv/interfaz"
 import {
   ArrowCounterClockwiseIcon,
   ArrowLeftIcon,
@@ -13,6 +21,7 @@ import { BarraTiempo } from "./BarraTiempo"
 import { Chat } from "./Chat"
 import { Avatar } from "./comun"
 import {
+  AvisoReconexion,
   Centro,
   Hoja,
   Opciones,
@@ -35,7 +44,7 @@ import { ChannelVideos } from "./Videos"
 const REANUDADO_MS = 8000
 const VELOCIDADES = [0.5, 0.75, 1, 1.25, 1.5, 2] as const
 const PRECALENTAR_MS = 20_000 // retrocediendo un directo, su empalme se mantiene caliente para volver rápido
-const velocidadDe = (valor: number): string => valor.toLocaleString("es")
+const velocidadDe = (valor: number): string => valor.toLocaleString(idiomaActual())
 
 type Props = {
   readonly at?: number | undefined // DVR-1: desde este segundo del VOD de la emisión en curso
@@ -91,7 +100,7 @@ export const Vod = ({ at, id, live, preferences }: Props) => {
   const deEste = video?.id === id ? video : null
   useMandos(
     `vod/${id}`,
-    deEste === null ? "" : deEste.title || "Sin título",
+    deEste === null ? "" : deEste.title || t("Sin título"),
     deEste?.owner.displayName ?? "",
     deEste?.owner.avatar ?? undefined,
   )
@@ -184,17 +193,19 @@ export const Vod = ({ at, id, live, preferences }: Props) => {
         {estado.fase === "cargando" ||
         loaded.kind === "loading" ||
         (reproduciendo && estado.esperando && !estado.pausado && !showControls) ? (
-          <div aria-label="Cargando" className="girando" role="status" />
+          <div aria-label={t("Cargando")} className="girando" role="status" />
+        ) : estado.fase === "reconectando" || estado.fase === "sin-red" ? (
+          <AvisoReconexion fase={estado.fase} />
         ) : estado.fase === "error" ||
           estado.fase === "solo-suscriptores" ||
           loaded.kind !== "ready" ? (
           <div className="escenario__aviso" role="alert">
             <p>
               {loaded.kind === "missing"
-                ? "Este vídeo ya no existe o no se puede ver."
+                ? t("Este vídeo ya no existe o no se puede ver.")
                 : estado.fase === "solo-suscriptores"
-                  ? "Este vídeo es solo para suscriptores."
-                  : "No se pudo reproducir el vídeo."}
+                  ? t("Este vídeo es solo para suscriptores.")
+                  : t("No se pudo reproducir el vídeo.")}
             </p>
             <span className="botones">
               {estado.fase === "error" || loaded.kind === "error" ? (
@@ -207,12 +218,12 @@ export const Vod = ({ at, id, live, preferences }: Props) => {
                   }}
                   type="button"
                 >
-                  Reintentar
+                  {t("Reintentar")}
                 </button>
               ) : null}
               {loaded.kind === "missing" ? null : (
                 <a className="boton" href={twitchUrl}>
-                  Abrir en twitch.tv
+                  {t("Abrir en twitch.tv")}
                 </a>
               )}
             </span>
@@ -220,7 +231,7 @@ export const Vod = ({ at, id, live, preferences }: Props) => {
         ) : null}
         {reanudadoVisible && reanudado !== null ? (
           <div className="reanudado" role="status">
-            Sigues donde lo dejaste ({formatClock(reanudado)}).
+            {t("Sigues donde lo dejaste ({clock}).", { clock: formatClock(reanudado) })}
             <button
               className="reanudado__principio"
               onClick={(event) => {
@@ -230,8 +241,7 @@ export const Vod = ({ at, id, live, preferences }: Props) => {
               }}
               type="button"
             >
-              <ArrowCounterClockwiseIcon aria-hidden="true" />
-              Desde el principio
+              <ArrowCounterClockwiseIcon aria-hidden="true" /> {t("Desde el principio")}
             </button>
           </div>
         ) : null}
@@ -241,7 +251,7 @@ export const Vod = ({ at, id, live, preferences }: Props) => {
         >
           <div className="controles__fila">
             <button
-              aria-label="Volver"
+              aria-label={t("Volver")}
               className="boton-icono boton-icono--claro"
               onClick={(event) => {
                 event.stopPropagation()
@@ -266,8 +276,7 @@ export const Vod = ({ at, id, live, preferences }: Props) => {
                 }}
                 type="button"
               >
-                <i aria-hidden="true" />
-                Ir al directo
+                <i aria-hidden="true" /> {t("Ir al directo")}
               </button>
             )}
           </div>
@@ -314,7 +323,7 @@ export const Vod = ({ at, id, live, preferences }: Props) => {
               <span className="controles__hueco" />
               {reproduciendo ? (
                 <button
-                  aria-label="Velocidad"
+                  aria-label={t("Velocidad")}
                   className="ajuste-video"
                   onClick={() => setHoja("velocidad")}
                   type="button"
@@ -324,7 +333,7 @@ export const Vod = ({ at, id, live, preferences }: Props) => {
               ) : null}
               {estado.calidades.length > 0 ? (
                 <button
-                  aria-label="Calidad"
+                  aria-label={t("Calidad")}
                   className="ajuste-video"
                   onClick={() => setHoja("calidad")}
                   type="button"
@@ -333,7 +342,7 @@ export const Vod = ({ at, id, live, preferences }: Props) => {
                 </button>
               ) : null}
               <button
-                aria-label={chatVisible ? "Ocultar el chat" : "Mostrar el chat"}
+                aria-label={chatVisible ? t("Ocultar el chat") : t("Mostrar el chat")}
                 aria-pressed={chatVisible}
                 className="boton-icono boton-icono--claro boton-icono--chat"
                 onClick={toggleChat}
@@ -342,7 +351,9 @@ export const Vod = ({ at, id, live, preferences }: Props) => {
                 <ChatTextIcon />
               </button>
               <button
-                aria-label={horizontal ? "Salir de la pantalla completa" : "Pantalla completa"}
+                aria-label={
+                  horizontal ? t("Salir de la pantalla completa") : t("Pantalla completa")
+                }
                 className="boton-icono boton-icono--claro"
                 onClick={() => {
                   android.canalPantallaCompleta(!horizontal)
@@ -359,7 +370,7 @@ export const Vod = ({ at, id, live, preferences }: Props) => {
       <div className="canal__lado">
         {horizontal || video === null ? null : <Ficha video={video} />}
         {horizontal || video === null ? null : (
-          <Pestanas elegida={pestana} onElegir={setPestana} videos="Más vídeos" />
+          <Pestanas elegida={pestana} onElegir={setPestana} videos={t("Más vídeos")} />
         )}
         {chatVisible ? (
           <Chat chat={chat} replay scale={preferences.chatScale} writing="no" />
@@ -370,7 +381,7 @@ export const Vod = ({ at, id, live, preferences }: Props) => {
         )}
       </div>
       {hoja === "velocidad" ? (
-        <Hoja onClose={() => setHoja(null)} titulo="Velocidad">
+        <Hoja onClose={() => setHoja(null)} titulo={t("Velocidad")}>
           <Opciones
             elegida={estado.velocidad}
             onElegir={(valor) => {
@@ -384,7 +395,7 @@ export const Vod = ({ at, id, live, preferences }: Props) => {
           />
         </Hoja>
       ) : hoja === "calidad" ? (
-        <Hoja onClose={() => setHoja(null)} titulo="Calidad">
+        <Hoja onClose={() => setHoja(null)} titulo={t("Calidad")}>
           <Opciones
             elegida={estado.calidad}
             onElegir={(valor) => {
@@ -393,7 +404,10 @@ export const Vod = ({ at, id, live, preferences }: Props) => {
             }}
             opciones={[
               {
-                nombre: estado.sonando === null ? "Automática" : `Automática (${estado.sonando})`,
+                nombre:
+                  estado.sonando === null
+                    ? t("Automática")
+                    : t("Automática ({sonando})", { sonando: estado.sonando }),
                 valor: null,
               },
               ...estado.calidades.map((nombre) => ({ nombre, valor: nombre })),
@@ -409,7 +423,7 @@ export const Vod = ({ at, id, live, preferences }: Props) => {
 const Ficha = ({ video }: { readonly video: VideoDetail }) => (
   <section className="ficha">
     <a
-      aria-label={`Ir al canal de ${video.owner.displayName}`}
+      aria-label={t("Ir al canal de {displayName}", { displayName: video.owner.displayName })}
       href={`#/canal/${video.owner.login}`}
     >
       <Avatar
@@ -422,12 +436,12 @@ const Ficha = ({ video }: { readonly video: VideoDetail }) => (
       <h1>
         <a href={`#/canal/${video.owner.login}`}>{video.owner.displayName}</a>
       </h1>
-      <p className="ficha__titulo">{video.title || "Sin título"}</p>
+      <p className="ficha__titulo">{video.title || t("Sin título")}</p>
       <p className="ficha__datos">
         {[
           video.category,
           formatAgo(video.createdAt),
-          `${formatViewers(video.views)} visualizaciones`,
+          t("{n} visualizaciones", { n: formatViewers(video.views) }),
         ]
           .filter((each) => each !== null && each !== "")
           .join(" · ")}
@@ -449,7 +463,7 @@ const FichaEncima = ({ video }: { readonly video: VideoDetail }) => (
         <b>{video.owner.displayName}</b>
         <span className="encima__datos"> · {formatAgo(video.createdAt)}</span>
       </p>
-      <p className="encima__titulo">{video.title || "Sin título"}</p>
+      <p className="encima__titulo">{video.title || t("Sin título")}</p>
     </div>
   </div>
 )

@@ -1,3 +1,4 @@
+import { t } from "@goodttv/interfaz"
 import { useState } from "react"
 
 // «Reintentar» que espera a la respuesta: mientras, dice «Comprobando…» y no repite.
@@ -14,7 +15,7 @@ export const RetryButton = ({ onRetry }: { readonly onRetry: () => Promise<void>
       }}
       type="button"
     >
-      {retrying ? "Comprobando…" : "Reintentar"}
+      {retrying ? t("Comprobando…") : t("Reintentar")}
     </button>
   )
 }

@@ -1,5 +1,5 @@
 import type { ChatEmote } from "@goodttv/contratos"
-import { CHAT_STATUS_TEXT, type ChatView, Message, useChatAtBottom } from "@goodttv/interfaz"
+import { CHAT_STATUS_TEXT, type ChatView, Message, t, useChatAtBottom } from "@goodttv/interfaz"
 import { type PointerEvent as ReactPointerEvent, useCallback, useRef, useState } from "react"
 import { Compose, type ComposeHandle, PROVIDER_LABEL } from "./ChatCompose"
 
@@ -57,7 +57,7 @@ export const ChatPanel = ({
   const status = CHAT_STATUS_TEXT[chat.status]
   const behind =
     chat.status === "connected" && chat.delay !== null && chat.delay >= 1
-      ? `Va ${chat.delay} s por detrás, como la imagen.`
+      ? t("Va {delay} s por detrás, como la imagen.", { delay: chat.delay })
       : null
   const send = chat.send
   const canWrite = writing === "si" && send !== undefined
@@ -132,7 +132,7 @@ export const ChatPanel = ({
 
   return (
     <aside aria-label="Chat" className={`chat chat--${scale}`} ref={panel}>
-      <header className="chat__head">{replay ? "Chat del vídeo" : "Chat del directo"}</header>
+      <header className="chat__head">{replay ? t("Chat del vídeo") : t("Chat del directo")}</header>
       {status === undefined ? null : <p className="chat__status">{status}</p>}
       {/* En un bloque propio, para que la lista se maquete aparte del resto de la página (desktop.css). */}
       <div className="chat__scroller">
@@ -172,13 +172,19 @@ export const ChatPanel = ({
           <span className="emote-tip__meta">
             {[
               tip.provider === undefined ? null : PROVIDER_LABEL[tip.provider],
-              tip.overlays.length > 0 ? `con ${tip.overlays.join(", ")}` : null,
+              tip.overlays.length > 0
+                ? t("con {overlays}", { overlays: tip.overlays.join(", ") })
+                : null,
             ]
               .filter((each) => each !== null)
               .join(" · ")}
           </span>
           <span className="emote-tip__hint">
-            {tip.copied ? "Copiado" : canWrite ? "Clic: al mensaje" : "Clic: copiar el nombre"}
+            {tip.copied
+              ? t("Copiado")
+              : canWrite
+                ? t("Clic: al mensaje")
+                : t("Clic: copiar el nombre")}
           </span>
         </div>
       )}
@@ -186,18 +192,24 @@ export const ChatPanel = ({
         {canWrite ? (
           <>
             <Compose emotes={chat.emotes} handle={composer} onSent={onSent} send={send} />
-            {behind === null ? null : <p className="chat__note">{behind} Lo tuyo sale ya.</p>}
+            {behind === null ? null : (
+              <p className="chat__note">
+                {behind} {t("Lo tuyo sale ya.")}
+              </p>
+            )}
           </>
         ) : writing === "vincular" ? (
           <p className="chat__note">
-            Solo lectura. Para escribir, vuelve a vincular la cuenta en{" "}
-            <a href="#/ajustes">Ajustes</a>.
+            {t("Solo lectura. Para escribir, vuelve a vincular la cuenta en")}{" "}
+            <a href="#/ajustes">{t("Ajustes")}</a>.
           </p>
         ) : replay ? (
-          <p className="chat__note">Como se escribió en el directo, a la par de la imagen.</p>
+          <p className="chat__note">
+            {t("Como se escribió en el directo, a la par de la imagen.")}
+          </p>
         ) : (
           <p className="chat__note">
-            {behind === null ? "Solo lectura." : `Solo lectura. ${behind}`}
+            {behind === null ? t("Solo lectura.") : t("Solo lectura. {behind}", { behind })}
           </p>
         )}
       </footer>

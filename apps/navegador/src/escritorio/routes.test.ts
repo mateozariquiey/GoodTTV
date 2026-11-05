@@ -2,6 +2,14 @@ import { describe, expect, it } from "vitest"
 import { parseRoute, routeHash } from "./routes"
 
 describe("parseRoute", () => {
+  it("lee la cuadrícula: hasta 4 canales válidos y sin repetir", () => {
+    expect(parseRoute("#/cuadricula/Ibai,xqc,ibai,no valido,a,b,c")).toEqual({
+      logins: ["ibai", "xqc", "a", "b"],
+      view: "grid",
+    })
+    expect(parseRoute("#/cuadricula/")).toEqual({ logins: [], view: "grid" })
+    expect(routeHash({ logins: ["ibai", "xqc"], view: "grid" })).toBe("#/cuadricula/ibai,xqc")
+  })
   it("lee el canal, los ajustes o Inicio", () => {
     expect(parseRoute("#/canal/Papaplatte")).toEqual({ login: "papaplatte", view: "channel" })
     expect(parseRoute("#/ajustes")).toEqual({ view: "settings" })

@@ -50,11 +50,24 @@ const enviar = (message: object): void => puente.postMessage(JSON.stringify(mess
 
 const params = new URLSearchParams(location.search)
 const registro = params.has("registro")
-const directo = createDirecto({
-  fetch: createRedNativa(globalThis.fetch.bind(globalThis), location.origin, false),
-  log: registro ? (event) => enviar({ registro: safeEvent(event) }) : () => undefined,
-  simulatedPause: parseSimulatedPause(params.get("pausa") ?? ""),
-})
+const nuevoDirecto = () =>
+  createDirecto({
+    fetch: createRedNativa(globalThis.fetch.bind(globalThis), location.origin, false),
+    log: registro ? (event) => enviar({ registro: safeEvent(event) }) : () => undefined,
+    simulatedPause: parseSimulatedPause(params.get("pausa") ?? ""),
+  })
+let directo = nuevoDirecto()
+directo.abrirConexiones() // lo normal es abrir un canal poco después de abrir la app
+
+// Reconectar tras un fallo (Reproductor.kt) empieza con un empalme nuevo: el de antes tiene un hueco del tiempo del
+// corte (con la hora contada, una latencia de mentira y el chat retrasado) y sus sesiones, esperas de hasta 30 s.
+const REINICIAR = "/motor/reiniciar"
+const reiniciar = (): Response => {
+  directo.stop()
+  directo = nuevoDirecto()
+  ultimoCanal = null
+  return new Response(null, { status: 204 })
+}
 
 // Cada trozo del cuerpo va en un ArrayBuffer con el número de la petición delante (4 bytes), de TROZO bytes como mucho:
 // un trozo del VOD recortado sale de la memoria entero, de varios MB.
@@ -170,7 +183,8 @@ const atender = async (id: number, ruta: string, rango: string | null): Promise<
   try {
     const url = new URL(ruta, location.origin)
     anotarCanal(url)
-    let response = await directo.handle(url, { range: rango, signal })
+    let response =
+      url.pathname === REINICIAR ? reiniciar() : await directo.handle(url, { range: rango, signal })
     const cabecera = performance.now() - inicio
     if (response.ok && url.pathname.endsWith("/live.m3u8")) {
       const headers = new Headers(response.headers)

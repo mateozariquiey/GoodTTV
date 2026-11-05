@@ -1,3 +1,5 @@
+import { t } from "./idioma"
+
 // Tiempos de los VOD (VOD-1; la extensión y Android): la posición y la duración como un reloj (1:02:03, 58:02) y la fecha
 // como «hace 3 días».
 
@@ -12,10 +14,10 @@ export const formatClock = (seconds: number): string => {
 export const formatAgo = (iso: string, now = Date.now()): string => {
   const hours = Math.floor((now - Date.parse(iso)) / 3_600_000)
   if (!Number.isFinite(hours)) return ""
-  if (hours < 1) return "hace menos de una hora"
-  if (hours < 24) return hours === 1 ? "hace 1 hora" : `hace ${hours} horas`
+  if (hours < 1) return t("hace menos de una hora")
+  if (hours < 24) return hours === 1 ? t("hace 1 hora") : t("hace {n} horas", { n: hours })
   const days = Math.floor(hours / 24)
-  if (days < 30) return days === 1 ? "ayer" : `hace ${days} días`
+  if (days < 30) return days === 1 ? t("ayer") : t("hace {n} días", { n: days })
   const months = Math.floor(days / 30)
-  return months === 1 ? "hace 1 mes" : `hace ${months} meses`
+  return months === 1 ? t("hace 1 mes") : t("hace {n} meses", { n: months })
 }

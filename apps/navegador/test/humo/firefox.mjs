@@ -15,10 +15,14 @@ export const launchFirefox = async ({ extension, firefox = "/usr/bin/firefox", w
     "browser.shell.checkDefaultBrowser": false,
     "browser.startup.homepage_override.mstone": "ignore",
     "datareporting.policy.dataSubmissionEnabled": false,
+    // Las pruebas buscan los textos en español. HUMO_IDIOMA=en: un sistema en otro idioma, para un recorrido.
+    "intl.accept_languages": process.env.HUMO_IDIOMA ?? "es",
     "extensions.webextensions.uuids": JSON.stringify({ [EXTENSION_ID]: UUID }),
     "media.autoplay.default": 0,
     "media.volume_scale": "0.0", // sin sonido, aunque la página crea que suena
     "toolkit.telemetry.reportingpolicy.firstRun": false,
+    // Zen: su bienvenida de un perfil nuevo tapa la ventana y estorba al cambiar de pestaña.
+    "zen.welcome-screen.seen": true,
   }
   await writeFile(
     join(profile, "user.js"),
@@ -53,6 +57,7 @@ export const launchFirefox = async ({ extension, firefox = "/usr/bin/firefox", w
       if (context === undefined) await new Promise((resolve) => setTimeout(resolve, 200))
     }
     if (context === undefined) throw new Error("la extensión no abrió su página")
+    const opened = new Set()
     // Devuelve valores de JavaScript, como Chrome con returnByValue: BiDi serializa los objetos a su manera.
     const evaluateIn = async (target, expression) => {
       const { exceptionDetails, result } = await command("script.evaluate", {
@@ -73,19 +78,27 @@ export const launchFirefox = async ({ extension, firefox = "/usr/bin/firefox", w
       },
       evaluate,
       // Otra pestaña con una página de la extensión, para leerla (la abre la propia página: BiDi no navega a ellas).
-      openTab: async (path) => {
+      // inWindow: en su propia ventana, a la vista junto a la primera.
+      openTab: async (path, { inWindow = false } = {}) => {
+        const url = JSON.stringify(path)
         const id = await evaluate(
-          `chrome.tabs.create({ url: ${JSON.stringify(path)} }).then((tab) => tab.id)`,
+          inWindow
+            ? `chrome.windows.create({ url: ${url} }).then((created) => created.tabs[0].id)`
+            : `chrome.tabs.create({ url: ${url} }).then((tab) => tab.id)`,
         )
         let other
         for (let i = 0; i < 50 && other === undefined; i++) {
           const { contexts } = await command("browsingContext.getTree")
           other = contexts.find(
-            (each) => each.context !== context && each.url.startsWith(`moz-extension://${UUID}/`),
+            (each) =>
+              each.context !== context &&
+              !opened.has(each.context) &&
+              each.url.startsWith(`moz-extension://${UUID}/`),
           )?.context
           if (other === undefined) await new Promise((resolve) => setTimeout(resolve, 200))
         }
         if (other === undefined) throw new Error("no se abrió la otra pestaña")
+        opened.add(other)
         return {
           close: () => evaluate(`chrome.tabs.remove(${id})`),
           evaluate: (expression) => evaluateIn(other, expression),

@@ -7,7 +7,8 @@
 //     [--wayland goodttv-lab] [--etiqueta base] [--detalle] [--extension otra/dist] [--precalentar 500]
 //     [--navegador chrome|firefox] [--chat 30 | --chatreal]
 // --canales auto:N toma los N directos con más espectadores. --wayland usa el compositor del laboratorio (GPU real y
-// decodificación por hardware, herramientas/laboratorio/weston.sh); sin él, sin ventana y por software.
+// decodificación por hardware, herramientas/laboratorio/weston.sh); sin él, sin ventana y por software. Los fotogramas
+// perdidos solo valen en un compositor a 60 Hz de verdad: en mini-agentes, --wayland wayland-0 (docs/desarrollo.md).
 // Escribe una línea JSON por canal y ronda, y un resumen al final.
 import { readdir, readFile } from "node:fs/promises"
 import { resolve } from "node:path"

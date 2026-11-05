@@ -10,6 +10,7 @@ import {
   type ReplayMessage,
   SearchInputSchema,
   type Storyboard,
+  type StreamCard,
   type VideoDetail,
   type VideoList,
 } from "@goodttv/contratos"
@@ -56,7 +57,33 @@ export type ChannelResult = {
 export type ChannelSource = {
   readonly byLogin: (login: string) => Promise<ChannelResult | null>
   readonly search: (query: string, first: number) => Promise<readonly ChannelResult[]>
+  readonly popular: (language: string) => Promise<readonly PopularResult[]>
 }
+
+export type PopularResult = {
+  readonly id: string
+  readonly login: string
+  readonly displayName: string
+  readonly avatar: string | null
+  readonly title: string
+  readonly category: string
+  readonly viewers: number
+  readonly startedAt: string
+}
+
+const toPopularCard = (result: PopularResult): StreamCard => ({
+  category: result.category,
+  id: result.id,
+  ...(result.avatar === null ? {} : { profileImageUrl: result.avatar }),
+  startedAt: result.startedAt,
+  tags: [],
+  thumbnailUrl: `https://static-cdn.jtvnw.net/previews-ttv/live_user_${result.login}-640x360.jpg`,
+  title: result.title,
+  userId: result.id,
+  userLogin: result.login,
+  userName: result.displayName,
+  viewerCount: result.viewers,
+})
 
 // Twitch siempre da una foto (la de por defecto, si no hay otra); sin ella, la tarjeta no es válida.
 const toChannelCard = (result: ChannelResult): ChannelCard | null =>
@@ -171,6 +198,8 @@ export const createPageApi = ({
               const result = await channels.byLogin(login)
               return result === null ? null : toChannelCard(result)
             },
+            popularSinCuenta: async (language: string) =>
+              (await channels.popular(language)).map(toPopularCard),
           }),
     },
     chat: {

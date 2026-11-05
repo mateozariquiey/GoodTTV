@@ -1,4 +1,5 @@
 import type { Channel } from "@goodttv/interfaz"
+import { t } from "@goodttv/interfaz"
 import { GearSixIcon } from "@phosphor-icons/react"
 import type { RefObject } from "react"
 import { Avatar } from "./Avatar"
@@ -16,20 +17,20 @@ export const TopBar = ({
   readonly searchRef: RefObject<HTMLInputElement | null>
 }) => (
   <header className="topbar">
-    <a aria-label="GoodTTV, Inicio" className="brand" href="#/">
+    <a aria-label={t("GoodTTV, Inicio")} className="brand" href="#/">
       <span aria-hidden="true" className="brand__logo" />
       <span className="brand__name">GoodTTV</span>
     </a>
     <Search inputRef={searchRef} onOpen={onOpen} />
-    <nav aria-label="Cuenta" className="topbar__end">
-      <a aria-label="Ajustes" className="icon-button" href="#/ajustes" title="Ajustes">
+    <nav aria-label={t("Cuenta")} className="topbar__end">
+      <a aria-label={t("Ajustes")} className="icon-button" href="#/ajustes" title={t("Ajustes")}>
         <GearSixIcon aria-hidden="true" />
       </a>
       {account === undefined ? null : (
         <a
           className="topbar__account"
           href="#/ajustes"
-          title={`Conectado como ${account.displayName}`}
+          title={t("Conectado como {displayName}", { displayName: account.displayName })}
         >
           <Avatar
             className="avatar avatar--small"

@@ -8,6 +8,7 @@ import {
   deviceId,
   type Fetch,
   getText,
+  NotLiveError,
   type OpenedVariant,
   openVariant,
   probeTime,
@@ -108,6 +109,8 @@ export type EmpalmeOptions = {
   readonly fillPollMs?: number
   readonly returnAheadMaxMs?: number
   readonly log?: (event: EmpalmeEvent) => void
+  // La lista de variante de una sesión recién abierta (conexiones.ts).
+  readonly onListOpened?: (url: string) => void
   // Solo para probar a demanda (GOODTTV_PAUSA_SIMULADA): cada «every» s, «length» s en que todas las sesiones se
   // tratan como en anuncio, para ver y oír el relleno con el VOD sin esperar una pausa global real.
   // Pruebas: pausas globales simuladas cada `every` s (0: ninguna periódica) y, con atStart, una al arrancar.
@@ -149,6 +152,7 @@ export class Empalme {
   readonly channel: string
   private readonly sessions: Session[]
   private readonly red: Fetch | undefined
+  private readonly warmedHosts = new Set<string>()
   private readonly fetchPlaylist: (url: string) => Promise<string>
   private readonly openSession: NonNullable<EmpalmeOptions["openSession"]>
   private readonly probe: (url: string, map: string | null) => Promise<number>
@@ -159,6 +163,7 @@ export class Empalme {
   private readonly fillPollMs: number
   private readonly returnAheadMaxMs: number
   private readonly log: (event: EmpalmeEvent) => void
+  private readonly onListOpened: NonNullable<EmpalmeOptions["onListOpened"]>
   private want: Want | null
   private playing: Want | null = null
   private qualities: readonly { readonly id: string; readonly label: string }[] = []
@@ -226,6 +231,7 @@ export class Empalme {
     const red = options.fetch
     this.red = red
     this.fetchPlaylist = options.fetchPlaylist ?? ((url) => getText(url, {}, red))
+    this.onListOpened = options.onListOpened ?? (() => undefined)
     this.openSession =
       options.openSession ??
       ((channel, playerType, device, want) => openVariant(channel, playerType, device, want, red))
@@ -285,7 +291,8 @@ export class Empalme {
   // Estado para la interfaz: si el canal no emite, calidades disponibles y la elegida.
   status(): EmpalmeStatus {
     return {
-      offline: this.out.length === 0 && this.failedOpens.size >= this.sessions.length,
+      // También con lo publicado: al terminar la emisión, quien vuelve a preguntar debe saber que ya no está.
+      offline: this.failedOpens.size >= this.sessions.length,
       published: this.out.length,
       qualities: this.qualities,
       quality: this.want === null ? null : wantId(this.want),
@@ -394,6 +401,7 @@ export class Empalme {
       }
       this.want ??= { fps: variant.fps, resolution: variant.resolution }
       Object.assign(session, { backoff: 0, state: "abierta", url: variant.url })
+      this.onListOpened(variant.url)
       this.failedOpens.clear()
       this.log({ broadcastId: variant.broadcastId, ev: "abierta", type: session.type })
       if (
@@ -416,8 +424,10 @@ export class Empalme {
       if (variant.broadcastId !== null) this.broadcastId = variant.broadcastId
       this.openVod() // ya con la calidad fijada
     } catch (error) {
-      // Canal sin emisión u otro fallo: se reintenta con espera creciente (2, 4, 8… hasta 30 s).
-      this.failedOpens.add(session.type)
+      // Canal sin emisión u otro fallo: se reintenta con espera creciente (2, 4, 8… hasta 30 s). Solo si lo dice Twitch
+      // cuenta como que no emite: sin red o con Twitch fallando, la interfaz no debe decir que el canal está apagado.
+      if (error instanceof NotLiveError) this.failedOpens.add(session.type)
+      else this.failedOpens.delete(session.type)
       session.state = "error"
       session.url = null
       session.backoff = Math.min(30_000, (session.backoff || 1000) * 2)
@@ -462,11 +472,34 @@ export class Empalme {
     void tick()
   }
 
+  // Los hosts de los fragmentos de Twitch tienen TTL 0 y su DNS tarda ~0,3 s, con cualquier resolvedor (4 nov, REN-3): es
+  // casi todo lo que tarda el primer fragmento de un host nuevo (~350 ms, frente a ~45 con la conexión hecha). Con la
+  // lista ya se sabe el host, así que se abre la conexión antes de que el reproductor la pida, por la misma red (en
+  // Android, la de Media3). No hay nada que aprovechar de la respuesta: si falla, el fragmento hará lo de siempre.
+  private warmConnection(segments: readonly MediaSegment[]): void {
+    const url = segments.filter((segment) => !segment.prefetch && !segment.ad).at(-1)?.url
+    if (url === undefined || this.red === undefined) return
+    let host: string
+    try {
+      host = new URL(url).host
+    } catch {
+      return
+    }
+    if (this.warmedHosts.has(host)) return
+    this.warmedHosts.add(host)
+    void this.red(url, {
+      method: "HEAD",
+      redirect: "error",
+      signal: AbortSignal.timeout(5000),
+    }).catch(() => undefined)
+  }
+
   // Una respuesta pedida antes de un reinicio de la línea de tiempo es de la emisión anterior: se descarta.
   receive(session: Session, text: string, generation = this.generation): void {
     if (generation !== this.generation || this.stopped) return
     const parsed = parseMedia(text, true)
     const { liveSequence } = parsed
+    this.warmConnection(parsed.segments)
     const segments =
       Date.now() < this.simulatedPauseUntil
         ? parsed.segments.map((segment) => ({ ...segment, ad: true, title: "pausa-simulada" }))

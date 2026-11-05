@@ -7,6 +7,7 @@ import {
   formatViewers,
   prefetchVod,
   prewarmStream,
+  t,
   useReplayChat,
   useWatchTime,
   vodDetail,
@@ -33,7 +34,7 @@ import { navigate } from "./routes"
 import { SeekBar } from "./SeekBar"
 import { SKIP_S, SkipButton } from "./SkipButton"
 import { contextOf, sideArrowsFree } from "./shortcuts"
-import { useSoleSound } from "./sonido"
+import { SoundElsewhere, useSoleSound } from "./sonido"
 import { useVodPlayer } from "./useVodPlayer"
 import { ChannelVideos } from "./Videos"
 
@@ -225,7 +226,9 @@ export const VodView = ({
   }
 
   const clickTimer = useRef<ReturnType<typeof setTimeout>>(undefined)
+  const clickTookSound = useRef(false)
   const onSurfaceClick = (): void => {
+    if (clickTookSound.current) return // ver onPointerDownCapture
     clearTimeout(clickTimer.current)
     clickTimer.current = setTimeout(toggle, DOUBLE_CLICK_MS)
   }
@@ -289,13 +292,13 @@ export const VodView = ({
     return (
       <div className="vod-missing">
         {loaded.kind === "loading" ? (
-          <div aria-label="Cargando" className="spinner" role="status" />
+          <div aria-label={t("Cargando")} className="spinner" role="status" />
         ) : (
           <>
             <p>
               {loaded.kind === "missing"
-                ? "Este vídeo ya no existe o no se puede ver."
-                : "No se pudo cargar el vídeo."}
+                ? t("Este vídeo ya no existe o no se puede ver.")
+                : t("No se pudo cargar el vídeo.")}
             </p>
             {loaded.kind === "error" ? (
               <button
@@ -303,7 +306,7 @@ export const VodView = ({
                 onClick={() => setAttempt((value) => value + 1)}
                 type="button"
               >
-                Reintentar
+                {t("Reintentar")}
               </button>
             ) : null}
           </>
@@ -323,11 +326,17 @@ export const VodView = ({
       <div className="watch__main">
         <div
           className={`stage${showControls ? "" : " stage--idle"}`}
-          onPointerDownCapture={(event) =>
+          onPointerDownCapture={(event) => {
+            // Un clic en el vídeo de una ventana en silencio le da el sonido, sin pausarla.
+            clickTookSound.current =
+              standby !== "no" &&
+              event.target instanceof Node &&
+              surface.current?.contains(event.target) === true
+            // En el silencio o el volumen, lo que elija la persona; en lo demás, como estaba.
             takeSound(
               event.target instanceof Element && event.target.closest("[data-sonido]") !== null,
             )
-          }
+          }}
           onPointerLeave={() => setAwake(false)}
           onPointerMove={wake}
         >
@@ -340,29 +349,30 @@ export const VodView = ({
             ref={surface}
           />
           {state.phase === "loading" ? (
-            <div aria-label="Cargando" className="spinner" role="status" />
+            <div aria-label={t("Cargando")} className="spinner" role="status" />
           ) : state.phase === "error" || state.phase === "unavailable" ? (
             <div className="stage__notice" role="alert">
               <p>
                 {state.phase === "unavailable"
-                  ? "Este vídeo es solo para suscriptores."
-                  : "No se pudo reproducir el vídeo."}
+                  ? t("Este vídeo es solo para suscriptores.")
+                  : t("No se pudo reproducir el vídeo.")}
               </p>
               <span className="stage__actions">
                 {state.phase === "error" ? (
                   <button className="button button--primary" onClick={player.retry} type="button">
-                    Reintentar
+                    {t("Reintentar")}
                   </button>
                 ) : null}
                 <a className="button" href={twitchUrl} rel="noreferrer" target="_blank">
-                  Abrir en twitch.tv
+                  {t("Abrir en twitch.tv")}
                 </a>
               </span>
             </div>
           ) : null}
+          {standby === "silencio" ? <SoundElsewhere /> : null}
           {resumedShown && state.resumedFrom !== null ? (
             <div className="resumed" role="status">
-              Sigues donde lo dejaste ({formatClock(state.resumedFrom)}).
+              {t("Sigues donde lo dejaste ({clock}).", { clock: formatClock(state.resumedFrom) })}
               <button
                 className="resumed__restart"
                 onClick={() => {
@@ -371,15 +381,14 @@ export const VodView = ({
                 }}
                 type="button"
               >
-                <ArrowCounterClockwiseIcon aria-hidden="true" />
-                Desde el principio
+                <ArrowCounterClockwiseIcon aria-hidden="true" /> {t("Desde el principio")}
               </button>
             </div>
           ) : null}
           <div
             className="controls controls--seek controls--vod"
             role="toolbar"
-            aria-label="Controles del vídeo"
+            aria-label={t("Controles del vídeo")}
           >
             <SeekBar
               buffered={state.buffered}
@@ -397,10 +406,10 @@ export const VodView = ({
             <div className="controls__row">
               <div className="controls__group">
                 <button
-                  aria-label={state.playing ? "Pausa" : "Reproducir"}
+                  aria-label={state.playing ? t("Pausa") : t("Reproducir")}
                   className="icon-button icon-button--light"
                   onClick={toggle}
-                  title={state.playing ? "Pausa (Espacio o K)" : "Reproducir (Espacio o K)"}
+                  title={state.playing ? t("Pausa (Espacio o K)") : t("Reproducir (Espacio o K)")}
                   type="button"
                 >
                   {state.playing ? <PauseIcon weight="fill" /> : <PlayIcon weight="fill" />}
@@ -408,17 +417,17 @@ export const VodView = ({
                 <SkipButton forward={false} onSkip={() => skipBy(-SKIP_S)} />
                 <SkipButton forward onSkip={() => skipBy(SKIP_S)} />
                 <button
-                  aria-label={muted ? "Quitar el silencio" : "Silenciar"}
+                  aria-label={muted ? t("Quitar el silencio") : t("Silenciar")}
                   className="icon-button icon-button--light"
                   data-sonido
                   onClick={muted && volume === 0 ? () => changeVolume(0.5) : toggleMuted}
-                  title={muted ? "Quitar el silencio (M)" : "Silenciar (M)"}
+                  title={muted ? t("Quitar el silencio (M)") : t("Silenciar (M)")}
                   type="button"
                 >
                   {muted ? <SpeakerSimpleXIcon /> : <SpeakerHighIcon />}
                 </button>
                 <input
-                  aria-label="Volumen"
+                  aria-label={t("Volumen")}
                   className="volume"
                   data-sonido
                   max={1}
@@ -436,11 +445,10 @@ export const VodView = ({
                   <button
                     className="go-live"
                     onClick={goLive}
-                    title="Volver al directo, con el retraso de tu modo (Fin)"
+                    title={t("Volver al directo, con el retraso de tu modo (Fin)")}
                     type="button"
                   >
-                    <i aria-hidden="true" />
-                    Ir al directo
+                    <i aria-hidden="true" /> {t("Ir al directo")}
                   </button>
                 )}
               </div>
@@ -449,7 +457,7 @@ export const VodView = ({
                   label={state.rate === 1 ? "1×" : `${state.rate}×`}
                   onToggle={(open) => setMenu(open ? "rate" : null)}
                   open={menu === "rate"}
-                  title="Velocidad"
+                  title={t("Velocidad")}
                 >
                   {RATES.map((rate) => (
                     <button
@@ -471,7 +479,7 @@ export const VodView = ({
                     label={quality}
                     onToggle={(open) => setMenu(open ? "quality" : null)}
                     open={menu === "quality"}
-                    title="Calidad"
+                    title={t("Calidad")}
                   >
                     {[{ index: -1, label: "Auto" }, ...state.qualities].map((each) => (
                       <button
@@ -490,11 +498,11 @@ export const VodView = ({
                   </Menu>
                 ) : null}
                 <button
-                  aria-label={chatShown ? "Ocultar el chat" : "Mostrar el chat"}
+                  aria-label={chatShown ? t("Ocultar el chat") : t("Mostrar el chat")}
                   aria-pressed={chatShown}
                   className="icon-button icon-button--light"
                   onClick={toggleChat}
-                  title={chatShown ? "Ocultar el chat (C)" : "Mostrar el chat (C)"}
+                  title={chatShown ? t("Ocultar el chat (C)") : t("Mostrar el chat (C)")}
                   type="button"
                 >
                   <ChatTextIcon />
@@ -505,21 +513,25 @@ export const VodView = ({
                 />
                 {fullscreen ? null : (
                   <button
-                    aria-label="Modo teatro"
+                    aria-label={t("Modo teatro")}
                     aria-pressed={theater}
                     className="icon-button icon-button--light icon-button--toggle"
                     onClick={() => onTheater(!theater)}
-                    title="Modo teatro (T): el vídeo y el chat ocupan la ventana"
+                    title={t("Modo teatro (T): el vídeo y el chat ocupan la ventana")}
                     type="button"
                   >
                     {theater ? <ArrowsInLineHorizontalIcon /> : <ArrowsOutLineHorizontalIcon />}
                   </button>
                 )}
                 <button
-                  aria-label={fullscreen ? "Salir de la pantalla completa" : "Pantalla completa"}
+                  aria-label={
+                    fullscreen ? t("Salir de la pantalla completa") : t("Pantalla completa")
+                  }
                   className="icon-button icon-button--light"
                   onClick={toggleFullscreen}
-                  title={fullscreen ? "Salir de la pantalla completa (F)" : "Pantalla completa (F)"}
+                  title={
+                    fullscreen ? t("Salir de la pantalla completa (F)") : t("Pantalla completa (F)")
+                  }
                   type="button"
                 >
                   {fullscreen ? <CornersInIcon /> : <CornersOutIcon />}
@@ -530,10 +542,10 @@ export const VodView = ({
         </div>
         <section className="channel-info">
           <a
-            aria-label={`Ir al canal de ${video.owner.displayName}`}
+            aria-label={t("Ir al canal de {displayName}", { displayName: video.owner.displayName })}
             className="channel-info__avatar"
             href={`#/canal/${video.owner.login}`}
-            title="Ir al canal"
+            title={t("Ir al canal")}
           >
             <Avatar
               className="avatar avatar--large"
@@ -547,12 +559,12 @@ export const VodView = ({
                 {video.owner.displayName}
               </a>
             </h1>
-            <p className="channel-info__title">{video.title || "Sin título"}</p>
+            <p className="channel-info__title">{video.title || t("Sin título")}</p>
             <p className="channel-info__meta">
               {[
                 video.category,
                 formatAgo(video.createdAt),
-                `${formatViewers(video.views)} visualizaciones`,
+                t("{n} visualizaciones", { n: formatViewers(video.views) }),
               ]
                 .filter((each) => each !== null && each !== "")
                 .join(" · ")}
@@ -560,12 +572,12 @@ export const VodView = ({
           </div>
           <div className="channel-info__stats">
             <a
-              aria-label="Abrir en twitch.tv"
+              aria-label={t("Abrir en twitch.tv")}
               className="icon-button"
               href={twitchUrl}
               rel="noreferrer"
               target="_blank"
-              title="Abrir en twitch.tv"
+              title={t("Abrir en twitch.tv")}
             >
               <ArrowSquareOutIcon aria-hidden="true" />
             </a>
@@ -576,7 +588,7 @@ export const VodView = ({
           current={video.id}
           login={video.owner.login}
           offline={false}
-          title={`Más vídeos de ${video.owner.displayName}`}
+          title={t("Más vídeos de {displayName}", { displayName: video.owner.displayName })}
         />
       </div>
       {chatShown ? <ChatPanel chat={chat} replay scale={scale} writing="no" /> : null}

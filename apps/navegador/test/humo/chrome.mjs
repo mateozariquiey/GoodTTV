@@ -1,7 +1,7 @@
 // Chrome for Testing sin ventana con la extensión cargada (el Chrome de marca ya no carga extensiones por línea de
 // comandos), controlado por CDP sin dependencias. No con Playwright: activa la emulación de foco, con la que Chrome
 // da por visibles todas las pestañas, y quita el freno a las pestañas en segundo plano, que es lo que hay que probar.
-import { mkdtemp } from "node:fs/promises"
+import { mkdir, mkdtemp, writeFile } from "node:fs/promises"
 import { homedir, tmpdir } from "node:os"
 import { join } from "node:path"
 import { connect, launch } from "./proceso.mjs"
@@ -27,6 +27,14 @@ export const launchChrome = async ({
   wayland,
 }) => {
   const profile = await mkdtemp(join(tmpdir(), "goodttv-humo-chrome-"))
+  // Las pruebas buscan los textos en español, y en Linux Chrome no hace caso de --lang: lo saca de su perfil.
+  // HUMO_IDIOMA=en: un sistema en otro idioma, para un recorrido.
+  const idioma = process.env.HUMO_IDIOMA ?? "es"
+  await mkdir(join(profile, "Default"))
+  await writeFile(
+    join(profile, "Default", "Preferences"),
+    JSON.stringify({ intl: { accept_languages: idioma, selected_languages: idioma } }),
+  )
   const { address, pid, stop } = await launch(
     chrome,
     [
@@ -97,6 +105,7 @@ export const launchChrome = async ({
       click: async (selector, count = 1) => {
         const box = await evaluate(`(() => {
           const element = document.querySelector(${JSON.stringify(selector)})
+          element.scrollIntoView({ block: "nearest" }) // un clic fuera de la ventana no llega a nada
           const rect = element.getBoundingClientRect()
           for (const [fx, fy] of [[0.5, 0.5], [0.5, 0.25], [0.25, 0.25], [0.75, 0.25], [0.5, 0.75]]) {
             const x = rect.left + rect.width * fx
@@ -125,9 +134,13 @@ export const launchChrome = async ({
         const { data } = await command("Page.captureScreenshot", { format: "png" }, sessionId)
         return Buffer.from(data, "base64")
       },
-      // Otra pestaña con una página de la extensión, para leerla.
-      openTab: async (path) => {
-        const { targetId } = await command("Target.createTarget", { url: `${origin}/${path}` })
+      // Otra pestaña con una página de la extensión, para leerla. inWindow: en su propia ventana, a la vista junto a la
+      // primera.
+      openTab: async (path, { inWindow = false } = {}) => {
+        const { targetId } = await command("Target.createTarget", {
+          newWindow: inWindow,
+          url: `${origin}/${path}`,
+        })
         const tab = await command("Target.attachToTarget", { flatten: true, targetId })
         return {
           close: () => command("Target.closeTarget", { targetId }),

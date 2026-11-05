@@ -1,4 +1,4 @@
-import { initials } from "@goodttv/interfaz"
+import { initials, t } from "@goodttv/interfaz"
 import { ArrowLeftIcon } from "@phosphor-icons/react"
 import { type ReactNode, useState } from "react"
 import { atras } from "./rutas"
@@ -26,7 +26,7 @@ export const Avatar = ({
 // La barra de arriba de una pantalla que no es Inicio: la flecha, que hace lo mismo que Atrás, y lo que lleve.
 export const Barra = ({ children }: { readonly children: ReactNode }) => (
   <header className="barra">
-    <button aria-label="Volver" className="boton-icono" onClick={() => atras()} type="button">
+    <button aria-label={t("Volver")} className="boton-icono" onClick={() => atras()} type="button">
       <ArrowLeftIcon />
     </button>
     {children}
@@ -47,7 +47,7 @@ export const Reintentar = ({ onRetry }: { readonly onRetry: () => Promise<void> 
       }}
       type="button"
     >
-      {retrying ? "Comprobando…" : "Reintentar"}
+      {retrying ? t("Comprobando…") : t("Reintentar")}
     </button>
   )
 }

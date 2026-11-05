@@ -300,7 +300,7 @@ describe("Twitch session shared by several pages (extension tabs)", () => {
       return new Response(undefined, { status: 401 })
     })
 
-    await expect(session.credentials()).rejects.toThrow("Sign in again")
+    await expect(session.credentials()).rejects.toThrow("Vuelve a vincular")
     expect(network.post).not.toHaveBeenCalled()
   })
 })
@@ -423,7 +423,7 @@ describe("La cuenta guardada con el token: al abrir, Helix no espera a validar",
     // Al abrir, la cuenta (auth.snapshot) y Helix a la vez: Helix va con la cuenta guardada, y la cuenta, que comparte
     // la validación, ve que la sesión ha caducado.
     const account = session.identity()
-    const accountRejection = expect(account).rejects.toThrow("Sign in again")
+    const accountRejection = expect(account).rejects.toThrow("Vuelve a vincular")
     await expect(session.credentials()).resolves.toMatchObject({ identity })
     await accountRejection
     expect(network.get).toHaveBeenCalledTimes(1)

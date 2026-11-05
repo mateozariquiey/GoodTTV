@@ -162,6 +162,9 @@ const setup = (ownsProfile = true) => {
     session: { defaultSession },
   }))
   vi.doMock("./https-server", () => ({ startStaticHttpsServer }))
+  vi.doMock("./local-certificate", () => ({
+    loadLocalCertificate: vi.fn(async () => ({ certificate: "certificate", key: "key" })),
+  }))
   vi.doMock("./input-router", () => ({ createInputRouter }))
   vi.doMock("./ipc", () => ({ registerIpc }))
   vi.doMock("@goodttv/servicios", () => ({ EmoteCatalog, EventSubChat, LocalStore, TwitchService }))
@@ -331,11 +334,14 @@ describe("profile ownership at the real main entry point", () => {
       ].join("\n"),
     )
 
-    const launch = () =>
-      spawn(
+    const launched: ReturnType<typeof spawn>[] = []
+    const launch = () => {
+      const probe = spawn(
         // El paquete electron exporta la ruta de su binario; así no depende de la carpeta de trabajo.
         createRequire(import.meta.url)("electron") as string,
-        ["--headless", "--no-sandbox", lockProbe],
+        // Ozone headless, no `--headless`: este último sigue usando X11 y, sin servidor X, Chromium
+        // puede caer al cargar los cursores, según lo que quede en memoria (docs/verificacion.md).
+        ["--ozone-platform=headless", "--no-sandbox", lockProbe],
         {
           env: {
             ...process.env,
@@ -345,6 +351,9 @@ describe("profile ownership at the real main entry point", () => {
           stdio: ["ignore", "pipe", "pipe"],
         },
       )
+      launched.push(probe)
+      return probe
+    }
     const profileResult = (process: ReturnType<typeof launch>) =>
       new Promise<string>((resolve, reject) => {
         process.stdout.once("data", (chunk: Buffer) => resolve(chunk.toString().trim()))
@@ -357,18 +366,17 @@ describe("profile ownership at the real main entry point", () => {
           ),
         )
       })
-    const stop = async (process: ReturnType<typeof launch>) => {
-      if (process.exitCode === null) {
+    const stop = async (process: ReturnType<typeof spawn>) => {
+      // Si murió por una señal, exitCode sigue siendo null y su "exit" ya no llegará.
+      if (process.exitCode === null && process.signalCode === null) {
         const exited = once(process, "exit")
         process.kill()
         await exited
       }
     }
 
-    let owner: ReturnType<typeof launch> | undefined
-    let replacement: ReturnType<typeof launch> | undefined
     try {
-      owner = launch()
+      const owner = launch()
       expect(await profileResult(owner)).toBe("owner")
 
       const contender = launch()
@@ -378,10 +386,11 @@ describe("profile ownership at the real main entry point", () => {
       expect(owner.exitCode).toBeNull()
 
       await stop(owner)
-      replacement = launch()
+      const replacement = launch()
       expect(await profileResult(replacement)).toBe("owner")
     } finally {
-      await Promise.all([owner, replacement].filter((process) => process !== undefined).map(stop))
+      // Todos, también el aspirante: si la prueba falla porque no se cierra, no debe quedar vivo.
+      await Promise.all(launched.map(stop))
       await rm(userData, { force: true, recursive: true })
     }
   }, 5000)

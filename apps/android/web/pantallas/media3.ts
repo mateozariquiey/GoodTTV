@@ -18,7 +18,8 @@ import { parseRoute } from "./rutas"
 
 export type EstadoMedia3 = {
   // cargando hasta que empieza a avanzar; reproduciendo desde entonces, aunque luego espere datos o esté en pausa.
-  readonly fase: "cargando" | "reproduciendo" | "sin-directo" | "error"
+  // reconectando y sin-red: ha fallado y la app lo vuelve a intentar sola (Reproductor.fallo), hasta que vuelva o dé error.
+  readonly fase: "cargando" | "reproduciendo" | "reconectando" | "sin-red" | "sin-directo" | "error"
   readonly esperando: boolean // le faltan datos para seguir
   readonly pausado: boolean
   readonly calidad: string | null // como la nombra Twitch: 1080p60
@@ -280,7 +281,13 @@ export const useMedia3 = (
 // Un VOD (VOD-1).
 export type EstadoVod = {
   // solo-suscriptores: usher no lo da como invitado.
-  readonly fase: "cargando" | "reproduciendo" | "solo-suscriptores" | "error"
+  readonly fase:
+    | "cargando"
+    | "reproduciendo"
+    | "reconectando"
+    | "sin-red"
+    | "solo-suscriptores"
+    | "error"
   readonly esperando: boolean
   readonly pausado: boolean
   readonly posicion: number // s

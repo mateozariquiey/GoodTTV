@@ -9,6 +9,8 @@ import { StoredTokenSchema, type TokenStore, TWITCH_CHAT_SCOPES } from "@goodttv
 // - Los títulos y las categorías de los directos llevan el id de esta carga (window.twitchFalso.carga): lo que se vea
 //   con otro es de una carga anterior. Cada petición queda en window.twitchFalso.peticiones, con su inicio y su fin en
 //   ms desde que se abrió la página.
+// - Con &sesioncomun, la sesión va donde la de verdad (chrome.storage, con su bloqueo), compartida entre pestañas: para
+//   comprobar renovar y cerrar sesión con varias abiertas (EXT-5). La guarda el recorrido; sin ella, sin cuenta.
 // - El token «falso-caducado» no vale: validar y Helix dan 401, y renovarlo da otro que sí.
 // - Con datos en sessionStorage («twitch-falso-datos»: seguidos y populares como los da Helix, y las fotos por id), los
 //   directos son esos en vez de los inventados: para hacer capturas con canales de verdad.

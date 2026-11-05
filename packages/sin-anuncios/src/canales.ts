@@ -69,6 +69,63 @@ export const searchChannels = async (
     .slice(0, Math.max(1, first))
 }
 
+export type PopularStream = {
+  readonly id: string
+  readonly login: string
+  readonly displayName: string
+  readonly avatar: string | null
+  readonly title: string
+  readonly category: string
+  readonly viewers: number
+  readonly startedAt: string
+}
+
+const toPopular = (node: unknown): PopularStream | null => {
+  const id = text(pick(node, "broadcaster", "id"))
+  const login = text(pick(node, "broadcaster", "login"))
+  const viewers = pick(node, "viewersCount")
+  const startedAt = text(pick(node, "createdAt"))
+  if (id === null || !/^\d{1,20}$/.test(id) || login === null || !LOGIN.test(login)) return null
+  if (typeof viewers !== "number" || !Number.isFinite(viewers) || startedAt === null) return null
+  return {
+    avatar: text(pick(node, "broadcaster", "profileImageURL")),
+    category: text(pick(node, "game", "displayName")) ?? "",
+    displayName: (text(pick(node, "broadcaster", "displayName")) ?? login).slice(0, 60),
+    id,
+    login,
+    startedAt,
+    title: text(pick(node, "title")) ?? "",
+    viewers,
+  }
+}
+
+// Los directos más vistos, como invitado, para la primera pantalla sin cuenta. language: el código de dos letras del
+// catálogo; si con ese idioma no sale ninguno, los de todos.
+export const popularStreams = async (
+  { first = 24, language }: { first?: number; language?: string } = {},
+  red: Fetch = globalFetch,
+): Promise<readonly PopularStream[]> => {
+  const ask = async (languages: readonly string[] | undefined) => {
+    const data = await gqlRequest(
+      {
+        query: `query($first: Int!, $languages: [Language!]) { streams(first: $first, options: { languages: $languages }) {
+          edges { node { title viewersCount createdAt game { displayName }
+            broadcaster { id login displayName profileImageURL(width: 70) } } } } }`,
+        variables: { first, ...(languages === undefined ? {} : { languages }) },
+      },
+      deviceId(),
+      red,
+    )
+    const edges = pick(data, "data", "streams", "edges")
+    return (Array.isArray(edges) ? edges : [])
+      .map((edge) => toPopular(pick(edge, "node")))
+      .filter((stream): stream is PopularStream => stream !== null)
+  }
+  const code = language?.toUpperCase()
+  const local = code !== undefined && /^[A-Z]{2}$/.test(code) ? await ask([code]) : []
+  return local.length > 0 ? local : ask(undefined)
+}
+
 // Un canal por su nombre (abierto desde la dirección, o el nombre exacto); null si no existe.
 export const channelByLogin = async (
   login: string,

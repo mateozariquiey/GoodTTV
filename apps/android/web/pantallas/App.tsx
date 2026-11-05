@@ -8,8 +8,10 @@ import {
   useAuth,
   useFollowedOrder,
   useHome,
+  useIdioma,
   useOpeningPrewarm,
   usePreferences,
+  useRefreshWhileVisible,
 } from "@goodttv/interfaz"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { android } from "../api"
@@ -38,6 +40,9 @@ const prewarmInApp = (login: string, mode: LatencyMode): void =>
   android.canalPrecalentar(login, mode)
 
 export const App = () => {
+  // Lo poco que pinta la app (la esquina, el aviso de la imagen en imagen) va en el idioma de la página.
+  const idioma = useIdioma()
+  useEffect(() => android.fijarIdioma(idioma), [idioma])
   const route = useRoute()
   const account = useAuth()
   const status = useAppStatus()
@@ -45,10 +50,7 @@ export const App = () => {
   // Al abrir, lo que se vio la última vez mientras se comprueba la cuenta y llega lo de ahora (useHome).
   const home = useHome(account.auth)
   const { auth, refresh, resource, signedIn, sketch, unreachable } = home
-  useEffect(() => {
-    const timer = setInterval(() => void refresh(), REFRESH_MS)
-    return () => clearInterval(timer)
-  }, [refresh])
+  useRefreshWhileVisible(refresh, REFRESH_MS)
   // Al volver a Inicio, al día: el canal que acabas de ver ya está en «Seguir viendo». Al abrir, ya carga useHome.
   const atHome = route.view === "home"
   const wasHome = useRef(atHome)

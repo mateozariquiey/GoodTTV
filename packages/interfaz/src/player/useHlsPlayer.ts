@@ -1,9 +1,9 @@
 import type { LatencyMode } from "@goodttv/contratos"
 import Hls from "hls.js"
-import { useCallback, useEffect, useRef, useState } from "react"
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react"
 import { usePlatform } from "../platform"
 import type { PlayerState } from "./useTwitchPlayer"
-import { chooseVolume, chosenVolume } from "./volume"
+import { chooseVolume, chosenVolume, type Volume } from "./volume"
 
 // Reproductor propio: un <video> con hls.js que lee el directo sin anuncios que prepara el proceso principal en
 // /stream/<canal>/ (src/main/stream). Mismo contrato que useTwitchPlayer, para que PlayerScreen no dependa de cuál
@@ -20,6 +20,7 @@ const INITIAL: PlayerState = {
 }
 
 const STALL_MS = 20_000
+const END_WATCH_MS = 5000
 // Retraso típico de un espectador de Twitch respecto al emisor (embed oficial, medido: ~2,7 s). Quien escribe en el
 // chat lo hace viendo el directo con ese retraso.
 export const TWITCH_VIEWER_LATENCY = 3
@@ -48,6 +49,11 @@ const MAX_BEHIND = 60 // los otros modos: lo mismo, con margen para las pausas d
 const KEEP_BELOW_MAX = 10
 // Si se empieza mientras se publican trozos del VOD (crece a saltos de ~10 s), margen (s) para no quedarse sin datos.
 const VOD_START_TARGET = 16
+// Adaptativo (REN-2): una parada de hasta tanto (s) en pleno directo es un canal que entrega a trompicones, y su retraso se
+// conserva, porque es justo el margen que le faltaba. Por debajo es un tropiezo; por encima, una pausa global sin VOD, que
+// dejaría un retraso enorme para siempre.
+const DELIVERY_STALL_MIN = 1
+const DELIVERY_STALL_MAX = 12
 // Al retroceder, fragmentos que se dejan hasta el principio de la lista: mientras se ve, la lista avanza a la par, y lo
 // que sale de ella ya no se puede pedir.
 const SEEK_FLOOR_SEGMENTS = 3
@@ -70,9 +76,15 @@ type StreamInfo = {
 
 // visit: una por reproductor creado. Si el proceso principal aún tenía el empalme del canal (se volvió a él enseguida),
 // sabe que este reproductor empieza con el margen corto.
-const streamQuery = (quality: string | null, mode: LatencyMode, visit: string): string => {
+const streamQuery = (
+  quality: string | null,
+  mode: LatencyMode,
+  visit: string,
+  hueco: number,
+): string => {
   const query = new URLSearchParams({ modo: mode, visita: visit })
   if (quality !== null) query.set("q", quality)
+  if (hueco > 0) query.set("hueco", String(hueco))
   return `?${query}`
 }
 
@@ -115,10 +127,11 @@ const chooseQuality = (quality: string | null, storage = qualityStorage()): void
 // Precalentar: pide al directo que abra ya el empalme de un canal que probablemente se va a abrir, sin parar el que
 // suena. Al abrirlo, el arranque lleva ya ese adelanto (abrir las sesiones de Twitch, a veces el directo publicado).
 // Con la calidad que se va a pedir: con otra, el directo abriría el canal otra vez.
-export const prewarmStream = (login: string, mode: LatencyMode): void => {
+export const prewarmStream = (login: string, mode: LatencyMode, hueco = 0): void => {
   const query = new URLSearchParams({ modo: mode })
   const quality = chosenLiveQuality()
   if (quality !== null) query.set("q", quality)
+  if (hueco > 0) query.set("hueco", String(hueco))
   void fetch(`/stream/${login}/precalentar?${query}`).catch(() => undefined)
 }
 
@@ -136,25 +149,73 @@ const readInfo = async (
   quality: string | null,
   mode: LatencyMode,
   visit: string,
+  hueco: number,
   signal: AbortSignal,
 ): Promise<StreamInfo> => {
-  const response = await fetch(`/stream/${login}/info${streamQuery(quality, mode, visit)}`, {
+  const response = await fetch(`/stream/${login}/info${streamQuery(quality, mode, visit, hueco)}`, {
     signal,
   })
   if (!response.ok) throw new Error(`HTTP ${response.status}`)
   return (await response.json()) as StreamInfo
 }
 
-// mode: retraso del directo (Ajustes). latency (s): retraso de la imagen respecto a la hora real del fragmento que
-// se ve; lo usa el chat para ir sincronizado. canGoLive: la pantalla ofrece «Ir al directo» (rewound y seekBy), como la
-// extensión; la tele, no.
+// Con la cuadrícula activada (EXT-6). hueco: el directo que atiende este canal (directo-huecos.ts). inCell: es una celda:
+// empieza callada si no es la que suena (silent), y la pantalla encendida la lleva la cuadrícula, porque quitar una
+// celda no debe soltarla. Además, un reproductor que se va de la pantalla se puede quedar en la siguiente (abajo).
+export type PlayerGrid = {
+  readonly hueco: number
+  readonly inCell: boolean
+  readonly silent: boolean
+}
+
+// Lo que un reproductor en marcha necesita de la pantalla que lo muestra.
+type PlayerOwner = {
+  readonly element: HTMLElement
+  readonly latency: React.RefObject<number | null>
+  readonly patch: (next: Partial<PlayerState>) => void
+  readonly seeker: React.RefObject<((seconds: number, orStart: boolean) => number | null) | null>
+  readonly setPictureInPicture: (on: boolean) => void
+  readonly setRewound: (on: boolean) => void
+  readonly setState: React.Dispatch<React.SetStateAction<PlayerState>>
+}
+// Una visita = un <video> y un hls.js. Sus closures llegan a la pantalla por owner, que cambia si pasa a otra.
+type PlayerVisit = {
+  readonly channel: string
+  readonly destroy: () => void
+  readonly hueco: number
+  readonly mode: LatencyMode
+  owner: PlayerOwner
+  readonly quality: string | null
+  readonly video: HTMLVideoElement
+}
+// Entrar y salir de la cuadrícula sin cortar el vídeo. Al pasar del canal a la cuadrícula o al revés, React quita una
+// pantalla y monta la otra en el mismo commit: el reproductor de la que se va espera aquí y la nueva lo recoge, en la
+// misma tarea, antes de que el navegador note que el <video> ha salido del documento (solo lo pausa si sigue fuera
+// al terminar la tarea). Lo que nadie recoge se destruye en la tarea siguiente.
+type WaitingVisit = {
+  readonly latency: number | null
+  readonly pictureInPicture: boolean
+  readonly rewound: boolean
+  readonly seeker: ((seconds: number, orStart: boolean) => number | null) | null
+  readonly state: PlayerState
+  readonly userPaused: boolean
+  readonly visit: PlayerVisit
+}
+const waiting = new Map<string, WaitingVisit>()
+
 export const useHlsPlayer = (
   container: React.RefObject<HTMLElement | null>,
   channel: string,
   enabled: boolean,
   mode: LatencyMode,
   canGoLive = false,
+  grid?: PlayerGrid,
 ) => {
+  const hueco = grid?.hueco ?? 0
+  const inCell = grid?.inCell ?? false
+  const keepable = grid !== undefined
+  const startSilent = useRef(false)
+  startSilent.current = grid?.silent ?? false
   const [state, setState] = useState<PlayerState>(INITIAL)
   const [attempt, setAttempt] = useState(0)
   const [quality, setQualityState] = useState<string | null>(() => chosenLiveQuality())
@@ -170,10 +231,92 @@ export const useHlsPlayer = (
     setState((current) => ({ ...current, ...next }))
   }, [])
 
+  const visitNow = useRef<PlayerVisit | null>(null)
+  const justKept = useRef<PlayerVisit | null>(null) // recogido al montar: el efecto de abajo no crea otro
+  const leaving = useRef({ pictureInPicture, rewound, state })
+  leaving.current = { pictureInPicture, rewound, state }
+  // En el layout, porque es lo que corre antes de que React saque del documento la pantalla que se va y antes de pintar
+  // la nueva. Sin cuadrícula (keepable), no hace nada: al desmontar se destruye como siempre.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: solo al montar y al desmontar la pantalla.
+  useLayoutEffect(() => {
+    if (!keepable) return undefined
+    const element = container.current
+    const kept = waiting.get(channel)
+    if (
+      kept !== undefined &&
+      element !== null &&
+      enabled &&
+      kept.visit.hueco === hueco &&
+      kept.visit.mode === mode &&
+      kept.visit.quality === quality
+    ) {
+      waiting.delete(channel)
+      const { video } = kept.visit
+      element.replaceChildren(video)
+      kept.visit.owner = {
+        element,
+        latency,
+        patch,
+        seeker,
+        setPictureInPicture,
+        setRewound,
+        setState,
+      }
+      videoRef.current = video
+      visitNow.current = kept.visit
+      justKept.current = kept.visit
+      latency.current = kept.latency
+      seeker.current = kept.seeker
+      userPaused.current = kept.userPaused
+      setRewound(kept.rewound)
+      setPictureInPicture(kept.pictureInPicture)
+      // Una celda muda que pasa a verse sola suena como eligió la persona. En una celda, se encarga la cuadrícula.
+      const sound = inCell ? { muted: video.muted } : chosenVolume()
+      if (!inCell) {
+        video.volume = chosenVolume().volume
+        video.muted = sound.muted
+      }
+      setState({ ...kept.state, muted: sound.muted })
+    }
+    return () => {
+      const visit = visitNow.current
+      if (visit === null) return
+      visitNow.current = null
+      const stay: WaitingVisit = {
+        latency: latency.current,
+        pictureInPicture: leaving.current.pictureInPicture,
+        rewound: leaving.current.rewound,
+        seeker: seeker.current,
+        state: leaving.current.state,
+        userPaused: userPaused.current,
+        visit,
+      }
+      waiting.set(visit.channel, stay)
+      setTimeout(() => {
+        if (waiting.get(visit.channel) !== stay) return
+        waiting.delete(visit.channel)
+        visit.destroy()
+      }, 0)
+    }
+  }, [])
+
   // Una visita (o un reintento, o un cambio de calidad) = un <video> y un hls.js nuevos.
   useEffect(() => {
     const element = container.current
     if (!enabled || element === null) return undefined
+    const leave = (visit: PlayerVisit) => (): void => {
+      if (!inCell) void window.api.player.setWatching(false)
+      // Se ha quedado esperando (arriba) o ya es de otra pantalla: no es de este efecto destruirlo.
+      if (visitNow.current !== visit) return
+      visitNow.current = null
+      visit.destroy()
+    }
+    if (justKept.current !== null) {
+      const kept = justKept.current
+      justKept.current = null
+      if (!inCell) void window.api.player.setWatching(true)
+      return leave(kept)
+    }
     let active = true
     const abort = new AbortController()
     // Como el anterior (un reintento, otro canal) o, el primero, con lo que eligió la persona en otra pantalla.
@@ -184,51 +327,86 @@ export const useHlsPlayer = (
     // Un canal que nunca arranca se informa en vez de girar para siempre. El plazo es de cada visita: con otro canal
     // que también carga, la fase no cambia y un efecto aparte seguiría con el plazo del anterior.
     const stall = setTimeout(() => {
-      setState((current) =>
+      visit.owner.setState((current) =>
         current.phase === "loading" ? { ...current, phase: "stalled" } : current,
       )
     }, STALL_MS)
     userPaused.current = false
-    void window.api.player.setWatching(true)
+    if (!inCell) void window.api.player.setWatching(true)
     const video = document.createElement("video")
     video.className = "player__media"
     video.dataset["attempt"] = String(attempt) // un reintento crea un <video> nuevo
     video.autoplay = true
     video.playsInline = true
-    video.muted = sound.muted
+    video.muted = sound.muted || startSilent.current
     video.volume = sound.volume
     videoRef.current = video
     element.replaceChildren(video)
+    const visit: PlayerVisit = {
+      channel,
+      destroy: () => {
+        active = false
+        abort.abort()
+        clearTimeout(stall)
+        if (catchup !== undefined) clearInterval(catchup)
+        if (endWatch !== undefined) clearInterval(endWatch)
+        visit.owner.seeker.current = null
+        hls?.destroy()
+        video.pause()
+        video.removeAttribute("src")
+        video.load()
+        visit.owner.element.replaceChildren()
+      },
+      hueco,
+      mode,
+      owner: { element, latency, patch, seeker, setPictureInPicture, setRewound, setState },
+      quality,
+      video,
+    }
+    visitNow.current = visit
     let hls: Hls | undefined
     let catchup: ReturnType<typeof setInterval> | undefined
+    let endWatch: ReturnType<typeof setInterval> | undefined
 
     const start = (): void => {
       if (!active) return
       video.play().catch((error: unknown) => {
         if (active && error instanceof DOMException && error.name === "NotAllowedError") {
-          patch({ blocked: true, playing: false })
+          visit.owner.patch({ blocked: true, playing: false })
         }
       })
     }
     video.addEventListener(
       "playing",
-      () => active && patch({ blocked: false, phase: "ready", playing: true }),
+      () => active && visit.owner.patch({ blocked: false, phase: "ready", playing: true }),
     )
-    video.addEventListener("pause", () => active && patch({ playing: false }))
-    video.addEventListener("volumechange", () => active && patch({ muted: video.muted }))
-    video.addEventListener("enterpictureinpicture", () => active && setPictureInPicture(true))
-    video.addEventListener("leavepictureinpicture", () => active && setPictureInPicture(false))
+    video.addEventListener("pause", () => active && visit.owner.patch({ playing: false }))
+    video.addEventListener(
+      "volumechange",
+      () => active && visit.owner.patch({ muted: video.muted }),
+    )
+    video.addEventListener(
+      "enterpictureinpicture",
+      () => active && visit.owner.setPictureInPicture(true),
+    )
+    video.addEventListener(
+      "leavepictureinpicture",
+      () => active && visit.owner.setPictureInPicture(false),
+    )
 
     latency.current = null
-    const visit = crypto.randomUUID().replaceAll("-", "")
-    readInfo(channel, quality, mode, visit, abort.signal)
+    const visitId = crypto.randomUUID().replaceAll("-", "")
+    readInfo(channel, quality, mode, visitId, hueco, abort.signal)
       .then((info) => {
         if (!active) return
         if (info.offline) {
-          patch({ phase: "offline", playing: false })
+          visit.owner.patch({ phase: "offline", playing: false })
           return
         }
-        patch({ qualities: info.qualities, quality: info.playing ?? info.quality ?? "auto" })
+        visit.owner.patch({
+          qualities: info.qualities,
+          quality: info.playing ?? info.quality ?? "auto",
+        })
         const segmentTarget = SYNC_SEGMENTS * (info.segmentDuration ?? 2)
         const target =
           mode === "sin-paradas"
@@ -302,10 +480,32 @@ export const useHlsPlayer = (
             const time = video.currentTime
             player.recoverMediaError()
             player.startLoad(time > 0 ? time : -1)
-          } else if (active) patch({ phase: "error", playing: false })
+          } else if (active) visit.owner.patch({ phase: "error", playing: false })
         })
+        // Si la emisión termina con el canal abierto, la lista se queda como estaba, sin error, y hls.js seguiría
+        // esperando: parado STALL_MS y sin pausa, se pregunta si sigue (el empalme lo sabe, y contesta enseguida).
+        let lastTime = -1
+        let stuckSince = performance.now()
+        endWatch = setInterval(() => {
+          if (video.paused || video.currentTime !== lastTime) {
+            lastTime = video.currentTime
+            stuckSince = performance.now()
+          } else if (performance.now() - stuckSince >= STALL_MS) {
+            stuckSince = performance.now()
+            readInfo(channel, info.quality, mode, visitId, hueco, abort.signal)
+              .then((now) => {
+                if (active && now.offline) {
+                  hls?.destroy()
+                  visit.owner.patch({ phase: "offline", playing: false })
+                }
+              })
+              .catch(() => undefined) // no se sabe: sigue esperando
+          }
+        }, END_WATCH_MS)
         player.attachMedia(video) // primero: el MediaSource se abre mientras llega la lista
-        player.loadSource(`/stream/${channel}/live.m3u8${streamQuery(info.quality, mode, visit)}`)
+        player.loadSource(
+          `/stream/${channel}/live.m3u8${streamQuery(info.quality, mode, visitId, hueco)}`,
+        )
         // Margen según el modo (D11). Adaptativo: tras la primera pausa global del canal (llegan trozos del VOD) se
         // conserva el margen que deja el relleno, para que las siguientes no se noten; antes, lo que sobre se salta.
         // Sin paradas: el margen mínimo es fijo y lo que se añada (una parada) se conserva, hasta un tope, como en
@@ -315,6 +515,30 @@ export const useHlsPlayer = (
         player.on(Hls.Events.FRAG_LOADING, (_event, data) => {
           if (mode === "adaptativo" && data.frag.url.includes("/stream/vod")) keepMargin = true
         })
+        // Lo mismo tras una parada por falta de datos en un canal que entrega a trompicones (REN-2): sin saltar lo que
+        // ha añadido, la siguiente ya no para. Los canales que no se paran siguen con el margen corto.
+        let stalledAt: number | null = null
+        let started = false
+        video.addEventListener("waiting", () => {
+          if (started && !video.seeking && !video.paused) stalledAt = performance.now()
+        })
+        const notStalled = (): void => {
+          stalledAt = null
+        }
+        video.addEventListener("seeking", notStalled)
+        video.addEventListener("pause", notStalled)
+        video.addEventListener("playing", () => {
+          started = true
+          if (stalledAt === null) return
+          const stalled = (performance.now() - stalledAt) / 1000
+          stalledAt = null
+          if (
+            mode === "adaptativo" &&
+            stalled >= DELIVERY_STALL_MIN &&
+            stalled <= DELIVERY_STALL_MAX
+          )
+            keepMargin = true
+        })
         // Retroceder y avanzar unos segundos dentro de la lista (abarca ~100 s), sin pasar del objetivo del modo. Lo
         // retrocedido se conserva, como el margen de una pausa: sin acelerar y sin que hls.js salte al directo (solo si
         // se sale de la lista y se queda sin datos), hasta volver a él.
@@ -322,9 +546,9 @@ export const useHlsPlayer = (
         const setBack = (on: boolean): void => {
           back = on
           player.config.liveMaxLatencyDuration = on ? Number.POSITIVE_INFINITY : maxLatency
-          setRewound(on)
+          visit.owner.setRewound(on)
         }
-        seeker.current = (seconds, orStart) => {
+        visit.owner.seeker.current = (seconds, orStart) => {
           const details = player.latestLevelDetails
           const targetLatency = player.targetLatency
           if (details === null || targetLatency === null || video.readyState === 0) return null
@@ -360,7 +584,8 @@ export const useHlsPlayer = (
         }
         catchup = setInterval(() => {
           const playing = player.playingDate
-          latency.current = playing === null ? null : (Date.now() - playing.getTime()) / 1000
+          visit.owner.latency.current =
+            playing === null ? null : (Date.now() - playing.getTime()) / 1000
           const target = player.targetLatency
           if (target === null || video.paused || video.readyState < 3) return
           const extra = player.latency - target
@@ -395,23 +620,23 @@ export const useHlsPlayer = (
         }, 1000)
       })
       .catch(() => {
-        if (active) patch({ phase: "error", playing: false })
+        if (active) visit.owner.patch({ phase: "error", playing: false })
       })
 
-    return () => {
-      active = false
-      abort.abort()
-      clearTimeout(stall)
-      if (catchup !== undefined) clearInterval(catchup)
-      seeker.current = null
-      hls?.destroy()
-      video.pause()
-      video.removeAttribute("src")
-      video.load()
-      element.replaceChildren()
-      void window.api.player.setWatching(false)
-    }
-  }, [attempt, canGoLive, channel, container, enabled, mode, patch, platformHls, quality])
+    return leave(visit)
+  }, [
+    attempt,
+    canGoLive,
+    channel,
+    container,
+    enabled,
+    hueco,
+    inCell,
+    mode,
+    patch,
+    platformHls,
+    quality,
+  ])
 
   // Al volver a ser visible (tras apagarse la pantalla), sigue salvo que la persona hubiera pausado.
   useEffect(() => {
@@ -459,6 +684,17 @@ export const useHlsPlayer = (
     },
     [patch],
   )
+  // El sonido que le toca a una celda de la cuadrícula, sin guardarlo como elección de la persona.
+  const applySound = useCallback(
+    (sound: Volume) => {
+      const video = videoRef.current
+      if (video === undefined) return
+      video.volume = sound.volume
+      video.muted = sound.muted
+      patch({ muted: sound.muted })
+    },
+    [patch],
+  )
   // Volumen de 0 a 1 (la tele no lo usa: el del sistema). Subirlo quita el silencio.
   const setVolume = useCallback(
     (volume: number) => {
@@ -496,6 +732,7 @@ export const useHlsPlayer = (
   )
 
   return {
+    applySound,
     // La calidad elegida (null: automática); la que suena está en state.quality.
     chosenQuality: quality,
     latency,

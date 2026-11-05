@@ -53,6 +53,7 @@ import org.json.JSONObject
 // Para medir (medir/webview.mjs): «ruta» abre otra dirección de la página, p. ej.
 //   adb shell am start -n …/io.github.mateozariquiey.goodttv.MainActivity --es ruta "'/index.html?reproductor=b#/canal/x'"
 class MainActivity : Activity() {
+    private var paginaCaida = false // onRenderProcessGone: esta actividad ya no conserva dónde estaba
     private lateinit var web: WebView
     private lateinit var caja: CajaVideo
     private lateinit var reproductor: Reproductor
@@ -121,7 +122,10 @@ class MainActivity : Activity() {
         // Si el proceso de la página muere, la WebView ya no sirve: se crea otra con la actividad.
         // En el PiP no: la actividad nueva empezaría ya en el PiP, con la página a la vista y sin el canal, que se ha
         // caído con ella (el motor comparte su proceso). Se cierra la ventana.
-        web.webViewClient = Paginas(assets, RedNativa(), alCaer = { if (isInPictureInPictureMode) finish() else recreate() }) { url ->
+        web.webViewClient = Paginas(assets, RedNativa(), alCaer = {
+            paginaCaida = true
+            if (isInPictureInPictureMode) finish() else recreate()
+        }) { url ->
             // Twitch (twitch.tv/activate al vincular la cuenta) en una Custom Tab: el navegador del teléfono, con su
             // sesión de Twitch, encima de la app; al cerrarla se vuelve aquí. Sin navegador no se abre, y queda copiar
             // el código.
@@ -157,10 +161,13 @@ class MainActivity : Activity() {
             alPausar = { reproductor.pausar(it) },
             alMover = { caja.post { pip() } }, // tras colocarse
         )
-        // Al registro, solo los relevos entre solo audio y vídeo (pocos, sin datos de la sesión): para ver en el teléfono
-        // cómo fue cada uno.
-        val registrar = { datos: JSONObject -> if (datos.has("relevo")) Log.i("GoodTTVMedia3", datos.toString()) }
+        // Al registro, solo los relevos entre solo audio y vídeo y los fallos (pocos, sin datos de la sesión): para ver en el
+        // teléfono cómo fue cada uno.
+        val registrar = { datos: JSONObject -> if (datos.has("relevo") || datos.has("error")) Log.i("GoodTTVMedia3", datos.toString()) }
         reproductor = Reproductor(this, caja.vista, registrar = registrar, alCambiar = { estado ->
+            // En la esquina no hay aviso que leer: si ya no hay nada que ver (terminó la emisión, o se ha dejado de intentar),
+            // se quita.
+            if (caja.sitio == CajaVideo.Sitio.MINI && !reproductor.enMarcha) cerrarCanal()
             caja.pausado = estado.optBoolean("pausado")
             if (pipPausado != caja.pausado || pipActivo != pipConCanal()) pip()
             avisarPagina("goodttv-reproductor", estado)
@@ -210,7 +217,14 @@ class MainActivity : Activity() {
                 }
             }
         }
-        abrir(intent)
+        abrir(intent, savedInstanceState?.getString(PAGINA))
+    }
+
+    // Si Android mata la app sin verse, al volver a ella sigue en la misma pantalla (con el canal, otra vez en marcha).
+    // Tras caerse la página, no: si fue por lo que hay en ella, volvería a caerse sin fin.
+    override fun onSaveInstanceState(outState: Bundle) {
+        super.onSaveInstanceState(outState)
+        if (::web.isInitialized && !paginaCaida) web.url?.let { outState.putString(PAGINA, it) }
     }
 
     // Con la actividad ya abierta, una «ruta» nueva la carga; sin ella (volver desde el lanzador), la página sigue igual.
@@ -220,8 +234,10 @@ class MainActivity : Activity() {
     }
 
     // La página nueva empieza sin canal: el de la anterior se cierra (si no, seguiría sonando debajo).
-    private fun abrir(intent: Intent) {
-        val ruta = intent.getStringExtra("ruta")?.takeIf { it.startsWith("/") } ?: "/index.html"
+    private fun abrir(intent: Intent, anterior: String? = null) {
+        val ruta = anterior?.takeIf { it.startsWith("$ORIGEN/") }?.removePrefix(ORIGEN)
+            ?: intent.getStringExtra("ruta")?.takeIf { it.startsWith("/") }
+            ?: "/index.html"
         cerrarCanal()
         web.loadUrl(ORIGEN + ruta)
     }
@@ -266,7 +282,7 @@ class MainActivity : Activity() {
     private fun pip() {
         pipPausado = caja.pausado
         pipActivo = pipConCanal()
-        val nombre = if (caja.pausado) "Reproducir" else "Pausa"
+        val nombre = if (caja.pausado) Idioma.texto("Reproducir", "Play") else Idioma.texto("Pausa", "Pause")
         val pausa = RemoteAction(
             Icon.createWithResource(this, if (caja.pausado) R.drawable.mini_reproducir else R.drawable.mini_pausa),
             nombre,
@@ -384,6 +400,13 @@ class MainActivity : Activity() {
             else window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         }
 
+        @JavascriptInterface
+        fun fijarIdioma(idioma: String) = runOnUiThread {
+            Idioma.ingles = idioma == "en"
+            caja.rotular()
+            if (pipActivo == true) pip()
+        }
+
         // La sesión de Twitch, cifrada (Sesion.kt). Solo la página de la app llega aquí (Paginas no carga otras).
         @JavascriptInterface
         fun sesionLeer(): String? = sesion.leer()
@@ -437,7 +460,7 @@ class MainActivity : Activity() {
 
         // Volver a abrir el canal tras un fallo.
         @JavascriptInterface
-        fun canalReintentar() = runOnUiThread { reproductor.reabrir() }
+        fun canalReintentar() = runOnUiThread { reproductor.reintentar() }
 
         // La pausa, la esquina y la pantalla completa valen también para un VOD.
         @JavascriptInterface
@@ -527,6 +550,7 @@ class MainActivity : Activity() {
     }
 
     private companion object {
+        const val PAGINA = "pagina" // onSaveInstanceState: la dirección de la página
         // La MainActivity que hay, si hay.
         var actual: WeakReference<MainActivity>? = null
 

@@ -6,6 +6,7 @@ import { CHANNELS } from "../shared/channels"
 import { type StaticHttpsServer, startStaticHttpsServer } from "./https-server"
 import { createInputRouter } from "./input-router"
 import { registerIpc } from "./ipc"
+import { loadLocalCertificate } from "./local-certificate"
 import { localDataFile } from "./local-store"
 import { createPlayerInteraction } from "./player-interaction"
 import { savedHomeStore } from "./saved-home"
@@ -88,9 +89,6 @@ const createWindow = async (): Promise<void> => {
   if (rendererUrl !== undefined) {
     rendererOrigin = new URL(rendererUrl).origin
   } else {
-    const certificatesPath = app.isPackaged
-      ? join(process.resourcesPath, "certs")
-      : join(app.getAppPath(), "resources/certs")
     // Directo sin anuncios del reproductor propio (docs/decisiones.md, D11), en el mismo origen que la interfaz.
     streamService = createStreamService(
       process.env["GOODTTV_REGISTRO_EMPALME"] === "1" ? logStreamEvent : undefined,
@@ -98,9 +96,8 @@ const createWindow = async (): Promise<void> => {
     const stream = streamService
     staticServer = await startStaticHttpsServer({
       assetsPath: join(app.getAppPath(), "out/renderer"),
-      certificatePath: join(certificatesPath, "localhost-cert.pem"),
+      ...(await loadLocalCertificate(app.getPath("userData"))),
       dynamic: (request, response, pathname) => stream.handle(request, response, pathname),
-      keyPath: join(certificatesPath, "localhost-key.pem"),
     })
     rendererOrigin = staticServer.origin
 

@@ -61,28 +61,47 @@ const openPage = async (login: string | undefined, from?: chrome.tabs.Tab): Prom
   await tab
 }
 
+// El idioma del menú: el de la página, que lo deja en chrome.storage porque aquí no llega localStorage (goodttv.tsx). Si
+// aún no se ha abierto, el del sistema.
+const LANGUAGE_KEY = "idioma-menu"
+const menuTitle = async (): Promise<string> => {
+  const saved: unknown = (await chrome.storage.local.get(LANGUAGE_KEY))[LANGUAGE_KEY]
+  const language = typeof saved === "string" ? saved : navigator.language
+  return language.toLowerCase().startsWith("es") ? "Abrir en GoodTTV" : "Open in GoodTTV"
+}
+
 // En los enlaces a twitch.tv de cualquier web y en las páginas de twitch.tv (sin tocar la página: no hay scripts de
 // contenido). Fuera de la página de un canal, lleva a Inicio.
 const createMenus = (): void => {
-  chrome.contextMenus.removeAll(() => {
-    chrome.contextMenus.create({
-      contexts: ["link"],
-      id: "abrir-enlace",
-      targetUrlPatterns: [
-        "https://www.twitch.tv/*",
-        "https://twitch.tv/*",
-        "https://m.twitch.tv/*",
-      ],
-      title: "Abrir en GoodTTV",
-    })
-    chrome.contextMenus.create({
-      contexts: ["page"],
-      documentUrlPatterns: ["https://www.twitch.tv/*"],
-      id: "abrir-pagina",
-      title: "Abrir en GoodTTV",
-    })
-  })
+  void menuTitle().then((title) =>
+    chrome.contextMenus.removeAll(() => {
+      chrome.contextMenus.create({
+        contexts: ["link"],
+        id: "abrir-enlace",
+        targetUrlPatterns: [
+          "https://www.twitch.tv/*",
+          "https://twitch.tv/*",
+          "https://m.twitch.tv/*",
+        ],
+        title,
+      })
+      chrome.contextMenus.create({
+        contexts: ["page"],
+        documentUrlPatterns: ["https://www.twitch.tv/*"],
+        id: "abrir-pagina",
+        title,
+      })
+    }),
+  )
 }
+
+// Si la página cambia de idioma, el menú también.
+chrome.storage.onChanged.addListener((changes, area) => {
+  if (area !== "local" || changes[LANGUAGE_KEY] === undefined) return
+  void menuTitle().then((title) => {
+    for (const id of ["abrir-enlace", "abrir-pagina"]) chrome.contextMenus.update(id, { title })
+  })
+})
 
 chrome.contextMenus.onClicked.addListener((info, tab) => {
   void openPage(channelFromTwitchUrl(info.linkUrl ?? info.pageUrl), tab)

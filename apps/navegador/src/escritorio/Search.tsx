@@ -1,4 +1,11 @@
-import { type Channel, formatViewers, fromSearch, searchChannels } from "@goodttv/interfaz"
+import {
+  type Channel,
+  formatViewers,
+  fromSearch,
+  idiomaActual,
+  searchChannels,
+  t,
+} from "@goodttv/interfaz"
 import { MagnifyingGlassIcon } from "@phosphor-icons/react"
 import { type KeyboardEvent, type RefObject, useEffect, useId, useRef, useState } from "react"
 import { Avatar } from "./Avatar"
@@ -11,7 +18,8 @@ import { Avatar } from "./Avatar"
 const LOGIN = /^[a-zA-Z0-9_]{1,25}$/
 const MAX_RESULTS = 8
 const SEARCH_DELAY_MS = 150
-const compact = new Intl.NumberFormat("es", { maximumFractionDigits: 1, notation: "compact" })
+const compact = (): Intl.NumberFormat =>
+  new Intl.NumberFormat(idiomaActual(), { maximumFractionDigits: 1, notation: "compact" })
 
 type Results =
   | { readonly kind: "idle" }
@@ -113,7 +121,7 @@ export const Search = ({
           aria-autocomplete="list"
           aria-controls={`${id}-list`}
           aria-expanded={open}
-          aria-label="Buscar canal"
+          aria-label={t("Buscar canal")}
           autoComplete="off"
           onBlur={() => setFocused(false)}
           onChange={(event) => {
@@ -123,7 +131,7 @@ export const Search = ({
           }}
           onFocus={() => setFocused(true)}
           onKeyDown={onKeyDown}
-          placeholder="Buscar canal"
+          placeholder={t("Buscar canal")}
           ref={inputRef}
           role="combobox"
           spellCheck={false}
@@ -134,7 +142,7 @@ export const Search = ({
       </label>
       {open ? (
         <div className="search__popup">
-          <div aria-label="Canales" className="search__list" id={`${id}-list`} role="listbox">
+          <div aria-label={t("Canales")} className="search__list" id={`${id}-list`} role="listbox">
             {options.map((channel, index) => (
               <div
                 aria-selected={index === selected}
@@ -153,7 +161,7 @@ export const Search = ({
               >
                 {channel === exact ? (
                   <span className="search__exact">
-                    Abrir el canal <b>{text}</b>
+                    {t("Abrir el canal")} <b>{text}</b>
                   </span>
                 ) : (
                   <>
@@ -164,7 +172,7 @@ export const Search = ({
                         {[
                           channel.followers === undefined
                             ? null
-                            : `${compact.format(channel.followers)} seguidores`,
+                            : t("{n} seguidores", { n: compact().format(channel.followers) }),
                           channel.category || null,
                         ]
                           .filter((each) => each !== null)
@@ -175,7 +183,7 @@ export const Search = ({
                       <span className="live-count">
                         <i aria-hidden="true" />
                         {channel.viewerCount === undefined
-                          ? "En directo"
+                          ? t("En directo")
                           : formatViewers(channel.viewerCount)}
                       </span>
                     ) : null}
@@ -184,12 +192,12 @@ export const Search = ({
               </div>
             ))}
           </div>
-          {results.kind === "loading" ? <p className="search__note">Buscando…</p> : null}
+          {results.kind === "loading" ? <p className="search__note">{t("Buscando…")}</p> : null}
           {results.kind === "ready" && found.length === 0 ? (
-            <p className="search__note">Twitch no encuentra ningún canal así.</p>
+            <p className="search__note">{t("Twitch no encuentra ningún canal así.")}</p>
           ) : null}
           {results.kind === "error" ? (
-            <p className="search__note">No se pudo buscar. Inténtalo otra vez.</p>
+            <p className="search__note">{t("No se pudo buscar. Inténtalo otra vez.")}</p>
           ) : null}
         </div>
       ) : null}

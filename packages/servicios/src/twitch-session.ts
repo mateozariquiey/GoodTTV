@@ -205,7 +205,7 @@ export class TwitchSession {
       return this.#validateTokenResponse(installed.token, false, installed.revision)
     }
     await this.clearIfCurrent(revision)
-    throw new ConfigurationError("Your Twitch session expired. Sign in again")
+    throw new ConfigurationError("Tu sesión de Twitch ha caducado. Vuelve a vincular la cuenta")
   }
 
   // La cuenta, junto al token, para no esperar a validarlo la próxima vez que se abra (#usable). Solo si sigue siendo esta
@@ -256,7 +256,7 @@ export class TwitchSession {
       if (revision !== this.#generation) throw new SessionChangedError()
       if (stored === undefined) {
         await this.#clearUnlocked(revision)
-        throw new ConfigurationError("Your Twitch session expired. Sign in again")
+        throw new ConfigurationError("Tu sesión de Twitch ha caducado. Vuelve a vincular la cuenta")
       }
       if (stored.refreshToken !== token.refreshToken) return this.#installToken(stored, revision)
       return this.#refreshWith(token, revision)
@@ -278,7 +278,7 @@ export class TwitchSession {
       if (error instanceof HTTPError && [400, 401, 403, 404].includes(error.response.status)) {
         if (revision !== this.#generation) throw new SessionChangedError()
         await this.#clearUnlocked(revision)
-        throw new ConfigurationError("Your Twitch session expired. Sign in again")
+        throw new ConfigurationError("Tu sesión de Twitch ha caducado. Vuelve a vincular la cuenta")
       }
       throw error
     }
@@ -325,7 +325,7 @@ export class TwitchSession {
   async #requireToken(): Promise<StoredToken> {
     const token = await this.#vault.load()
     if (token === undefined) {
-      throw new ConfigurationError("Sign in to Twitch to browse streams")
+      throw new ConfigurationError("Vincula tu cuenta de Twitch para ver los directos")
     }
     return token
   }
@@ -333,7 +333,7 @@ export class TwitchSession {
   async #requireClientId(): Promise<string> {
     const settings = await this.#settings.load()
     if (settings.clientId === "") {
-      throw new ConfigurationError("This build has no Twitch Client ID")
+      throw new ConfigurationError("Esta compilación no tiene Client ID de Twitch")
     }
     return settings.clientId
   }

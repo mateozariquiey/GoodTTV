@@ -4,6 +4,7 @@
 export * from "./canales"
 export * from "./directo"
 export * from "./directo-fetch"
+export * from "./directo-huecos"
 export * from "./empalme"
 export * from "./media-time"
 export * from "./playlist"

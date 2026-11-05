@@ -5,7 +5,9 @@ import {
   formatViewers,
   isSeen,
   prefetchVod,
+  t,
   unfinishedVods,
+  useIdioma,
   vodProgress,
 } from "@goodttv/interfaz"
 import { FilmStripIcon } from "@phosphor-icons/react"
@@ -35,7 +37,9 @@ export const VideoItem = ({
   const datos = [
     channel,
     formatAgo(video.createdAt),
-    video.views === undefined ? undefined : `${formatViewers(video.views)} visualizaciones`,
+    video.views === undefined
+      ? undefined
+      : t("{n} visualizaciones", { n: formatViewers(video.views) }),
   ].filter((each) => each !== undefined && each !== "")
   return (
     <li>
@@ -57,9 +61,9 @@ export const VideoItem = ({
           )}
           <span className="video__duracion">{formatClock(video.seconds)}</span>
           {current ? (
-            <span className="video__visto">Viéndolo</span>
+            <span className="video__visto">{t("Viéndolo")}</span>
           ) : seen ? (
-            <span className="video__visto">Visto</span>
+            <span className="video__visto">{t("Visto")}</span>
           ) : null}
           {ratio === null ? null : (
             <span className="video__progreso">
@@ -68,7 +72,7 @@ export const VideoItem = ({
           )}
         </span>
         <span className="directo__texto">
-          <span className="directo__titulo video__titulo">{video.title || "Sin título"}</span>
+          <span className="directo__titulo video__titulo">{video.title || t("Sin título")}</span>
           <span className="directo__categoria">{datos.join(" · ")}</span>
         </span>
       </a>
@@ -90,6 +94,7 @@ export const ChannelVideos = memo(function ChannelVideos({
   readonly current?: string // el VOD que se está viendo
   readonly login: string
 }) {
+  useIdioma() // con memo no se vuelve a pintar solo al cambiar el idioma
   const [loaded, setLoaded] = useState<Loaded>({ kind: "loading" })
   useEffect(() => {
     const vods = window.api.vods
@@ -115,24 +120,26 @@ export const ChannelVideos = memo(function ChannelVideos({
     [current, login],
   )
   return (
-    <section aria-label="Vídeos" className="videos">
+    <section aria-label={t("Vídeos")} className="videos">
       {unfinished.length === 0 ? null : (
         <>
-          <h2 className="seccion">Seguir viendo</h2>
+          <h2 className="seccion">{t("Seguir viendo")}</h2>
           <ul className="directos">
             {unfinished.map((entry) => (
               <VideoItem key={entry.id} video={entry} />
             ))}
           </ul>
-          <h2 className="seccion">Todos</h2>
+          <h2 className="seccion">{t("Todos")}</h2>
         </>
       )}
       {loaded.kind === "loading" ? (
-        <p className="nota">Cargando…</p>
+        <p className="nota">{t("Cargando…")}</p>
       ) : loaded.kind === "error" ? (
-        <p className="nota">No se pudieron cargar.</p>
+        <p className="nota">{t("No se pudieron cargar.")}</p>
       ) : videos.length === 0 ? (
-        <p className="nota">Este canal no guarda sus emisiones, o son solo para suscriptores.</p>
+        <p className="nota">
+          {t("Este canal no guarda sus emisiones, o son solo para suscriptores.")}
+        </p>
       ) : (
         <ul className="directos">
           {videos.map((video) => (

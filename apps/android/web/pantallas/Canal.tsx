@@ -9,9 +9,11 @@ import {
   prefetchVod,
   renewVod,
   TWITCH_VIEWER_LATENCY,
+  t,
   toRecent,
   useBehind,
   useChat,
+  useIdioma,
   VOD_WARM_MS,
 } from "@goodttv/interfaz"
 import {
@@ -30,6 +32,7 @@ import { BarraTiempo } from "./BarraTiempo"
 import { Chat, type Escritura } from "./Chat"
 import { Avatar } from "./comun"
 import {
+  AvisoReconexion,
   Centro,
   type Pestana,
   Pestanas,
@@ -128,7 +131,7 @@ export const Canal = ({
   useMandos(
     `canal/${details.login}`,
     details.displayName,
-    details.title ?? "En directo",
+    details.title ?? t("En directo"),
     details.profileImageUrl,
   )
   const latest = useRef(details)
@@ -173,7 +176,7 @@ export const Canal = ({
   const chatDelay = useCallback((): number | null => {
     const seconds = latency.current
     if (seconds !== null) return Math.max(0, seconds - TWITCH_VIEWER_LATENCY)
-    return fase === "cargando" || fase === "reproduciendo" ? null : 0
+    return fase === "sin-directo" || fase === "error" ? 0 : null
   }, [latency, fase])
 
   // DVR-1: la emisión en curso y el VOD que la graba. Sin VOD público, solo se retrocede lo que cabe en la lista.
@@ -322,7 +325,7 @@ export const Canal = ({
         {franja ? (
           <div className="franja">
             <button
-              aria-label="Volver"
+              aria-label={t("Volver")}
               className="boton-icono"
               onClick={(event) => {
                 event.stopPropagation()
@@ -333,7 +336,8 @@ export const Canal = ({
               <ArrowLeftIcon />
             </button>
             <p role="status">
-              {details.displayName} no está en directo ahora. Sus emisiones anteriores, debajo.
+              {details.displayName}{" "}
+              {t("no está en directo ahora. Sus emisiones anteriores, debajo.")}
             </p>
           </div>
         ) : (
@@ -350,7 +354,7 @@ export const Canal = ({
             >
               <div className="controles__fila">
                 <button
-                  aria-label="Volver"
+                  aria-label={t("Volver")}
                   className="boton-icono boton-icono--claro"
                   onClick={(event) => {
                     event.stopPropagation()
@@ -372,7 +376,9 @@ export const Canal = ({
                   <span className="controles__lado" />
                 ) : (
                   <button
-                    aria-label={`Canal anterior: ${anterior.displayName}`}
+                    aria-label={t("Canal anterior: {displayName}", {
+                      displayName: anterior.displayName,
+                    })}
                     className="boton-icono boton-icono--claro boton-icono--lado"
                     onClick={() => {
                       onStep(anterior)
@@ -402,7 +408,9 @@ export const Canal = ({
                   <span className="controles__lado" />
                 ) : (
                   <button
-                    aria-label={`Canal siguiente: ${siguiente.displayName}`}
+                    aria-label={t("Canal siguiente: {displayName}", {
+                      displayName: siguiente.displayName,
+                    })}
                     className="boton-icono boton-icono--claro boton-icono--lado"
                     onClick={() => {
                       onStep(siguiente)
@@ -423,7 +431,7 @@ export const Canal = ({
                     duracion={dvr.duration}
                     etiqueta={(at) =>
                       dvr.duration - at < DVR_MIN_BACK_S
-                        ? "En directo"
+                        ? t("En directo")
                         : `−${formatClock(dvr.duration - at)}`
                     }
                     onArrastrar={(on) => {
@@ -452,24 +460,24 @@ export const Canal = ({
                       }}
                       type="button"
                     >
-                      <i aria-hidden="true" />
-                      Ir al directo
+                      <i aria-hidden="true" /> {t("Ir al directo")}
                     </button>
                   ) : enDirecto ? (
                     <span className="en-directo en-directo--claro">
-                      <i aria-hidden="true" />
-                      En directo
+                      <i aria-hidden="true" /> {t("En directo")}
                     </span>
                   ) : null}
                   {enDirecto && !estado.retrocedido && behind !== null && behind >= 1 ? (
-                    <span className="por-detras">{behind} s por detrás</span>
+                    <span className="por-detras">
+                      {behind} {t("s por detrás")}
+                    </span>
                   ) : null}
                   <span className="controles__hueco" />
                   {estado.calidad === null ? null : (
                     <span className="calidad">{estado.calidad}</span>
                   )}
                   <button
-                    aria-label={chatVisible ? "Ocultar el chat" : "Mostrar el chat"}
+                    aria-label={chatVisible ? t("Ocultar el chat") : t("Mostrar el chat")}
                     aria-pressed={chatVisible}
                     className="boton-icono boton-icono--claro boton-icono--chat"
                     onClick={toggleChat}
@@ -478,7 +486,9 @@ export const Canal = ({
                     <ChatTextIcon />
                   </button>
                   <button
-                    aria-label={horizontal ? "Salir de la pantalla completa" : "Pantalla completa"}
+                    aria-label={
+                      horizontal ? t("Salir de la pantalla completa") : t("Pantalla completa")
+                    }
                     className="boton-icono boton-icono--claro"
                     onClick={() => {
                       android.canalPantallaCompleta(!horizontal)
@@ -496,7 +506,9 @@ export const Canal = ({
       </div>
       <div className="canal__lado">
         {horizontal ? null : <Ficha channel={details} following={following} live={enDirecto} />}
-        {horizontal ? null : <Pestanas elegida={pestana} onElegir={setPestana} videos="Vídeos" />}
+        {horizontal ? null : (
+          <Pestanas elegida={pestana} onElegir={setPestana} videos={t("Vídeos")} />
+        )}
         <CanalChat
           broadcasterId={signedIn ? details.userId : undefined}
           canChat={canChat}
@@ -537,6 +549,7 @@ const CanalChat = memo(
     readonly signedIn: boolean
     readonly visible: boolean
   }) => {
+    useIdioma() // con memo no se vuelve a pintar solo al cambiar el idioma
     const chat = useChat(broadcasterId, reading, delay)
     const writing: Escritura =
       !signedIn || chat.send === undefined ? "no" : canChat ? "si" : "vincular"
@@ -570,12 +583,12 @@ const Ficha = ({
         )}
         {channel.viewerCount === undefined ? null : (
           <span className="ficha__espectadores">
-            <UserIcon aria-label="Espectadores" />
+            <UserIcon aria-label={t("Espectadores")} />
             {formatViewers(channel.viewerCount)}
           </span>
         )}
         {channel.startedAt === undefined ? null : (
-          <span title="Tiempo en directo">{formatUptime(channel.startedAt)}</span>
+          <span title={t("Tiempo en directo")}>{formatUptime(channel.startedAt)}</span>
         )}
       </p>
     </div>
@@ -585,7 +598,7 @@ const Ficha = ({
         href={`https://www.twitch.tv/${channel.login}`}
       >
         <HeartIcon aria-hidden="true" size={18} weight={following ? "fill" : "regular"} />
-        {following ? "Siguiendo" : "Seguir"}
+        {following ? t("Siguiendo") : t("Seguir")}
       </a>
     )}
   </section>
@@ -609,7 +622,7 @@ const FichaEncima = ({ channel }: { readonly channel: Channel }) => (
             : ` · ${channel.category}`}
           {channel.viewerCount === undefined
             ? null
-            : ` · ${formatViewers(channel.viewerCount)} espectadores`}
+            : ` · ${t("{n} espectadores", { n: formatViewers(channel.viewerCount) })}`}
         </span>
       </p>
       {channel.title === undefined ? null : <p className="encima__titulo">{channel.title}</p>}
@@ -635,14 +648,17 @@ const Aviso = ({
     fase === "cargando" ||
     (fase === "reproduciendo" && estado.esperando && !estado.pausado && !showControls)
   ) {
-    return <div aria-label="Cargando" className="girando" role="status" />
+    return <div aria-label={t("Cargando")} className="girando" role="status" />
   }
+  if (fase === "reconectando" || fase === "sin-red") return <AvisoReconexion fase={fase} />
   if (fase === "reproduciendo") return null
   return (
     <div className="escenario__aviso" role="alert">
       {fase === "sin-directo" ? (
         <>
-          <p>{channel.displayName} no está en directo ahora.</p>
+          <p>
+            {channel.displayName} {t("no está en directo ahora.")}
+          </p>
           <button
             className="boton"
             onClick={(event) => {
@@ -651,12 +667,12 @@ const Aviso = ({
             }}
             type="button"
           >
-            Volver
+            {t("Volver")}
           </button>
         </>
       ) : (
         <>
-          <p>No se pudo preparar el directo sin anuncios.</p>
+          <p>{t("No se pudo preparar el directo sin anuncios.")}</p>
           <button
             className="boton boton--principal"
             onClick={(event) => {
@@ -665,7 +681,7 @@ const Aviso = ({
             }}
             type="button"
           >
-            Reintentar
+            {t("Reintentar")}
           </button>
         </>
       )}

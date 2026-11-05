@@ -68,7 +68,9 @@ const { FakeHls, players } = vi.hoisted(() => {
     }
     attachMedia(): void {}
     loadSource(): void {}
-    destroy(): void {}
+    destroy(): void {
+      this.calls.push("destroy")
+    }
     recoverMediaError(): void {
       this.calls.push("recoverMediaError")
     }
@@ -285,6 +287,79 @@ describe("margen que sobra", () => {
     expect(current?.rewound).toBe(false)
   })
 
+  // Un canal que entrega a trompicones (REN-2): lo que añade la parada es el margen que le faltaba.
+  const stallFor = (video: HTMLVideoElement, ms: number): void => {
+    fire(video, "waiting")
+    wait(ms)
+    fire(video, "playing")
+  }
+
+  it("tras una parada de unos segundos, en Adaptativo, conserva el retraso y la siguiente ya no para", async () => {
+    const { player, video } = await open()
+    fire(video, "playing")
+    wait(60_000)
+    stallFor(video, 5000)
+    player.latency = 10
+    second()
+    expect(video.currentTime).toBe(10)
+    expect(player.targetLatency).toBe(10)
+  })
+
+  it("un tropiezo de menos de 1 s, o una pausa global sin VOD, no cambian el margen", async () => {
+    for (const ms of [500, 30_000]) {
+      const { player, video } = await open()
+      fire(video, "playing")
+      wait(60_000)
+      stallFor(video, ms)
+      player.latency = 8
+      second()
+      expect(video.currentTime, `${ms}`).toBe(13)
+      expect(player.targetLatency, `${ms}`).toBe(5)
+      act(() => root?.unmount())
+    }
+  })
+
+  it("la espera del arranque, la de un salto y las del modo directo no cuentan como parada", async () => {
+    const arranque = await open()
+    stallFor(arranque.video, 5000) // aún no había empezado
+    arranque.player.latency = 8
+    second()
+    expect(arranque.video.currentTime).toBe(13)
+    act(() => root?.unmount())
+
+    const salto = await open()
+    fire(salto.video, "playing")
+    fire(salto.video, "waiting")
+    fire(salto.video, "seeking")
+    wait(5000)
+    fire(salto.video, "playing")
+    salto.player.latency = 8
+    second()
+    expect(salto.video.currentTime).toBe(13)
+    act(() => root?.unmount())
+
+    canGoLive = false // sin esto, lo pausado se conserva como lo retrocedido, y no se vería
+    const pausa = await open()
+    fire(pausa.video, "playing")
+    fire(pausa.video, "waiting")
+    wait(100)
+    fire(pausa.video, "pause") // la persona pausa en plena espera: esos segundos no son falta de datos
+    wait(5000)
+    fire(pausa.video, "playing")
+    pausa.player.latency = 8
+    second()
+    expect(pausa.video.currentTime).toBe(13)
+    act(() => root?.unmount())
+
+    mode = "directo"
+    const directo = await open()
+    fire(directo.video, "playing")
+    stallFor(directo.video, 5000)
+    directo.player.latency = 8
+    second()
+    expect(directo.video.currentTime).toBe(13)
+  })
+
   it("con la lista parada no salta: ese retraso no es margen que sobre", async () => {
     const { player, video } = await open()
     fire(video, "playing")
@@ -395,5 +470,101 @@ describe("canal que no arranca", () => {
     expect(phase).toBe("loading")
     wait(18_000)
     expect(phase).toBe("stalled")
+  })
+})
+
+// Entrar y salir de la cuadrícula sin cortar el vídeo (EXT-6, D42).
+describe("el reproductor cambia de pantalla", () => {
+  const hook = { current: undefined as ReturnType<typeof useHlsPlayer> | undefined }
+  // Lo que esté esperando a que lo recojan se destruye: si no, lo recogería la prueba siguiente.
+  afterEach(() => {
+    act(() => root?.unmount())
+    root = undefined
+    wait(0)
+  })
+  const Screen = ({
+    channel,
+    grid,
+    tag,
+  }: {
+    readonly channel: string
+    readonly grid: boolean
+    readonly tag: "article" | "section"
+  }) => {
+    const surface = useRef<HTMLElement>(null)
+    hook.current = useHlsPlayer(
+      surface,
+      channel,
+      true,
+      "adaptativo",
+      true,
+      grid ? { hueco: 0, inCell: tag === "section", silent: false } : undefined,
+    )
+    return createElement(tag, { ref: surface })
+  }
+  // Dos componentes distintos, como ChannelView y GridView: React quita uno y monta el otro en el mismo commit.
+  const Solo = (props: { readonly channel: string; readonly grid: boolean }) =>
+    createElement(Screen, { ...props, tag: "article" })
+  const Celda = (props: { readonly channel: string; readonly grid: boolean }) =>
+    createElement(Screen, { ...props, tag: "section" })
+  const render = async (kind: typeof Solo, channel: string, grid: boolean): Promise<void> => {
+    await act(async () => root?.render(createElement(kind, { channel, grid })))
+  }
+  const start = async (grid = true): Promise<HTMLVideoElement> => {
+    root = createRoot(document.body.appendChild(document.createElement("div")))
+    await render(Solo, "a", grid)
+    const video = document.querySelector("video")
+    if (video === null) throw new Error("sin vídeo")
+    return video
+  }
+
+  it("sigue el mismo <video> y el mismo hls.js, en la nueva pantalla", async () => {
+    const video = await start()
+    await render(Celda, "a", true)
+    wait(1000)
+    expect(document.querySelector("section video")).toBe(video)
+    expect(players).toHaveLength(1)
+    expect(players[0]?.calls).not.toContain("destroy")
+  })
+
+  it("lo que hace después llega a la pantalla nueva", async () => {
+    const video = await start()
+    await render(Celda, "a", true)
+    fire(video, "playing")
+    expect(hook.current?.state.phase).toBe("ready")
+    expect(hook.current?.state.playing).toBe(true)
+  })
+
+  it("y de vuelta, también", async () => {
+    const video = await start()
+    await render(Celda, "a", true)
+    await render(Solo, "a", true)
+    wait(1000)
+    expect(document.querySelector("article video")).toBe(video)
+    expect(players).toHaveLength(1)
+  })
+
+  it("otro canal en la pantalla nueva: el de antes se destruye y hay otro", async () => {
+    await start()
+    await render(Celda, "b", true)
+    wait(0)
+    expect(players[0]?.calls).toContain("destroy")
+    expect(players).toHaveLength(2)
+  })
+
+  it("si nadie lo recoge, se destruye en la tarea siguiente", async () => {
+    await start()
+    act(() => root?.render(null))
+    expect(players[0]?.calls).not.toContain("destroy")
+    wait(0)
+    expect(players[0]?.calls).toContain("destroy")
+  })
+
+  it("sin la cuadrícula, ni espera: se destruye al desmontar y hay otro <video>", async () => {
+    const video = await start(false)
+    await render(Celda, "a", false)
+    expect(players[0]?.calls).toContain("destroy")
+    expect(document.querySelector("section video")).not.toBe(video)
+    expect(players).toHaveLength(2)
   })
 })

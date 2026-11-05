@@ -1,6 +1,6 @@
 {
   "name": "@goodttv/navegador",
-  "version": "0.4.1",
+  "version": "0.5.0",
   "private": true,
   "description": "GoodTTV en el navegador: extensión de Chrome y Firefox con el reproductor propio sin anuncios",
   "type": "module",
@@ -32,6 +32,6 @@
     "@types/react-dom": "19.2.7",
     "@vitejs/plugin-react": "6.1.1",
     "jsdom": "30.0.1",
-    "vite": "8.2.2"
+    "vite": "8.2.4"
   }
 }

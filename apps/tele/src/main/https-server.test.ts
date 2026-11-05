@@ -4,6 +4,7 @@ import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { afterAll, beforeAll, describe, expect, it } from "vitest"
 import { type StaticHttpsServer, startStaticHttpsServer } from "./https-server"
+import { createLocalCertificate } from "./local-certificate"
 
 type Response = {
   readonly body: string
@@ -41,8 +42,7 @@ describe("static HTTPS server", () => {
     await writeFile(join(assetsPath, "index.html"), "<h1>VacuumStream</h1>")
     server = await startStaticHttpsServer({
       assetsPath,
-      certificatePath: join(import.meta.dirname, "../../resources/certs/localhost-cert.pem"),
-      keyPath: join(import.meta.dirname, "../../resources/certs/localhost-key.pem"),
+      ...createLocalCertificate(),
     })
   })
 

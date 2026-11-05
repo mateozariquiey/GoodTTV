@@ -35,7 +35,10 @@ const stream = (login: string): StreamCard => ({
 
 const MATEO = { displayName: "Mateo", kind: "authenticated", login: "mateo" } as const
 const OFFLINE = { kind: "unreachable", message: "fetch failed" } as const
-const EXPIRED = { kind: "error", message: "Your Twitch session expired. Sign in again" } as const
+const EXPIRED = {
+  kind: "error",
+  message: "Tu sesión de Twitch ha caducado. Vuelve a vincular la cuenta",
+} as const
 // Lo guardado hace horas, y lo de hace un minuto (otra pestaña).
 const SAVED: SavedHome = {
   account: MATEO,
@@ -127,7 +130,7 @@ describe("Inicio al abrir", () => {
 
   it("si lo pedido antes de saber la cuenta falla, no es un error hasta que la cuenta lo diga", async () => {
     api.catalog.followed.mockImplementationOnce(async () => {
-      throw new Error("Your Twitch session expired. Sign in again")
+      throw new Error("Tu sesión de Twitch ha caducado. Vuelve a vincular la cuenta")
     })
     await show(undefined)
     expect(home?.resource.kind).toBe("loading")

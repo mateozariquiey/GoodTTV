@@ -8,21 +8,21 @@ export class ConfigurationError extends Error {
 // Helix answered with an error status (after refreshing the token once on 401).
 export class TwitchRequestError extends ConfigurationError {
   public constructor(readonly status: number) {
-    super(`Twitch request failed (${status})`)
+    super(`Twitch ha dado un error ${status}`)
     this.name = "TwitchRequestError"
   }
 }
 
 export class SessionChangedError extends Error {
   public constructor() {
-    super("The Twitch session changed while an operation was in progress")
+    super("La sesión de Twitch ha cambiado durante la operación")
     this.name = "SessionChangedError"
   }
 }
 
 export class TwitchUnavailableError extends Error {
   public constructor(status: number) {
-    super(`Twitch authentication is unavailable (${status})`)
+    super(`No se puede autenticar con Twitch ahora mismo: error ${status}`)
     this.name = "TwitchUnavailableError"
   }
 }

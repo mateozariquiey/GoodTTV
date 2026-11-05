@@ -759,6 +759,55 @@ TV el mismo día: el usuario la probó con el mando (abrir, reproducir, cambiar 
   - rebajó REN-4 y REP-7 de causa a hipótesis;
   - aclaró que lo probado en el mini PC es la 0.2.2.
 
+## Electron 44.10.2 y el `SIGSEGV` de `verify`
+
+4 de noviembre. `bun run verify` llevaba desde octubre fallando en `D-cycle-20-1` (la prueba del bloqueo de perfil de la
+tele) con un `SIGSEGV` en el segundo proceso. **Era un fallo de la combinación entre la prueba y el entorno, no del
+producto,** y su causa es un error de Chromium.
+
+- **Causa:** `XCursorLoader` crea `rm_cache_` antes que `rm_xcursor_theme_` (en ese orden se declaran). Con la conexión a X
+  rota, la caché responde dentro de su propio constructor y llama a `OnPropertyChanged`, que asigna a una cadena aún sin
+  construir. Si los restos de esa memoria parecen una cadena larga, escribe a través de un puntero basura. En el volcado,
+  ese puntero era el texto `de_modul`, un trozo de la ruta `node_modules/electron`. Fuentes: la pila, sacada con los
+  símbolos de Electron, y `ui/base/x/x11_cursor_loader.{h,cc}`.
+- **Por qué solo fallaba a veces:** hacen falta tres cosas a la vez, y la tercera depende de la ruta.
+  - `--headless` en Electron **no** cambia a Ozone headless: sigue en X11 y además se salta el error «Missing X server».
+  - Ningún servidor X al que conectarse: es lo normal en un servicio sin sesión gráfica, como los agentes. Con Xvfb no falla.
+  - Unos restos concretos en memoria. Con la 44.8.0 y la misma prueba fallaba desde la raíz del repo (3 de 3), y pasaba desde
+    `apps`, `apps/tele`, `packages`, `/tmp` y el directorio personal. En un barrido de 71 carpetas de trabajo, cayó en 2.
+- **Dos errores de la nota anterior:** «solo con todo el repo» era en realidad la carpeta de trabajo. Lanzar ese archivo
+  solo desde la raíz fallaba 5 de 5, y desde `apps/tele` pasaba 3 de 3, así que no influían las demás pruebas ni la
+  carga. «Desde el reinicio del 31 de octubre» tampoco era cierto: hay volcados iguales del 24 de octubre.
+- **El producto no cae:** con la app real, desde la raíz, la segunda instancia sale con 0 en 0,2-0,3 s y la primera sigue viva,
+  tanto en X11 (Xvfb) como en Wayland (Weston), con y sin `--ozone-platform`. Sin pantalla da exit 1 con «Missing X server». La
+  app no pasa `--headless`, así que no llega a esa vía.
+- **Arreglo:** la prueba usa `--ozone-platform=headless`, que no toca X. Sigue comprobando el bloqueo con Electron de verdad:
+  al cambiarla para que cada proceso use un perfil distinto, falla (`expected 'owner' to be 'contender'`).
+  Esa comprobación destapó otro fallo de la prueba: si fallaba, el aspirante seguía vivo, huérfano. Ahora se cierran todos.
+- **La subida de Electron no lo arregla:** con la 44.10.2 (Chromium 152.0.7977.169) y `--headless`, no cae en esas 71
+  carpetas, pero un punto de ruptura muestra que `OnPropertyChanged` sigue llamándose dentro del constructor. Solo
+  cambian los restos de memoria, que en esa ejecución eran ceros.
+
+Electron pasa de 44.8.0 a 44.10.2 por los parches de Chromium y por GHSA-jr5w-w6x2-84p9 (alto, certificados intermedios
+de eMudhra comprometidos, corregido en la 44.9.1).
+
+| Con Electron 44.10.2 y la prueba arreglada, salvo donde se indica | Pasadas | Fallos |
+| --- | --- | --- |
+| `verify`, con la 44.8.0 y la prueba arreglada (8,0 s de media) | 25 | 0 |
+| `verify`, tras la subida (7,2 s de media) | 30 | 0 |
+| Vitest con 2 núcleos (31 s) y con 1 (25 s), para simular un equipo lento | 20 | 0 |
+| Las 10 e2e de la tele en Xvfb | 7 | 0 |
+| Las 10 e2e de la tele en Weston | 2 | 0 |
+| `test:interfaz`, en Chrome (58 pasos) y en Firefox (50) | 7 | 0 |
+
+- **Arranque:** el mismo código sobre los dos binarios, alternando y con los dos órdenes, 45 aperturas por versión en 5
+  canales en directo. Mediana del primer fotograma: 2193 ms con la nueva y 2199 ms con la anterior. Las primeras 3 tandas,
+  siempre con la nueva primero, dieron +244 ms, pero no se repitió: con la anterior primero, en 6 tandas, salió −29 ms.
+- **AppImage:** se empaqueta con los *fuses* de `after-pack.cjs`, arranca en Weston, sigue viva a los 20 s y se cierra con
+  `SIGTERM` en 0,1 s. No se ha probado con el mando en la TV ni reproduciendo desde el AppImage.
+- **Duración de `verify`:** unos 8 s (lint 0,2; tipos 1; pruebas 4,6; compilaciones 1,1). No hay nada que recortar sin perder
+  cobertura.
+
 ## La hora de los trozos del VOD
 
 16 de octubre. Al arrancar desde el VOD (todas las sesiones con anuncio de entrada), el empalme no tenía hora (PDT)
@@ -835,6 +884,30 @@ empalme, sin esperar a Twitch. Con las esperas de verdad: sin sonido el primer m
   mismo token; si otra pestaña cierra sesión mientras tanto, no se renueva con el viejo; dos pestañas que añaden un
   reciente a la vez no pierden ninguno.
 - **Sin probar con una cuenta de verdad:** la renovación real con varias pestañas y el chat en más de tres ventanas.
+
+3 de noviembre, en `mini-agentes`, con Chrome for Testing y Zen 1.23.4b en la sesión GNOME, canales en directo y
+`.lab/ext-5/` (`pestanas.mjs`, `ventanas.mjs` y `cuenta.mjs`), con `?esperas=5,20`:
+
+| Cuánto tiempo oculta | Hasta que suena, Chrome | Hasta que suena, Zen |
+| --- | --- | --- |
+| 2 s, sin sonido | 41-62 ms | 53 ms |
+| 9 s, con el empalme caliente | 123-131 ms | 272 ms |
+| 65 s, todo parado | 1649 ms (1) | 736 ms |
+
+Una vuelta de cada, salvo donde hay un intervalo. (1) Medida con Zen reproduciendo a la vez en el mismo equipo; el 21 de
+octubre, a solas, dio 679-736 ms.
+
+- **Antes de arreglarlo, con dos ventanas a la vista:** tres fallos reproducidos en Chrome. Si la que suena se cierra o se
+  va a Inicio, la otra queda muda y no suena ninguna; y un clic en el vídeo de la muda le da el sonido y la pausa. El mismo
+  recorrido después del arreglo, bien en los dos navegadores: suena la otra, y el clic da el sonido sin pausar.
+- **Un VOD tapado por otra pestaña:** se silencia, se pausa pasada la espera (5 s en la prueba), y al volver sigue con sonido, en los dos.
+- **La sesión con varias pestañas,** en los dos, con la cuenta falsa y el almacén de verdad (`&sesioncomun`): con tres
+  pestañas recargadas a la vez y el token caducado, una sola renovación; cerrar sesión en una llega a las otras en ~150 ms,
+  y entrar, en ~2 s. Es la red falsa: una renovación real sigue sin probar.
+- **Dos resultados que parecían fallos y eran de la prueba,** ya corregidos en el ayudante: en Firefox, `openTab` devolvía
+  siempre la primera pestaña que abrió, y parecía que se renovaba dos veces; y la bienvenida de Zen en un perfil nuevo deja
+  la página a 0×0 y con pestañas inactivas que siguen «visibles», y parecía que el sonido no cambiaba de pestaña.
+- **Sin probar:** la vista dividida de Zen o de Chrome (se espera como dos ventanas), y lo que dice Twitch al cuarto chat.
 
 ## Revisión independiente del 21 de octubre
 
@@ -1191,4 +1264,74 @@ cada hueco y en cada relleno).
 - **Pruebas:** las unitarias (451, con la de la carga progresiva en fMP4 cambiada), `bun run verify`, las 10 e2e de la
   tele (el recorrido crítico, en `t2x2` y `sasavot`, en fMP4) y `test:interfaz` en Chrome (45 pasos) y Zen (41), en
   `t2x2`. Android no usa hls.js (Media3), así que no cambia.
+
+## El idioma a mano (D35)
+
+3 de noviembre de 2026, con canales en directo.
+
+- **Extensión, en Chrome for Testing y en Zen:** `test:interfaz` (57 pasos en Chrome, 49 en Zen, que no hace los clics de
+  verdad): elegir English cambia los ajustes sin recargar, se recuerda al recargar, y «Sistema» vuelve y no guarda nada.
+- **Recorrido en inglés** (ajustes, Inicio con la cuenta falsa y un canal, en Chrome): sin español en el texto ni en
+  `aria-label`, `title` y `placeholder`, salvo lo que da Twitch. Con otra pestaña cambiando el idioma, la del canal cambia
+  sin recargar y el vídeo sigue.
+- **Android, en el emulador** (sistema en inglés): la app sale en inglés; elegir Español cambia sin recargar y se recuerda al
+  relanzarla; el canal, la búsqueda y la esquina, en español. Sin comprobar: las etiquetas de la esquina con un lector de
+  pantalla y la imagen en imagen, ni nada en el S25.
+- **Pestañas ocultas y aviso:** `refresh-visible.test.ts` (oculta no refresca, y al volver lo hace una vez) y `test:interfaz`
+  (el aviso sale en la ventana muda y pasa a la otra al darle el sonido; el clic, en Chrome). Con una extensión de verdad no
+  se ha contado cuántas peticiones ahorra.
+- **La tele:** las e2e (10) pasan, y sigue en español.
+
+## El certificado de localhost por instalación
+
+La tele traía de serie un certificado autofirmado de VacuumStream, con `CA:TRUE` y su clave privada en el repo y en cada
+instalación. Ahora cada instalación crea el suyo al arrancar y lo guarda en `localhost-certificate.json`, en su carpeta de
+datos y solo legible por su dueño: ECDSA P-256, `CA:FALSE`, 10 años, y otro nuevo si el archivo está roto o el reloj queda
+fuera de sus fechas ([`local-certificate.ts`](../apps/tele/src/main/local-certificate.ts)). La aceptación por huella no
+cambia, y el exportador ya no tiene la excepción que dejaba pasar esa clave. El historial del repo público la sigue teniendo.
+
+Con Electron 44.10.2 y la app empaquetada (`electron-builder --dir`, el contenido del AppImage), en Xvfb, con el mismo perfil:
+
+| Arranque | Inicio y recientes | Reproduce un directo | Certificado |
+| --- | --- | --- | --- |
+| Versión anterior | Sí, los 10 | Sí, con el reproductor propio | El de `resources/certs` |
+| Nueva, al actualizar | Sí, los 10 | Sí, sin fallos en las peticiones locales | Lo crea, modo 600 y `CA:FALSE` |
+| Nueva, otra vez | Sí, los 10 | Sí | El mismo |
+| Nueva, con el archivo roto | Sí, los 10 | Sí | Crea otro |
+
+Chromium sigue dando `net_error -202` (`ERR_CERT_AUTHORITY_INVALID`), el único error que acepta la app, y `openssl x509` y
+`openssl verify` leen bien el certificado. Lo del reloj y lo de no poder guardar el archivo solo lo cubren las pruebas
+unitarias. No se ha probado en el mini PC con la TV, que está retirada, ni el AppImage montado.
+
+## Fallos y reconexión (AND-6)
+
+El 4 de noviembre, en un emulador `goodttv-s25` con la variante debug (API 36, sin GPU: comportamiento, no cifras), con los
+mismos guiones antes y después de D38, ahora en `herramientas/laboratorio/android-fallos.mjs`. La red se corta de verdad
+(`svc wifi` y `svc data`); lo de Twitch, con reglas en el `fetch` del motor.
+
+| Escena | Antes | Después |
+| --- | --- | --- |
+| 30 s sin red, a la vista | Error a los 5 s, y ahí se queda aunque vuelva la red | `sin-red` y, al volver, sonando en 2,7 s, a 3 s de latencia |
+| Abrir un canal sin red | «No está en directo», sin reintentar | `sin-red` enseguida, y sonando 3,4 s tras volver |
+| 40 s sin red, pantalla apagada y `force-idle` | — | Servicio vivo, y sonando 4 s tras volver, a 3,7 s |
+| 40 s sin red, en el PiP | — | Igual, en 3,3 s, a 3 s |
+| En la esquina: 15 s sin red | — | Sigue en la esquina, y suena en 2,2 s |
+| De wifi a datos | Sin error, una espera de 1 s | Sin error ni espera vista |
+| Gql da 500 al abrir | «No está en directo» en 1 s | `cargando` y `reconectando` |
+| Usher da 404, o un canal que no existe | «No está en directo» | Igual, en menos de 1 s |
+| Fin de la emisión (usher y listas, 404) | 59 s esperando y luego «No se pudo preparar» | 62 s y «no está en directo» (a 60 s de la esquina, y la quita; sin servicio) |
+| La lista da 403 durante 12 s (token caducado) | — | Ni se nota: el empalme abre sesión nueva |
+| Gql da 500 sin parar | — | 7 intentos, y `error` a los 4:40, sin servicio, con 124 peticiones. «Reintentar» con Twitch de vuelta suena en 4,2 s |
+| Dos cortes seguidos (15 s) | — | El primero reconecta. El segundo lo aguantó el búfer, sin intentos |
+| 25 s sin red en un VOD | — | Lo aguantó el búfer (5,9 → 31 → 51 s): no se llega a reconectar |
+| `kill -9` con la pantalla apagada | — | Sin servicio ni notificación; al volver, en el mismo canal y sonando, y Atrás va a Inicio |
+| `kill -9` en el PiP | — | Android quita la actividad sin guardar su estado: vuelve a Inicio, sin colgarse |
+
+«Antes» en blanco: esa escena no se llegó a medir sin el arreglo. La extensión, en Chrome for Testing y con reglas en su
+`fetch`: 30 s sin nada de Twitch, sigue sola en 6 s tras volver (hls.js); gql a 500 al abrir, «Twitch no responde» a los 20 s,
+con «Reintentar», y sigue sola 33 s tras volver; el fin de la emisión, «no está en directo» a los 32 s. La tele no se ha
+recorrido con estos casos, porque ya no hay aparato de pruebas: pasa sus e2e (10 de 10).
+
+Sin comprobar: nada de esto en el S25 (el sueño profundo y el ahorro de Samsung, sobre todo), reconectar un VOD y medidas de
+rendimiento.
 

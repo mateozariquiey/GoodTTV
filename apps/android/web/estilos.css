@@ -21,10 +21,10 @@
   --surface: #17171b;
   --surface-2: #202026;
   --hover: #29292f;
-  --rule: #232329;
-  --text: #ececef;
-  --muted: #a6a6b0;
-  --dim: #8a8a95;
+  --rule: #2c2c33;
+  --text: #f0f0f3;
+  --muted: #c0c0c9;
+  --dim: #a4a4af;
   --white: #f2f2f4;
   --live: #e5484d;
   --warning: #f0b45b;
@@ -293,9 +293,11 @@ img {
 }
 
 .seccion {
-  margin: 0;
-  padding: 20px 16px 8px;
-  font-size: 16px;
+  margin: 16px 0 0;
+  padding: 16px 16px 8px;
+  border-top: 1px solid var(--rule);
+  font-size: 20px;
+  letter-spacing: -0.015em;
 }
 
 .nota {
@@ -305,18 +307,46 @@ img {
 }
 
 /* Un título de sección con un botón a la derecha (el orden de tus seguidos). */
+.seccion__cuenta {
+  margin-left: 8px;
+  font-weight: 400;
+  color: var(--dim);
+}
+
 .seccion--con-boton {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 8px;
+  margin-top: 0;
   padding-top: 12px;
   padding-bottom: 0;
+  border-top: 0;
 }
 
 .seccion--con-boton h2 {
   margin: 0;
   font-size: inherit;
+}
+
+/* En Inicio con vídeos a medias, el título es el selector: el elegido va en blanco. */
+.titulos {
+  display: flex;
+  gap: 20px;
+  min-width: 0;
+}
+
+.titulo {
+  min-height: 44px;
+  color: var(--dim);
+  font: inherit;
+  font-weight: 500;
+  letter-spacing: inherit;
+}
+
+.titulo[aria-pressed="true"] {
+  color: var(--text);
+  font-weight: 700;
 }
 
 .orden {
@@ -328,11 +358,12 @@ img {
   display: inline-flex;
   align-items: center;
   gap: 4px;
+  justify-content: center;
+  min-width: 44px;
   min-height: 44px;
-  padding: 0 8px;
   border-radius: var(--radius);
   color: var(--muted);
-  font-size: 14px;
+  font-size: 22px;
 }
 
 .orden__boton:active,
@@ -389,11 +420,14 @@ img {
 
 .bienvenida h1 {
   margin: 0;
-  font-size: 26px;
+  font-size: 32px;
+  line-height: 1.1;
+  letter-spacing: -0.02em;
 }
 
 .bienvenida p {
   margin: 0;
+  font-size: 16px;
   color: var(--muted);
 }
 
@@ -419,7 +453,7 @@ img {
   position: relative;
   width: clamp(128px, 38vw, 200px);
   aspect-ratio: 16 / 9;
-  border-radius: 8px;
+  border-radius: 4px;
   overflow: hidden;
   background: var(--surface-2);
   flex: none;
@@ -462,11 +496,12 @@ img {
 }
 
 .directo__nombre {
-  font-size: 15px;
+  font-size: 16px;
+  font-weight: 700;
 }
 
 .directo__categoria {
-  color: var(--muted);
+  color: var(--dim);
   font-size: 13px;
 }
 
@@ -479,9 +514,16 @@ img {
   -webkit-line-clamp: 2;
 }
 
+/* En vertical, la ficha del canal en una línea de título: el sitio es para el chat. */
+@media (orientation: portrait) {
+  .ficha__titulo {
+    -webkit-line-clamp: 1;
+  }
+}
+
 .directo__titulo {
+  color: var(--muted);
   font-size: 13px;
-  opacity: 0.85;
 }
 
 /* La forma de una lista mientras llega lo de ahora (lo guardado es de hace rato): los mismos huecos, vacíos. Cada línea
@@ -725,12 +767,6 @@ img {
   background: var(--bg);
 }
 
-.canal__sin-chat {
-  display: grid;
-  place-items: center;
-  flex: 1;
-}
-
 @media (orientation: landscape) {
   .canal {
     flex-direction: row;
@@ -766,10 +802,10 @@ img {
   justify-content: space-between;
   padding: 4px 4px 2px;
   background: linear-gradient(
-    rgb(0 0 0 / 0.55),
-    transparent 32%,
-    transparent 50%,
-    rgb(0 0 0 / 0.8)
+    rgb(0 0 0 / 0.6),
+    rgb(0 0 0 / 0.28) 35%,
+    rgb(0 0 0 / 0.28) 55%,
+    rgb(0 0 0 / 0.85)
   );
   text-shadow: 0 1px 3px rgb(0 0 0 / 0.6);
   transition: opacity 0.2s ease;
@@ -846,8 +882,8 @@ img {
 }
 
 .boton-icono--lado {
-  background: rgb(0 0 0 / 0.35);
-  font-size: 26px;
+  background: rgb(0 0 0 / 0.2);
+  font-size: 22px;
 }
 
 .centro {
@@ -859,10 +895,10 @@ img {
 }
 
 .centro__pausa {
-  width: 64px;
-  height: 64px;
+  width: 56px;
+  height: 56px;
   background: rgb(0 0 0 / 0.35);
-  font-size: 34px;
+  font-size: 30px;
 }
 
 /* Retroceder y avanzar: los segundos, dentro de la flecha en círculo, como en la extensión. */
@@ -894,7 +930,7 @@ img {
 .reloj {
   padding: 0 6px;
   color: #fff;
-  font-size: 13px;
+  font-size: 14px;
   white-space: nowrap;
 }
 
@@ -1257,7 +1293,9 @@ img {
 
 .ficha h1 {
   margin: 0;
-  font-size: 17px;
+  font-size: 22px;
+  line-height: 1.2;
+  letter-spacing: -0.015em;
 }
 
 .ficha__titulo {

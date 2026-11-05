@@ -1,16 +1,29 @@
 import type { ChatEmote, ChatMessage, ChatToken } from "@goodttv/contratos"
 import { memo, useRef } from "react"
+import { t } from "../idioma"
 import type { ChatState, ChatView } from "./useChat"
 import { useChatAtBottom } from "./useChatAtBottom"
 
 export const CHAT_STATUS_TEXT: Record<ChatState["status"], string | undefined> = {
   connected: undefined,
-  connecting: "Conectando con el chat…",
-  error: "No se pudo conectar con el chat. Se reintentará al cambiar de canal.",
-  "missing-scope": "Vuelve a vincular la cuenta en Ajustes para leer el chat.",
-  off: "Vincula tu cuenta en Ajustes para leer el chat.",
-  reconnecting: "Reconectando con el chat…",
-  unauthenticated: "Vincula tu cuenta en Ajustes para leer el chat.",
+  get connecting() {
+    return t("Conectando con el chat…")
+  },
+  get error() {
+    return t("No se pudo conectar con el chat. Se reintentará al cambiar de canal.")
+  },
+  get "missing-scope"() {
+    return t("Vuelve a vincular la cuenta en Ajustes para leer el chat.")
+  },
+  get off() {
+    return t("Vincula tu cuenta en Ajustes para leer el chat.")
+  },
+  get reconnecting() {
+    return t("Reconectando con el chat…")
+  },
+  get unauthenticated() {
+    return t("Vincula tu cuenta en Ajustes para leer el chat.")
+  },
 }
 
 const EmoteImage = ({

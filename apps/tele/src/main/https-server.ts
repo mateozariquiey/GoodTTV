@@ -1,20 +1,19 @@
 import { X509Certificate } from "node:crypto"
 import { readFile } from "node:fs"
-import { readFile as readFileAsync } from "node:fs/promises"
 import type { IncomingMessage, ServerResponse } from "node:http"
 import { createServer } from "node:https"
 import { extname, resolve, sep } from "node:path"
 
 type StaticHttpsServerOptions = {
   readonly assetsPath: string
-  readonly certificatePath: string
+  readonly certificate: string
   // Rutas dinámicas (el directo del reproductor propio): devuelve true si ha atendido la petición.
   readonly dynamic?: (
     request: IncomingMessage,
     response: ServerResponse,
     pathname: string,
   ) => boolean
-  readonly keyPath: string
+  readonly key: string
 }
 
 export type StaticHttpsServer = {
@@ -46,10 +45,7 @@ const sendStatus = (response: ServerResponse, status: number): void => {
 export const startStaticHttpsServer = async (
   options: StaticHttpsServerOptions,
 ): Promise<StaticHttpsServer> => {
-  const [certificate, key] = await Promise.all([
-    readFileAsync(options.certificatePath),
-    readFileAsync(options.keyPath),
-  ])
+  const { certificate, key } = options
   const root = resolve(options.assetsPath)
   let expectedHost = ""
 

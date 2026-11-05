@@ -9,6 +9,8 @@ import type {
   StreamCard,
 } from "@goodttv/contratos"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { type Channel, fromStream } from "./channel"
+import { idiomaActual, idiomaDelCatalogo } from "./idioma"
 import { usePlatform } from "./platform"
 
 // Data hooks. Every remote list has the same four states so screens can always offer a way on:
@@ -142,14 +144,42 @@ export type HomeData = {
   readonly recents: readonly RecentChannel[]
 }
 
-const language = (): string => navigator.language.slice(0, 2).toLowerCase() || "es"
+// Sin cuenta, los directos más vistos, para que la primera pantalla ya deje ver algo. Va aparte de loadHome, para que la
+// bienvenida no los espere; si fallan, solo se queda la bienvenida.
+export const useGuestPopular = (
+  enabled: boolean,
+): { readonly channels: readonly Channel[]; readonly loading: boolean } => {
+  const available = enabled && window.api.catalog.popularSinCuenta !== undefined
+  const [channels, setChannels] = useState<readonly Channel[]>([])
+  const [loading, setLoading] = useState(available)
+  useEffect(() => {
+    if (!available) return undefined
+    let current = true
+    setLoading(true)
+    void window.api.catalog
+      .popularSinCuenta?.(idiomaDelCatalogo())
+      .then(
+        (streams) => {
+          if (current) setChannels(streams.map(fromStream))
+        },
+        () => undefined,
+      )
+      .finally(() => {
+        if (current) setLoading(false)
+      })
+    return () => {
+      current = false
+    }
+  }, [available])
+  return { channels: available ? channels : [], loading: available && loading }
+}
 
 export const loadHome = async (signedIn: boolean): Promise<HomeData> => {
   const recents = await window.api.recents.list()
   if (!signedIn) return { following: [], popular: [], recentLive: new Map(), recents }
   const [following, popular, recentStreams] = await Promise.all([
     window.api.catalog.followed({ first: 100 }),
-    window.api.catalog.live({ first: 24, language: language() }),
+    window.api.catalog.live({ first: 24, language: idiomaDelCatalogo() }),
     window.api.catalog.streamsByLogin(recents.map((recent) => recent.login)),
   ])
   return {
@@ -340,10 +370,33 @@ export const usePreferences = () => {
   return { loaded, preferences, reload, update }
 }
 
-// Spanish formatting with a dot for thousands. Intl's "es-ES" leaves four-digit numbers ungrouped
-// ("9877"), which reads worse in a list of viewer counts.
+// Refresca cada `ms`, pero solo a la vista: una pestaña oculta no gasta red ni límite de Twitch, y si le tocaba mientras
+// estaba oculta, refresca al volver (EXT-5). Si vuelve antes de que le toque, sigue su cuenta.
+export const useRefreshWhileVisible = (refresh: () => unknown, ms: number): void => {
+  useEffect(() => {
+    let timer: ReturnType<typeof setTimeout> | undefined
+    const tick = (): void => {
+      timer = undefined
+      if (document.visibilityState !== "visible") return // lo retoma onVisibility
+      void refresh()
+      timer = setTimeout(tick, ms)
+    }
+    const onVisibility = (): void => {
+      if (document.visibilityState === "visible" && timer === undefined) tick()
+    }
+    timer = setTimeout(tick, ms)
+    document.addEventListener("visibilitychange", onVisibility)
+    return () => {
+      clearTimeout(timer)
+      document.removeEventListener("visibilitychange", onVisibility)
+    }
+  }, [refresh, ms])
+}
+
+// Thousands with a dot (a comma in English). Intl's "es-ES" leaves four-digit numbers ungrouped ("9877"), which reads
+// worse in a list of viewer counts.
 export const formatViewers = (count: number): string =>
-  String(Math.trunc(count)).replace(/\B(?=(\d{3})+(?!\d))/g, ".")
+  String(Math.trunc(count)).replace(/\B(?=(\d{3})+(?!\d))/g, idiomaActual() === "en" ? "," : ".")
 
 export const formatUptime = (startedAt: string, now = Date.now()): string => {
   const minutes = Math.max(0, Math.floor((now - Date.parse(startedAt)) / 60_000))

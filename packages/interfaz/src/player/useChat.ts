@@ -6,6 +6,7 @@ import type {
   ChatStatus,
 } from "@goodttv/contratos"
 import { useCallback, useEffect, useRef, useState } from "react"
+import { t, tMensaje } from "../idioma"
 import { NO_EMOTES } from "./emote-complete"
 
 export const CHAT_HISTORY = 150
@@ -205,10 +206,10 @@ export const useChat = (
   const send = useCallback(
     async (text: string): Promise<string | null> => {
       const write = window.api.chat.send
-      if (write === undefined || broadcasterId === undefined) return "Aquí no se puede escribir."
+      if (write === undefined || broadcasterId === undefined) return t("Aquí no se puede escribir.")
       try {
         const result = await write({ broadcasterId, message: text })
-        if (!result.sent) return result.reason
+        if (!result.sent) return tMensaje(result.reason)
         // Sin esperar a la cola del retraso: lo propio sale ya. Si la copia de EventSub ya llegó, se queda esa.
         if (shown.current === broadcasterId) {
           setState((current) =>
@@ -219,7 +220,7 @@ export const useChat = (
         }
         return null
       } catch {
-        return "No se pudo enviar. Inténtalo otra vez."
+        return t("No se pudo enviar. Inténtalo otra vez.")
       }
     },
     [broadcasterId],

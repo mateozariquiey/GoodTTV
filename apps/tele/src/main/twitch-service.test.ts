@@ -214,7 +214,7 @@ describe("Twitch account snapshot", () => {
       .mockResolvedValueOnce({ displayName: "viewer", kind: "authenticated", login: "viewer" })
       .mockResolvedValue({ kind: "guest" })
     vi.spyOn(TwitchAuth.prototype, "refreshCredentials").mockRejectedValue(
-      new ConfigurationError("Your Twitch session expired. Sign in again"),
+      new ConfigurationError("Tu sesión de Twitch ha caducado. Vuelve a vincular la cuenta"),
     )
     requests.mockResolvedValueOnce(new Response(null, { status: 401 }))
     expect(await makeService().authSnapshot()).toEqual({ kind: "guest" })
@@ -431,7 +431,7 @@ describe("La cuenta de cada petición y las fotos al perder la sesión", () => {
   it("si la sesión se pierde sin cerrarla aquí (caducada, u otra página), las fotos se olvidan", async () => {
     vi.spyOn(TwitchAuth.prototype, "snapshot").mockResolvedValue({
       kind: "error",
-      message: "Your Twitch session expired. Sign in again",
+      message: "Tu sesión de Twitch ha caducado. Vuelve a vincular la cuenta",
     })
     const storage = memoryStorage()
     storage.setItem("fotos", JSON.stringify({ fotos: {}, version: 1 }))
@@ -701,7 +701,7 @@ describe("Twitch chat support", () => {
 
   it("reports a signed-out viewer as undefined but lets transient failures through", async () => {
     vi.spyOn(TwitchAuth.prototype, "credentials").mockRejectedValueOnce(
-      new ConfigurationError("Sign in to Twitch to browse streams"),
+      new ConfigurationError("Vincula tu cuenta de Twitch para ver los directos"),
     )
     expect(await makeService().viewer()).toBeUndefined()
     vi.spyOn(TwitchAuth.prototype, "credentials").mockRejectedValueOnce(

@@ -46,6 +46,10 @@ export class HttpError extends Error {
   }
 }
 
+// Twitch dice que el canal no se puede ver ahora: no existe, o usher lo rechaza (404 sin emisión, 403 solo para
+// suscriptores). Un fallo de la red o de Twitch (5xx, 429, gql sin datos) no dice nada del canal: se reintenta.
+export class NotLiveError extends Error {}
+
 export const getText = async (
   url: string,
   init: RequestInit = {},
@@ -144,7 +148,11 @@ export const openVariant = async (
 ): Promise<OpenedVariant> => {
   const { platform, playerType } = sessionKind(source)
   const result = await gql(TOKEN_QUERY, { login: channel, platform, playerType }, device, red)
-  const token = tokenOf(pick(result, "data", "streamPlaybackAccessToken"))
+  const data = pick(result, "data", "streamPlaybackAccessToken")
+  // Un canal que no existe da null sin más (comprobado el 5 nov). Con errors, es Twitch quien ha fallado y no dice nada del canal.
+  if (data === null && pick(result, "errors") !== undefined) throw new Error("gql con errores")
+  if (data === null) throw new NotLiveError("el canal no existe")
+  const token = tokenOf(data)
   if (token === null) throw new Error("sin token de reproducción")
   const params = new URLSearchParams({
     allow_audio_only: "true",
@@ -162,9 +170,17 @@ export const openVariant = async (
     `https://usher.ttvnw.net/api/channel/hls/${channel.toLowerCase()}.m3u8?${params}`,
     {},
     red,
-  )
+  ).catch((error: unknown) => {
+    const rejected =
+      error instanceof HttpError &&
+      error.status >= 400 &&
+      error.status < 500 &&
+      error.status !== 408 &&
+      error.status !== 429
+    throw rejected ? new NotLiveError(error.message) : error
+  })
   const variant = pickVariant(master, want)
-  if (variant === undefined) throw new Error("la lista maestra no tiene vídeo")
+  if (variant === undefined) throw new NotLiveError("la lista maestra no tiene vídeo")
   const expires = Number(pick(JSON.parse(token.value) as unknown, "expires") ?? 0)
   return { ...variant, broadcastId: broadcastIdOf(master), expires, variants: listVariants(master) }
 }

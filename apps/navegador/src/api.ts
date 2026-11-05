@@ -10,6 +10,7 @@ import {
   channelByLogin,
   commentsFrom,
   liveArchive,
+  popularStreams,
   searchChannels,
   storyboardOf,
   videoById,
@@ -29,6 +30,7 @@ export const createExtensionApi = (
     // Buscar canales con la relevancia de twitch.tv y sin cuenta, como invitado.
     channels: {
       byLogin: (login) => channelByLogin(login),
+      popular: (language) => popularStreams({ language }),
       search: (query, first) => searchChannels(query, { first }),
     },
     // Un fork compila con VITE_TWITCH_CLIENT_ID; si no, el del proyecto.

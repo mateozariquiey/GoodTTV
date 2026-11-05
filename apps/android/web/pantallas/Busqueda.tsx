@@ -1,4 +1,11 @@
-import { type Channel, formatViewers, fromSearch, searchChannels } from "@goodttv/interfaz"
+import {
+  type Channel,
+  formatViewers,
+  fromSearch,
+  idiomaActual,
+  searchChannels,
+  t,
+} from "@goodttv/interfaz"
 import { ArrowRightIcon, XIcon } from "@phosphor-icons/react"
 import { useEffect, useRef, useState } from "react"
 import { Avatar, Barra } from "./comun"
@@ -11,7 +18,8 @@ import { Avatar, Barra } from "./comun"
 const LOGIN = /^[a-zA-Z0-9_]{1,25}$/
 const MAX_RESULTS = 12
 const SEARCH_DELAY_MS = 150
-const compact = new Intl.NumberFormat("es", { maximumFractionDigits: 1, notation: "compact" })
+const compact = (): Intl.NumberFormat =>
+  new Intl.NumberFormat(idiomaActual(), { maximumFractionDigits: 1, notation: "compact" })
 
 type Results =
   | { readonly kind: "idle" }
@@ -93,7 +101,7 @@ export const Busqueda = ({
           }}
         >
           <input
-            aria-label="Buscar un canal"
+            aria-label={t("Buscar un canal")}
             autoCapitalize="none"
             autoComplete="off"
             enterKeyHint="go"
@@ -102,7 +110,7 @@ export const Busqueda = ({
               pendingGo.current = null
               onQuery(event.currentTarget.value)
             }}
-            placeholder="Buscar un canal"
+            placeholder={t("Buscar un canal")}
             ref={input}
             spellCheck={false}
             type="search"
@@ -110,7 +118,7 @@ export const Busqueda = ({
           />
           {query === "" ? null : (
             <button
-              aria-label="Borrar"
+              aria-label={t("Borrar")}
               className="boton-icono"
               onClick={() => {
                 onQuery("")
@@ -134,7 +142,7 @@ export const Busqueda = ({
                   </span>
                   <span className="resultado__texto">
                     <span>
-                      Abrir el canal <b>{text}</b>
+                      {t("Abrir el canal")} <b>{text}</b>
                     </span>
                   </span>
                 </>
@@ -147,7 +155,7 @@ export const Busqueda = ({
                       {[
                         channel.followers === undefined
                           ? null
-                          : `${compact.format(channel.followers)} seguidores`,
+                          : t("{n} seguidores", { n: compact().format(channel.followers) }),
                         channel.category || null,
                       ]
                         .filter((each) => each !== null)
@@ -158,7 +166,7 @@ export const Busqueda = ({
                     <span className="en-directo">
                       <i aria-hidden="true" />
                       {channel.viewerCount === undefined
-                        ? "En directo"
+                        ? t("En directo")
                         : formatViewers(channel.viewerCount)}
                     </span>
                   ) : null}
@@ -168,12 +176,12 @@ export const Busqueda = ({
           </li>
         ))}
       </ul>
-      {results.kind === "loading" ? <p className="nota">Buscando…</p> : null}
+      {results.kind === "loading" ? <p className="nota">{t("Buscando…")}</p> : null}
       {results.kind === "ready" && found.length === 0 ? (
-        <p className="nota">Twitch no encuentra ningún canal así.</p>
+        <p className="nota">{t("Twitch no encuentra ningún canal así.")}</p>
       ) : null}
       {results.kind === "error" ? (
-        <p className="nota">No se pudo buscar. Inténtalo otra vez.</p>
+        <p className="nota">{t("No se pudo buscar. Inténtalo otra vez.")}</p>
       ) : null}
     </div>
   )

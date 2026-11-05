@@ -5,6 +5,7 @@ import {
   NO_EMOTES,
   replaceWord,
   suggestEmotes,
+  t,
   useChatCompose,
   useChatEmotes,
   wordAt,
@@ -190,7 +191,7 @@ export const Compose = ({
           aria-autocomplete="list"
           aria-controls={listId}
           aria-expanded={suggestions.length > 0}
-          aria-label="Enviar un mensaje"
+          aria-label={t("Enviar un mensaje")}
           autoComplete="off"
           className="chat__input"
           enterKeyHint="send"
@@ -224,11 +225,11 @@ export const Compose = ({
             event.preventDefault()
           }}
           onSelect={(event) => setCaret(event.currentTarget.selectionStart ?? 0)}
-          placeholder="Enviar un mensaje"
+          placeholder={t("Enviar un mensaje")}
           ref={input}
           role="combobox"
           spellCheck
-          title="Tab completa el emote; «:» y unas letras, sugerencias"
+          title={t("Tab completa el emote; «:» y unas letras, sugerencias")}
           value={text}
         />
         <button
@@ -286,7 +287,7 @@ const EmotePicker = ({
   const sections = SECTIONS.map(([key, title]) => ({
     emotes: groups[key].filter((emote) => emote.name.toLowerCase().includes(query)),
     key,
-    title,
+    title: t(title),
   })).filter((section) => section.emotes.length > 0)
   // Las imágenes, a mano (data-src → src): React no toca su src, que no lleva.
   const list = useRef<HTMLDivElement>(null)
@@ -328,7 +329,7 @@ const EmotePicker = ({
   return (
     <div className="emote-picker">
       <input
-        aria-label="Buscar emotes"
+        aria-label={t("Buscar emotes")}
         autoComplete="off"
         // biome-ignore lint/a11y/noAutofocus: abrir la lista es para buscar en ella.
         autoFocus
@@ -339,15 +340,15 @@ const EmotePicker = ({
           event.preventDefault()
           onClose()
         }}
-        placeholder="Buscar"
+        placeholder={t("Buscar")}
         value={search}
       />
       <div className="emote-picker__list" ref={list}>
         {loading ? (
-          <p className="emote-picker__note">Cargando emotes…</p>
+          <p className="emote-picker__note">{t("Cargando emotes…")}</p>
         ) : sections.length === 0 ? (
           <p className="emote-picker__note">
-            {query === "" ? "No hay emotes." : "Ninguno se llama así."}
+            {query === "" ? t("No hay emotes.") : t("Ninguno se llama así.")}
           </p>
         ) : (
           sections.map((section) => (
@@ -374,7 +375,7 @@ const EmotePicker = ({
       </div>
       <p className="emote-picker__hovered">
         {hovered === null ? (
-          "Pasa el ratón por un emote para ver su nombre."
+          t("Pasa el ratón por un emote para ver su nombre.")
         ) : (
           <>
             <strong>{hovered.name}</strong> · {PROVIDER_LABEL[hovered.provider]}

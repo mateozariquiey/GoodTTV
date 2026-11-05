@@ -7,6 +7,7 @@
 //   /stream/vod?u=…[&desde=…&map=…]        trozos del VOD (no traen CORS), recortados si hace falta
 // Un canal a la vez (más uno precalentado): pedir otro, u otra calidad, para el anterior. Sin peticiones en 30 s, se
 // para.
+import { createConexiones } from "./conexiones"
 import { Empalme, type EmpalmeEvent, type EmpalmeOptions } from "./empalme"
 import { type Bytes, firstVideoPts, fmp4FirstVideoTime, trimFmp4, trimTs } from "./media-time"
 import { AUDIO_ONLY, type Want } from "./playlist"
@@ -79,6 +80,7 @@ export type DirectoRequest = {
 }
 
 export type Directo = {
+  readonly abrirConexiones: () => void
   readonly handle: (url: URL, request?: DirectoRequest) => Promise<Response>
   readonly stop: () => void
 }
@@ -116,6 +118,7 @@ export const createDirecto = ({
   log = () => undefined,
   simulatedPause = null,
 }: DirectoOptions = {}): Directo => {
+  const conexiones = createConexiones(red)
   let active: Active | undefined
   let warm: Active | undefined // precalentado (ver prewarm)
   let outgoing: Active | undefined // el de antes de cambiar de calidad, para su reproductor (ver ensure)
@@ -182,11 +185,13 @@ export const createDirecto = ({
     // En solo audio, sin el relleno con el VOD: sus trozos son de vídeo, y se sitúan por la imagen. En una pausa de
     // anuncios en todas las sesiones, silencio, como en el modo directo.
     const audioOnly = want?.resolution === AUDIO_ONLY
+    conexiones.abrir()
     const empalme = createEmpalme({
       channel: login,
       fetch: red,
       fillSlack: settings.fillSlack,
       log: (event) => log({ ...event, canal: login }),
+      onListOpened: conexiones.listaAbierta,
       simulatedPause,
       startBackSeconds: settings.startBackSeconds,
       vod: settings.vod && !audioOnly,
@@ -377,6 +382,7 @@ export const createDirecto = ({
   }
 
   return {
+    abrirConexiones: () => conexiones.abrir({ gql: true }),
     handle,
     stop: () => {
       clearInterval(idle)

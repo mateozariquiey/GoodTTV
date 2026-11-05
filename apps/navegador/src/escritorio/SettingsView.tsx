@@ -1,8 +1,17 @@
 import type { AppStatus, Preferences, PreferencesPatch } from "@goodttv/contratos"
-import { type AuthState, LATENCY_MODES, LATENCY_ORDER } from "@goodttv/interfaz"
+import {
+  type AuthState,
+  elegirIdioma,
+  idiomaElegido,
+  LATENCY_MODES,
+  LATENCY_ORDER,
+  t,
+  tMensaje,
+} from "@goodttv/interfaz"
 import { QRCodeSVG } from "qrcode.react"
-import type { ReactNode } from "react"
+import { type ReactNode, useState } from "react"
 import { Avatar } from "./Avatar"
+import { gridEnabled, setGridEnabled } from "./cuadricula"
 import { RetryButton } from "./RetryButton"
 
 type Account = {
@@ -63,14 +72,16 @@ const AccountGroup = ({
   readonly status: AppStatus | undefined
 }) => {
   const { auth } = account
-  if (auth === undefined) return <p className="page__note">Comprobando la cuenta…</p>
+  if (auth === undefined) return <p className="page__note">{t("Comprobando la cuenta…")}</p>
   if (auth.kind === "unreachable") {
     return (
       <>
         <p className="setting__warning" role="alert">
-          No se pudo comprobar la cuenta ({auth.message}).
+          {t("No se pudo comprobar la cuenta ({error}).", { error: tMensaje(auth.message) })}
         </p>
-        <Row label="La sesión no se ha cerrado: se vuelve a comprobar sola al volver la conexión.">
+        <Row
+          label={t("La sesión no se ha cerrado: se vuelve a comprobar sola al volver la conexión.")}
+        >
           {/* Sin red también se puede cerrar: se borra aquí, aunque Twitch no se entere. */}
           <span className="setting__actions">
             <RetryButton onRetry={account.reload} />
@@ -80,7 +91,7 @@ const AccountGroup = ({
               onClick={() => void account.logout()}
               type="button"
             >
-              Cerrar sesión
+              {t("Cerrar sesión")}
             </button>
           </span>
         </Row>
@@ -99,7 +110,7 @@ const AccountGroup = ({
                 url={auth.profileImageUrl}
               />
               <span>
-                Conectado como <b>{auth.displayName}</b>
+                {t("Conectado como")} <b>{auth.displayName}</b>
               </span>
             </>
           }
@@ -110,13 +121,14 @@ const AccountGroup = ({
             onClick={() => void account.logout()}
             type="button"
           >
-            Cerrar sesión
+            {t("Cerrar sesión")}
           </button>
         </Row>
         {status?.secureStorage === false ? (
           <p className="setting__warning">
-            La sesión se guarda sin cifrar en el perfil del navegador: quien pueda leer tus archivos
-            podría copiarla.
+            {t(
+              "La sesión se guarda sin cifrar en el perfil del navegador: quien pueda leer tus archivos podría copiarla.",
+            )}
           </p>
         ) : null}
       </>
@@ -137,12 +149,16 @@ const AccountGroup = ({
           />
         </span>
         <div>
-          <p>Abre twitch.tv/activate (o escanea el código con el móvil) y escribe:</p>
+          <p>{t("Abre twitch.tv/activate (o escanea el código con el móvil) y escribe:")}</p>
           <p className="link-code__code">
             <span aria-hidden="true">{challenge.userCode}</span>
-            <span className="visually-hidden">Código {challenge.userCode.split("").join(" ")}</span>
+            <span className="visually-hidden">
+              {t("Código")} {challenge.userCode.split("").join(" ")}
+            </span>
           </p>
-          <p className="page__note">Caduca en {minutesLeft(challenge.expiresAt)} min.</p>
+          <p className="page__note">
+            {t("Caduca en {n} min.", { n: minutesLeft(challenge.expiresAt) })}
+          </p>
           <span className="link-code__actions">
             <a
               className="button button--primary"
@@ -150,10 +166,10 @@ const AccountGroup = ({
               rel="noreferrer"
               target="_blank"
             >
-              Abrir twitch.tv/activate
+              {t("Abrir twitch.tv/activate")}
             </a>
             <button className="button" onClick={() => void account.logout()} type="button">
-              Cancelar
+              {t("Cancelar")}
             </button>
           </span>
         </div>
@@ -164,35 +180,66 @@ const AccountGroup = ({
     <>
       {auth.kind === "error" ? (
         <p className="setting__warning" role="alert">
-          No se pudo vincular la cuenta ({auth.message}).
+          {t("No se pudo vincular la cuenta ({error}).", { error: tMensaje(auth.message) })}
         </p>
       ) : null}
-      <Row label="Vincula tu cuenta para ver a quién sigues y leer el chat. Solo se piden permisos de lectura.">
+      <Row
+        label={t(
+          "Vincula tu cuenta para ver a quién sigues y leer el chat. Solo se piden permisos de lectura.",
+        )}
+      >
         <button
           className="button button--primary"
           disabled={account.busy}
           onClick={() => void account.begin()}
           type="button"
         >
-          Vincular cuenta
+          {t("Vincular cuenta")}
         </button>
       </Row>
     </>
   )
 }
 
-const SHORTCUTS: readonly (readonly [readonly string[], string])[] = [
-  [["Espacio"], "Pausa y reanuda"],
-  [["←", "→"], "Retrocede o avanza 10 s"],
-  [["Fin"], "Vuelve al directo, si has retrocedido"],
-  [["M"], "Silencio"],
-  [["T"], "Modo teatro: el vídeo y el chat ocupan la ventana"],
-  [["F"], "Pantalla completa: solo el vídeo"],
-  [["C"], "Muestra u oculta el chat"],
-  [["↑", "↓"], "Canal anterior y siguiente de la lista"],
-  [["/"], "Buscar"],
-  [["Esc"], "Volver"],
+const shortcuts = (): readonly (readonly [readonly string[], string])[] => [
+  [[t("Espacio")], t("Pausa y reanuda")],
+  [["←", "→"], t("Retrocede o avanza 10 s")],
+  [[t("Fin")], t("Vuelve al directo, si has retrocedido")],
+  [["M"], t("Silencio")],
+  [["T"], t("Modo teatro: el vídeo y el chat ocupan la ventana")],
+  [["F"], t("Pantalla completa: solo el vídeo")],
+  [["C"], t("Muestra u oculta el chat")],
+  [["↑", "↓"], t("Canal anterior y siguiente de la lista")],
+  [["/"], t("Buscar")],
+  [["Esc"], t("Volver")],
 ]
+
+// La cuadrícula de canales (EXT-6): en pruebas, y solo en este navegador.
+const GridSwitch = () => {
+  const [on, setOn] = useState(() => gridEnabled())
+  return (
+    <>
+      <Row label={t("Cuadrícula de canales (en pruebas)")}>
+        <button
+          aria-checked={on}
+          aria-label={t("Cuadrícula de canales (en pruebas)")}
+          className="switch"
+          onClick={() => {
+            setGridEnabled(!on)
+            setOn(!on)
+          }}
+          role="switch"
+          type="button"
+        />
+      </Row>
+      <p className="setting__hint">
+        {t(
+          "Hasta 4 canales en una pestaña, con un + en la columna y un botón en el canal. Suena el que eliges, y su chat es el que se ve.",
+        )}
+      </p>
+    </>
+  )
+}
 
 export const SettingsView = ({
   account,
@@ -206,16 +253,32 @@ export const SettingsView = ({
   readonly status: AppStatus | undefined
 }) => (
   <div className="page page--narrow">
-    <h1 className="page__title">Ajustes</h1>
+    <h1 className="page__title">{t("Ajustes")}</h1>
     <section className="settings-group">
-      <h2 className="settings-group__title">Cuenta</h2>
+      <h2 className="settings-group__title">{t("Cuenta")}</h2>
       <AccountGroup account={account} status={status} />
     </section>
     <section className="settings-group">
-      <h2 className="settings-group__title">Reproducción</h2>
-      <Row label="Retraso del directo">
+      <h2 className="settings-group__title">{t("Idioma")}</h2>
+      <Row label={t("Idioma de la interfaz")}>
         <Segmented
-          label="Retraso del directo"
+          label={t("Idioma")}
+          name="idioma"
+          onChange={elegirIdioma}
+          options={[
+            { label: t("Sistema"), value: "sistema" },
+            { label: "Español", value: "es" },
+            { label: "English", value: "en" },
+          ]}
+          value={idiomaElegido()}
+        />
+      </Row>
+    </section>
+    <section className="settings-group">
+      <h2 className="settings-group__title">{t("Reproducción")}</h2>
+      <Row label={t("Retraso del directo")}>
+        <Segmented
+          label={t("Retraso del directo")}
           name="latencia"
           onChange={(latencyMode) => onPreferences({ latencyMode })}
           options={LATENCY_ORDER.map((mode) => ({ label: LATENCY_MODES[mode].label, value: mode }))}
@@ -223,36 +286,37 @@ export const SettingsView = ({
         />
       </Row>
       <p className="setting__hint">{LATENCY_MODES[preferences.latencyMode].hint}</p>
+      <GridSwitch />
     </section>
     <section className="settings-group">
       <h2 className="settings-group__title">Chat</h2>
-      <Row label="Mostrar el chat al abrir un canal">
+      <Row label={t("Mostrar el chat al abrir un canal")}>
         <button
           aria-checked={preferences.chatVisible}
-          aria-label="Mostrar el chat al abrir un canal"
+          aria-label={t("Mostrar el chat al abrir un canal")}
           className="switch"
           onClick={() => onPreferences({ chatVisible: !preferences.chatVisible })}
           role="switch"
           type="button"
         />
       </Row>
-      <Row label="Tamaño del texto">
+      <Row label={t("Tamaño del texto")}>
         <Segmented
-          label="Tamaño del texto del chat"
+          label={t("Tamaño del texto del chat")}
           name="tamano-chat"
           onChange={(chatScale) => onPreferences({ chatScale })}
           options={[
             { label: "Normal", value: "normal" as const },
-            { label: "Grande", value: "large" as const },
+            { label: t("Grande"), value: "large" as const },
           ]}
           value={preferences.chatScale}
         />
       </Row>
     </section>
     <section className="settings-group">
-      <h2 className="settings-group__title">Atajos de teclado</h2>
+      <h2 className="settings-group__title">{t("Atajos de teclado")}</h2>
       <dl className="shortcuts">
-        {SHORTCUTS.map(([keys, action]) => (
+        {shortcuts().map(([keys, action]) => (
           <div key={action}>
             <dt>
               {keys.map((key) => (
@@ -265,10 +329,12 @@ export const SettingsView = ({
       </dl>
     </section>
     <section className="settings-group">
-      <h2 className="settings-group__title">Acerca de</h2>
+      <h2 className="settings-group__title">{t("Acerca de")}</h2>
       <p className="setting__hint">
-        GoodTTV {status?.version ?? "…"}. Basado en VacuumStream de Eliott Bouhana (licencia MIT).
-        No está afiliado a Twitch. La reproducción usa un reproductor propio sin anuncios.
+        GoodTTV {status?.version ?? "…"}
+        {t(
+          ". Basado en VacuumStream de Eliott Bouhana (licencia MIT). No está afiliado a Twitch. La reproducción usa un reproductor propio sin anuncios.",
+        )}
       </p>
     </section>
   </div>

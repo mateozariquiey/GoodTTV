@@ -1,3 +1,4 @@
+import { t } from "@goodttv/interfaz"
 import { ArrowClockwiseIcon, ArrowCounterClockwiseIcon } from "@phosphor-icons/react"
 
 // Retroceder o avanzar unos segundos, como ← y →: la flecha en círculo con los segundos dentro.
@@ -13,11 +14,13 @@ export const SkipButton = ({
   readonly onSkip: () => void
 }) => (
   <button
-    aria-label={forward ? `Avanzar ${SKIP_S} s` : `Retroceder ${SKIP_S} s`}
+    aria-label={forward ? t("Avanzar {n} s", { n: SKIP_S }) : t("Retroceder {n} s", { n: SKIP_S })}
     className="icon-button icon-button--light skip"
     disabled={disabled}
     onClick={onSkip}
-    title={forward ? `Avanzar ${SKIP_S} s (→)` : `Retroceder ${SKIP_S} s (←)`}
+    title={
+      forward ? t("Avanzar {n} s (→)", { n: SKIP_S }) : t("Retroceder {n} s (←)", { n: SKIP_S })
+    }
     type="button"
   >
     {forward ? (

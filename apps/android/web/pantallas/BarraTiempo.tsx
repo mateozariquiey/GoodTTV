@@ -1,5 +1,5 @@
 import type { Storyboard } from "@goodttv/contratos"
-import { formatClock } from "@goodttv/interfaz"
+import { formatClock, t } from "@goodttv/interfaz"
 import { thumbnailAt } from "@goodttv/sin-anuncios"
 import { type PointerEvent as ReactPointerEvent, useRef, useState } from "react"
 import { android } from "../api"
@@ -54,7 +54,7 @@ export const BarraTiempo = ({
     // biome-ignore lint/a11y/useFocusableInteractive: sin teclado en el teléfono; los 10 s, en los botones.
     // biome-ignore lint/a11y/useKeyWithClickEvents: el clic solo evita que tocar la barra oculte los controles.
     <div
-      aria-label="Posición en el vídeo"
+      aria-label={t("Posición en el vídeo")}
       aria-valuemax={Math.round(duracion)}
       aria-valuemin={0}
       aria-valuenow={Math.round(vista)}

@@ -51,15 +51,24 @@ class CajaVideo(
 
     private val capa = FrameLayout(contexto)
     private val ocultarCapa = Runnable { capa.visibility = GONE }
-    private val pausa = boton(R.drawable.mini_pausa, "Pausa", Gravity.CENTER, 56) { alPausar(!pausado) }
+    private val pausa = boton(R.drawable.mini_pausa, "", Gravity.CENTER, 56) { alPausar(!pausado) }
+    private val ampliar = boton(R.drawable.mini_ampliar, "", Gravity.TOP or Gravity.START, 44) { alAmpliar() }
+    private val cerrar = boton(R.drawable.mini_cerrar, "", Gravity.TOP or Gravity.END, 44) { alCerrar() }
 
     // Para el icono de pausa o reproducir (lo dice el estado del reproductor).
     var pausado = false
         set(valor) {
             field = valor
             pausa.setImageResource(if (valor) R.drawable.mini_reproducir else R.drawable.mini_pausa)
-            pausa.contentDescription = if (valor) "Reproducir" else "Pausa"
+            rotular()
         }
+
+    // Lo que dicen los botones a quien usa un lector de pantalla, en el idioma de la página (Idioma.kt).
+    fun rotular() {
+        pausa.contentDescription = if (pausado) Idioma.texto("Reproducir", "Play") else Idioma.texto("Pausa", "Pause")
+        ampliar.contentDescription = Idioma.texto("Volver al canal", "Back to the channel")
+        cerrar.contentDescription = Idioma.texto("Cerrar", "Close")
+    }
 
     init {
         setBackgroundColor(Color.BLACK)
@@ -69,8 +78,9 @@ class CajaVideo(
         capa.setBackgroundColor(0x66000000)
         capa.visibility = GONE
         capa.addView(pausa)
-        capa.addView(boton(R.drawable.mini_ampliar, "Volver al canal", Gravity.TOP or Gravity.START, 44) { alAmpliar() })
-        capa.addView(boton(R.drawable.mini_cerrar, "Cerrar", Gravity.TOP or Gravity.END, 44) { alCerrar() })
+        capa.addView(ampliar)
+        capa.addView(cerrar)
+        rotular()
         addView(capa, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT))
     }
 

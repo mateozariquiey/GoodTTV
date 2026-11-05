@@ -5,7 +5,11 @@ import { createDirectoFetch } from "./directo-fetch"
 const ORIGIN = "chrome-extension://abc"
 
 const setup = (handle: Directo["handle"]) => {
-  const directo: Directo = { handle: vi.fn(handle), stop: () => undefined }
+  const directo: Directo = {
+    abrirConexiones: () => undefined,
+    handle: vi.fn(handle),
+    stop: () => undefined,
+  }
   const native = vi.fn(async () => new Response("red"))
   return { directo, fetch: createDirectoFetch(directo, ORIGIN, native), native }
 }

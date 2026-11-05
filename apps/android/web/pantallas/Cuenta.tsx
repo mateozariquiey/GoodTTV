@@ -1,5 +1,13 @@
 import type { AppStatus, Preferences, PreferencesPatch } from "@goodttv/contratos"
-import { type AuthState, LATENCY_MODES, LATENCY_ORDER } from "@goodttv/interfaz"
+import {
+  type AuthState,
+  elegirIdioma,
+  idiomaElegido,
+  LATENCY_MODES,
+  LATENCY_ORDER,
+  t,
+  tMensaje,
+} from "@goodttv/interfaz"
 import { ArrowSquareOutIcon, CopyIcon } from "@phosphor-icons/react"
 import type { ReactNode } from "react"
 import { android } from "../api"
@@ -61,13 +69,13 @@ const minutesLeft = (expiresAt: string): number =>
 
 const CuentaTwitch = ({ account }: { readonly account: Account }) => {
   const { auth } = account
-  if (auth === undefined) return <p className="nota">Comprobando la cuenta…</p>
+  if (auth === undefined) return <p className="nota">{t("Comprobando la cuenta…")}</p>
   if (auth.kind === "unreachable") {
     return (
       <>
         <p className="ajuste__alerta" role="alert">
-          No se pudo comprobar la cuenta ({auth.message}). La sesión no se ha cerrado: se vuelve a
-          comprobar sola al volver la conexión.
+          {t("No se pudo comprobar la cuenta ({error}).", { error: tMensaje(auth.message) })}{" "}
+          {t("La sesión no se ha cerrado: se vuelve a comprobar sola al volver la conexión.")}
         </p>
         {/* Sin red también se puede cerrar: se borra aquí, aunque Twitch no se entere. */}
         <div className="botones">
@@ -78,7 +86,7 @@ const CuentaTwitch = ({ account }: { readonly account: Account }) => {
             onClick={() => void account.logout()}
             type="button"
           >
-            Cerrar sesión
+            {t("Cerrar sesión")}
           </button>
         </div>
       </>
@@ -93,7 +101,7 @@ const CuentaTwitch = ({ account }: { readonly account: Account }) => {
           url={auth.profileImageUrl}
         />
         <span className="conectado__nombre">
-          Conectado como <b>{auth.displayName}</b>
+          {t("Conectado como")} <b>{auth.displayName}</b>
         </span>
         <button
           className="boton"
@@ -101,7 +109,7 @@ const CuentaTwitch = ({ account }: { readonly account: Account }) => {
           onClick={() => void account.logout()}
           type="button"
         >
-          Cerrar sesión
+          {t("Cerrar sesión")}
         </button>
       </div>
     )
@@ -110,27 +118,27 @@ const CuentaTwitch = ({ account }: { readonly account: Account }) => {
     const { challenge } = auth
     return (
       <div className="codigo">
-        <p>Acepta este código en twitch.tv/activate:</p>
+        <p>{t("Acepta este código en twitch.tv/activate:")}</p>
         <p className="codigo__letras">
           <span aria-hidden="true">{challenge.userCode}</span>
-          <span className="oculto">Código {challenge.userCode.split("").join(" ")}</span>
+          <span className="oculto">
+            {t("Código")} {challenge.userCode.split("").join(" ")}
+          </span>
         </p>
-        <p className="nota">Caduca en {minutesLeft(challenge.expiresAt)} min.</p>
+        <p className="nota">{t("Caduca en {n} min.", { n: minutesLeft(challenge.expiresAt) })}</p>
         <div className="botones">
           <a className="boton boton--principal" href={challenge.verificationUri}>
-            <ArrowSquareOutIcon aria-hidden="true" size={20} />
-            Abrir Twitch
+            <ArrowSquareOutIcon aria-hidden="true" size={20} /> {t("Abrir Twitch")}
           </a>
           <button
             className="boton"
             onClick={() => android.copiar(challenge.userCode)}
             type="button"
           >
-            <CopyIcon aria-hidden="true" size={20} />
-            Copiar el código
+            <CopyIcon aria-hidden="true" size={20} /> {t("Copiar el código")}
           </button>
           <button className="boton" onClick={() => void account.logout()} type="button">
-            Cancelar
+            {t("Cancelar")}
           </button>
         </div>
       </div>
@@ -140,11 +148,13 @@ const CuentaTwitch = ({ account }: { readonly account: Account }) => {
     <>
       {auth.kind === "error" ? (
         <p className="ajuste__alerta" role="alert">
-          No se pudo vincular la cuenta ({auth.message}).
+          {t("No se pudo vincular la cuenta ({error}).", { error: tMensaje(auth.message) })}
         </p>
       ) : null}
       <p className="ajuste__pista">
-        Vincula tu cuenta para ver a quién sigues y leer el chat. Solo se piden permisos de lectura.
+        {t(
+          "Vincula tu cuenta para ver a quién sigues y leer el chat. Solo se piden permisos de lectura.",
+        )}
       </p>
       <button
         className="boton boton--principal boton--ancho"
@@ -152,7 +162,7 @@ const CuentaTwitch = ({ account }: { readonly account: Account }) => {
         onClick={() => void account.begin()}
         type="button"
       >
-        Vincular la cuenta de Twitch
+        {t("Vincular la cuenta de Twitch")}
       </button>
     </>
   )
@@ -171,17 +181,31 @@ export const Cuenta = ({
 }) => (
   <div className="pantalla">
     <Barra>
-      <h1 className="barra__titulo">Cuenta y ajustes</h1>
+      <h1 className="barra__titulo">{t("Cuenta y ajustes")}</h1>
     </Barra>
     <main className="ajustes">
       <section className="grupo">
-        <h2 className="grupo__titulo">Cuenta de Twitch</h2>
+        <h2 className="grupo__titulo">{t("Cuenta de Twitch")}</h2>
         <CuentaTwitch account={account} />
       </section>
       <section className="grupo">
-        <h2 className="grupo__titulo">Retraso del directo</h2>
+        <h2 className="grupo__titulo">{t("Idioma")}</h2>
         <Segmentos
-          label="Retraso del directo"
+          label={t("Idioma")}
+          name="idioma"
+          onChange={elegirIdioma}
+          options={[
+            { label: t("Sistema"), value: "sistema" },
+            { label: "Español", value: "es" },
+            { label: "English", value: "en" },
+          ]}
+          value={idiomaElegido()}
+        />
+      </section>
+      <section className="grupo">
+        <h2 className="grupo__titulo">{t("Retraso del directo")}</h2>
+        <Segmentos
+          label={t("Retraso del directo")}
           name="latencia"
           onChange={(latencyMode) => onPreferences({ latencyMode })}
           options={LATENCY_ORDER.map((mode) => ({ label: LATENCY_MODES[mode].label, value: mode }))}
@@ -191,35 +215,36 @@ export const Cuenta = ({
       </section>
       <section className="grupo">
         <h2 className="grupo__titulo">Chat</h2>
-        <Fila label="Mostrar el chat al abrir un canal">
+        <Fila label={t("Mostrar el chat al abrir un canal")}>
           <button
             aria-checked={preferences.chatVisible}
-            aria-label="Mostrar el chat al abrir un canal"
+            aria-label={t("Mostrar el chat al abrir un canal")}
             className="interruptor"
             onClick={() => onPreferences({ chatVisible: !preferences.chatVisible })}
             role="switch"
             type="button"
           />
         </Fila>
-        <Fila label="Tamaño del texto">
+        <Fila label={t("Tamaño del texto")}>
           <Segmentos
-            label="Tamaño del texto del chat"
+            label={t("Tamaño del texto del chat")}
             name="tamano-chat"
             onChange={(chatScale) => onPreferences({ chatScale })}
             options={[
               { label: "Normal", value: "normal" as const },
-              { label: "Grande", value: "large" as const },
+              { label: t("Grande"), value: "large" as const },
             ]}
             value={preferences.chatScale}
           />
         </Fila>
       </section>
       <section className="grupo">
-        <h2 className="grupo__titulo">Acerca de</h2>
+        <h2 className="grupo__titulo">{t("Acerca de")}</h2>
         <p className="ajuste__pista">
-          GoodTTV {status?.version ?? "…"} para Android, con WebView {webview}. Basado en
-          VacuumStream de Eliott Bouhana (licencia MIT). No está afiliado a Twitch. La reproducción
-          usa un reproductor propio sin anuncios.
+          GoodTTV {status?.version ?? "…"} {t("para Android, con WebView")} {webview}
+          {t(
+            ". Basado en VacuumStream de Eliott Bouhana (licencia MIT). No está afiliado a Twitch. La reproducción usa un reproductor propio sin anuncios.",
+          )}
         </p>
       </section>
     </main>

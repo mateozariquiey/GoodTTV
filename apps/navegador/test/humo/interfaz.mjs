@@ -3,7 +3,8 @@
 // Esc; en Chrome, F a pantalla completa, con su propio chat), chat (C), silencio (M), volver a Inicio con el canal en «Seguir viendo», pedir y cancelar el código de la
 // cuenta, un modo de retraso que se conserva al recargar, Inicio sin poder comprobar la cuenta y cerrar sesión así
 // (?sinred, EXT-4), un VOD de las emisiones del canal (VOD-1) con el volumen elegido en el directo, que sigue al
-// volver a él, y dos pestañas a la vez, con sonido solo en la última (EXT-5) y la nueva con ese volumen.
+// volver a él, y dos pestañas a la vez, con sonido solo en la última (EXT-5) y la nueva con ese volumen. Al cerrarse la
+// que suena, vuelve a sonar la otra; con dos ventanas a la vista, un clic en la que calla le da el sonido sin pausarla.
 // En Chrome, teclas, texto y clics son de verdad (CDP); en Firefox se simulan en la página (BiDi no los admite en las
 // páginas de una extensión).
 // Uso, desde la raíz y con la extensión compilada (bun run build:navegador):
@@ -197,6 +198,41 @@ const run = async (name, launch) => {
       "el engranaje abre Ajustes",
       await waitFor(`document.body.innerText.includes("Retraso del directo")`),
     )
+
+    // El idioma (issue #1): cambia sin recargar y se recuerda; «Sistema» aquí es español (--lang=es).
+    const idioma = (valor) => browser.click(`input[name="idioma"][value="${valor}"]`)
+    await idioma("en")
+    step(
+      "elegir English cambia los ajustes sin recargar",
+      await waitFor(
+        `document.body.innerText.includes("Stream delay") && document.documentElement.lang === "en"`,
+      ),
+    )
+    await browser.evaluate(`(globalThis.antesDeRecargar = true, location.reload())`)
+    step(
+      "el idioma se recuerda al recargar",
+      await waitFor(
+        `globalThis.antesDeRecargar !== true && document.body.innerText.includes("Stream delay") && document.querySelector('input[name="idioma"][value="en"]')?.checked === true`,
+      ),
+    )
+    await idioma("sistema")
+    await waitFor(`document.documentElement.lang === "es"`)
+    // Español coincide con el del sistema aquí: el idioma no cambia, pero la elección sí, y el selector debe seguirla.
+    await idioma("es")
+    step(
+      "elegir el mismo idioma que el sistema marca esa opción",
+      await waitFor(
+        `document.querySelector('input[name="idioma"][value="es"]')?.checked === true`,
+        5_000,
+      ),
+    )
+    await idioma("sistema")
+    step(
+      "Sistema vuelve al idioma del navegador y no guarda nada",
+      await waitFor(
+        `document.body.innerText.includes("Retraso del directo") && localStorage.getItem("goodttv-idioma") === null`,
+      ),
+    )
     await browser.click(".settings-group .button--primary")
     step(
       "Vincular cuenta pide un código a Twitch y lo muestra",
@@ -347,6 +383,46 @@ const run = async (name, launch) => {
       await waitFor(`(${VIDEO})?.silencio === true && (${VIDEO})?.pausado === false`),
     )
     await other.close()
+    step(
+      "al cerrarse la que sonaba, la primera vuelve a sonar",
+      await waitFor(`(${VIDEO})?.silencio === false`, 5_000),
+    )
+
+    // Dos ventanas a la vista: un clic en el vídeo de la que está en silencio le da el sonido, sin pausarla.
+    const side = await browser.openTab(`goodttv.html#/canal/${channel}`, { inWindow: true })
+    step("otra ventana abre el canal", await waitIn(side, `(${VIDEO})?.tiempo > 1`))
+    step("la primera se calla", await waitFor(`(${VIDEO})?.silencio === true`))
+    step(
+      "y avisa de que suena en otra ventana",
+      await waitFor(`document.querySelector(".sound-elsewhere") !== null`, 5_000),
+    )
+    step(
+      "la que suena no lleva aviso",
+      await waitIn(side, `document.querySelector(".sound-elsewhere") === null`, 5_000),
+    )
+    // En Firefox los clics se simulan, sin pointerdown, así que este, de verdad, solo en Chrome.
+    if (browser.cdp !== undefined) {
+      const box = await browser.evaluate(`(() => {
+        const rect = document.querySelector(".stage__surface").getBoundingClientRect()
+        return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 }
+      })()`)
+      const mouse = { button: "left", clickCount: 1, ...box }
+      await browser.cdp("Input.dispatchMouseEvent", { ...mouse, type: "mousePressed" })
+      await browser.cdp("Input.dispatchMouseEvent", { ...mouse, type: "mouseReleased" })
+      step(
+        "un clic en su vídeo le da el sonido",
+        await waitFor(`(${VIDEO})?.silencio === false`, 5_000),
+      )
+      step("y a la otra se lo quita", await waitIn(side, `(${VIDEO})?.silencio === true`, 5_000))
+      step(
+        "y el aviso pasa a la otra",
+        (await waitFor(`document.querySelector(".sound-elsewhere") === null`, 5_000)) &&
+          (await waitIn(side, `document.querySelector(".sound-elsewhere") !== null`, 5_000)),
+      )
+      await sleep(600) // más que la espera del doble clic: si fuera a pausarse, ya lo estaría
+      step("sin pausarla", await browser.evaluate(`(${VIDEO})?.pausado === false`))
+    }
+    await side.close()
     return { navegador: name, ok: true, pasos: steps.length }
   } catch (error) {
     return { motivo: String(error), navegador: name, ok: false, pasos: steps.length }

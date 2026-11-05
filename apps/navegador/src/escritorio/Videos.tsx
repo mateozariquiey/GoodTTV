@@ -5,7 +5,9 @@ import {
   isSeen,
   prefetchVod,
   prefetchVodMaster,
+  t,
   unfinishedVods,
+  useIdioma,
   vodProgress,
 } from "@goodttv/interfaz"
 import { FilmStripIcon } from "@phosphor-icons/react"
@@ -52,9 +54,9 @@ export const VideoTile = ({
         )}
         <span className="video-tile__length">{formatClock(video.seconds)}</span>
         {current ? (
-          <span className="video-tile__seen">Viéndolo</span>
+          <span className="video-tile__seen">{t("Viéndolo")}</span>
         ) : seen ? (
-          <span className="video-tile__seen">Visto</span>
+          <span className="video-tile__seen">{t("Visto")}</span>
         ) : null}
         {ratio === null ? null : (
           <span className="video-tile__progress">
@@ -62,7 +64,7 @@ export const VideoTile = ({
           </span>
         )}
       </span>
-      <span className="video-tile__title">{video.title || "Sin título"}</span>
+      <span className="video-tile__title">{video.title || t("Sin título")}</span>
       <span className="video-tile__meta">
         {channel === undefined ? null : <b>{channel} · </b>}
         {formatAgo(video.createdAt)}
@@ -89,6 +91,7 @@ export const ChannelVideos = memo(function ChannelVideos({
   readonly offline: boolean
   readonly title?: string
 }) {
+  useIdioma() // con memo no se vuelve a pintar solo al cambiar el idioma
   const [loaded, setLoaded] = useState<Loaded>({ kind: "loading" })
   useEffect(() => {
     const vods = window.api.vods
@@ -115,10 +118,10 @@ export const ChannelVideos = memo(function ChannelVideos({
   if (window.api.vods === undefined) return null
   const videos = loaded.kind === "ready" ? (loaded.list?.videos ?? []) : []
   return (
-    <section aria-label="Vídeos" className={`videos${offline ? " videos--offline" : ""}`}>
+    <section aria-label={t("Vídeos")} className={`videos${offline ? " videos--offline" : ""}`}>
       {unfinished.length === 0 ? null : (
         <>
-          <h2 className="videos__title">Seguir viendo</h2>
+          <h2 className="videos__title">{t("Seguir viendo")}</h2>
           <div className="videos__row">
             {unfinished.map((entry) => (
               <VideoTile key={entry.id} video={entry} />
@@ -127,15 +130,15 @@ export const ChannelVideos = memo(function ChannelVideos({
         </>
       )}
       <h2 className="videos__title">
-        {title ?? (offline ? "Sus últimas emisiones" : "Emisiones anteriores")}
+        {title ?? (offline ? t("Sus últimas emisiones") : t("Emisiones anteriores"))}
       </h2>
       {loaded.kind === "loading" ? (
-        <p className="videos__note">Cargando…</p>
+        <p className="videos__note">{t("Cargando…")}</p>
       ) : loaded.kind === "error" ? (
-        <p className="videos__note">No se pudieron cargar.</p>
+        <p className="videos__note">{t("No se pudieron cargar.")}</p>
       ) : videos.length === 0 ? (
         <p className="videos__note">
-          Este canal no guarda sus emisiones, o son solo para suscriptores.
+          {t("Este canal no guarda sus emisiones, o son solo para suscriptores.")}
         </p>
       ) : (
         <div className="videos__grid">

@@ -9,12 +9,23 @@ import {
   useHome,
   useOpeningPrewarm,
   usePreferences,
+  useRefreshWhileVisible,
 } from "@goodttv/interfaz"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { ChannelView } from "./ChannelView"
+import {
+  addToGrid,
+  gridEnabled,
+  gridFrom,
+  lastActive,
+  lastGrid,
+  rememberActive,
+  rememberGrid,
+} from "./cuadricula"
+import { GridView } from "./GridView"
 import { HomeView } from "./HomeView"
 import { usePointerPrewarm } from "./prewarm"
-import { navigate, useRoute } from "./routes"
+import { navigate, type Route, useRoute } from "./routes"
 import { SettingsView } from "./SettingsView"
 import { Sidebar } from "./Sidebar"
 import { contextOf, shortcutFor, watchPointerFocus } from "./shortcuts"
@@ -28,7 +39,11 @@ import { VodView } from "./VodView"
 const REFRESH_MS = 120_000 // como Inicio en la tele
 
 export const Desktop = () => {
-  const route = useRoute()
+  const address = useRoute()
+  // Sin la cuadrícula activada (EXT-6) o sin canales, su dirección es Inicio, como cualquier otra que no se conoce.
+  const gridOn = gridEnabled()
+  const route: Route =
+    address.view === "grid" && (!gridOn || address.logins.length === 0) ? { view: "home" } : address
   const account = useAuth()
   const status = useAppStatus()
   const {
@@ -40,10 +55,7 @@ export const Desktop = () => {
   // Al abrir, lo que se vio la última vez mientras se comprueba la cuenta y llega lo de ahora (useHome).
   const home = useHome(account.auth)
   const { auth, refresh, resource, signedIn, sketch, unreachable } = home
-  useEffect(() => {
-    const timer = setInterval(() => void refresh(), REFRESH_MS)
-    return () => clearInterval(timer)
-  }, [refresh])
+  useRefreshWhileVisible(refresh, REFRESH_MS)
   // Lo que cambia otra pestaña (goodttv.tsx): entrar o salir de la cuenta, o las preferencias.
   const { reload: reloadAccount } = account
   useEffect(() => {
@@ -88,10 +100,24 @@ export const Desktop = () => {
   // El último canal abierto desde una lista o la búsqueda, con lo que se sabía de él; si se llega por la dirección,
   // lo que digan las listas.
   const [opened, setOpened] = useState<Channel>()
-  const open = useCallback((channel: Channel) => {
-    setOpened(channel)
-    navigate({ login: channel.login, view: "channel" })
+  // En la cuadrícula, lo que se elige en la columna o en la búsqueda entra en ella.
+  const [gridActive, setGridActiveState] = useState<string | undefined>(() => lastActive())
+  const setGridActive = useCallback((login: string) => {
+    setGridActiveState(login)
+    rememberActive(login)
   }, [])
+  const gridLogins = route.view === "grid" ? route.logins : null
+  useEffect(() => {
+    if (gridLogins !== null) rememberGrid(gridLogins)
+  }, [gridLogins])
+  const open = useCallback(
+    (channel: Channel) => {
+      setOpened(channel)
+      if (gridLogins === null) navigate({ login: channel.login, view: "channel" })
+      else navigate({ logins: addToGrid(gridLogins, channel.login, gridActive), view: "grid" })
+    },
+    [gridActive, gridLogins],
+  )
   const channel = useMemo((): Channel | undefined => {
     if (route.view !== "channel") return undefined
     if (opened?.login === route.login) return opened
@@ -107,6 +133,10 @@ export const Desktop = () => {
     return []
   }, [channel, following, popular, recents])
 
+  const knownChannels = useMemo(
+    () => [...following, ...popular, ...recents, ...(opened === undefined ? [] : [opened])],
+    [following, opened, popular, recents],
+  )
   const offline = useMemo(
     () => new Set(recents.filter((each) => each.live === false).map((each) => each.login)),
     [recents],
@@ -117,7 +147,7 @@ export const Desktop = () => {
   const [collapsed, setCollapsed] = useState(false)
   const [theater, setTheater] = useState(false)
   useEffect(() => {
-    if (route.view !== "channel" && route.view !== "vod") setTheater(false)
+    if (route.view !== "channel" && route.view !== "vod" && route.view !== "grid") setTheater(false)
   }, [route.view])
   const search = useRef<HTMLInputElement>(null)
 
@@ -145,7 +175,7 @@ export const Desktop = () => {
 
   return (
     <div
-      className={`desktop${theater && (channel !== undefined || route.view === "vod") ? " desktop--theater" : ""}${collapsed ? " desktop--collapsed" : ""}`}
+      className={`desktop${theater && (channel !== undefined || route.view === "vod" || route.view === "grid") ? " desktop--theater" : ""}${collapsed ? " desktop--collapsed" : ""}`}
     >
       <TopBar
         account={auth?.kind === "authenticated" ? auth : undefined}
@@ -158,6 +188,17 @@ export const Desktop = () => {
         current={channel?.login}
         failed={resource.kind === "error" || unreachable !== undefined}
         loading={resource.kind === "loading" && unreachable === undefined}
+        onAdd={
+          gridOn && route.view !== "grid"
+            ? (added) => {
+                setOpened(added)
+                const base = gridFrom(channel?.login, lastGrid())
+                const sounding = channel?.login ?? gridActive ?? base[0] ?? added.login
+                setGridActive(sounding)
+                navigate({ logins: addToGrid(base, added.login, sounding), view: "grid" })
+              }
+            : undefined
+        }
         onCollapse={() => setCollapsed((value) => !value)}
         onOpen={open}
         onOrder={setOrder}
@@ -171,7 +212,30 @@ export const Desktop = () => {
             canChat={auth?.kind === "authenticated" && auth.canChat === true}
             channel={channel}
             lineup={lineup}
+            onGrid={
+              gridOn
+                ? () => {
+                    setGridActive(channel.login)
+                    navigate({ logins: gridFrom(channel.login, lastGrid()), view: "grid" })
+                  }
+                : undefined
+            }
             onOpen={open}
+            onPreferences={update}
+            onTheater={setTheater}
+            preferences={preferences}
+            preferencesLoaded={preferencesLoaded}
+            signedIn={signedIn}
+            theater={theater}
+          />
+        ) : route.view === "grid" ? (
+          <GridView
+            active={gridActive}
+            canChat={auth?.kind === "authenticated" && auth.canChat === true}
+            known={knownChannels}
+            logins={route.logins}
+            onActive={setGridActive}
+            onAdd={() => search.current?.focus()}
             onPreferences={update}
             onTheater={setTheater}
             preferences={preferences}

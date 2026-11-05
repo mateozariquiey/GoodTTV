@@ -27,6 +27,7 @@ const SAFE_FIELDS = new Set([
   "ahora",
   "antes",
   "canal",
+  "celda",
   "duracionS",
   "ev",
   "fragmentosVod",
@@ -314,23 +315,26 @@ export const labApi = (base: AppApi, search: string): AppApi => {
         ...(writing ? { canChat: true } : {}),
       }),
     },
-    catalog: {
-      ...api.catalog,
-      streamsByLogin: async (logins) =>
-        logins.map((each) => ({
-          category: "Prueba",
-          id: "1",
-          startedAt: new Date().toISOString(),
-          tags: [],
-          thumbnailUrl:
-            "https://static-cdn.jtvnw.net/previews-ttv/live_user_x-{width}x{height}.jpg",
-          title: "Chat del laboratorio",
-          userId: "1",
-          userLogin: each,
-          userName: each,
-          viewerCount: 1,
-        })),
-    },
+    // Con ?twitchfalso, la ficha del canal sale de sus datos, para que las capturas lleven los de verdad.
+    catalog: params.has("twitchfalso")
+      ? api.catalog
+      : {
+          ...api.catalog,
+          streamsByLogin: async (logins) =>
+            logins.map((each) => ({
+              category: "Prueba",
+              id: "1",
+              startedAt: new Date().toISOString(),
+              tags: [],
+              thumbnailUrl:
+                "https://static-cdn.jtvnw.net/previews-ttv/live_user_x-{width}x{height}.jpg",
+              title: "Chat del laboratorio",
+              userId: "1",
+              userLogin: each,
+              userName: each,
+              viewerCount: 1,
+            })),
+        },
     chat: {
       close: async () => {
         stop()

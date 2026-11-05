@@ -4,7 +4,7 @@
 // en nativo, red-nativa.ts) y window.api (api.ts), con la sesión cifrada por la app.
 // Con ?reproductor=b, en cambio, abre el canal con hls.js en la propia página (B), solo para medir (medir-b.tsx).
 import "@fontsource-variable/atkinson-hyperlegible-next"
-import { type Platform, PlatformContext } from "@goodttv/interfaz"
+import { activarIdioma, type Platform, PlatformContext, useIdioma } from "@goodttv/interfaz"
 import { pageStorage, readSavedHome } from "@goodttv/servicios"
 import { FetchLoader } from "hls.js"
 import { StrictMode } from "react"
@@ -35,8 +35,18 @@ const PLATFORM: Platform = {
 
 const element = document.querySelector("#root")
 if (element === null) throw new TypeError("Root element is missing")
+
+// Al cambiar de idioma se vuelve a pintar todo sin recargar: el vídeo sigue sonando.
+const Raiz = () => {
+  useIdioma()
+  return medirB ? <MedirB /> : <App />
+}
+
+activarIdioma()
 createRoot(element).render(
   <StrictMode>
-    <PlatformContext value={PLATFORM}>{medirB ? <MedirB /> : <App />}</PlatformContext>
+    <PlatformContext value={PLATFORM}>
+      <Raiz />
+    </PlatformContext>
   </StrictMode>,
 )

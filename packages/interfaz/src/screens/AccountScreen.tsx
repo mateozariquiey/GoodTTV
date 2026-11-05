@@ -8,6 +8,7 @@ import type {
 import { QRCodeSVG } from "qrcode.react"
 import { useEffect, useRef, useState } from "react"
 import type { AuthState } from "../data"
+import { t } from "../idioma"
 import { useLayer } from "../navigation"
 import { RetryButton } from "../ui"
 
@@ -32,16 +33,34 @@ const TO_ACCOUNT = "account-link account-cancel account-retry account-logout"
 export const LATENCY_MODES: Record<LatencyMode, { readonly hint: string; readonly label: string }> =
   {
     adaptativo: {
-      hint: "Unos segundos de retraso. Si el canal pone una pausa publicitaria total, la primera para la imagen unos segundos y desde entonces se mantiene ~16 s por detrás para que las siguientes no se noten. Las pausas se cubren con la grabación del directo, si el canal la tiene pública.",
-      label: "Adaptativo",
+      get hint() {
+        return t(
+          "Unos segundos de retraso. Si el canal pone una pausa publicitaria total, la primera para la imagen unos segundos y desde entonces se mantiene ~16 s por detrás para que las siguientes no se noten. Las pausas se cubren con la grabación del directo, si el canal la tiene pública.",
+        )
+      },
+      get label() {
+        return t("Adaptativo")
+      },
     },
     directo: {
-      hint: "El mínimo retraso posible, para eventos en vivo. Si el canal pone una pausa publicitaria total, la imagen se queda quieta lo que dure y luego salta al directo.",
-      label: "Directo",
+      get hint() {
+        return t(
+          "El mínimo retraso posible, para eventos en vivo. Si el canal pone una pausa publicitaria total, la imagen se queda quieta lo que dure y luego salta al directo.",
+        )
+      },
+      get label() {
+        return t("Directo")
+      },
     },
     "sin-paradas": {
-      hint: "Unos 22 s por detrás desde el principio, para que las pausas publicitarias totales no detengan la imagen. Las cubre con la grabación del directo, si el canal la tiene pública.",
-      label: "Sin paradas",
+      get hint() {
+        return t(
+          "Unos 22 s por detrás desde el principio, para que las pausas publicitarias totales no detengan la imagen. Las cubre con la grabación del directo, si el canal la tiene pública.",
+        )
+      },
+      get label() {
+        return t("Sin paradas")
+      },
     },
   }
 export const LATENCY_ORDER: readonly LatencyMode[] = ["adaptativo", "sin-paradas", "directo"]

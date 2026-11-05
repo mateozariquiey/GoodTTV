@@ -136,7 +136,7 @@ export class TwitchAuth {
     const now = Date.now()
     if (now >= Date.parse(pending.challenge.expiresAt)) {
       this.#pending = undefined
-      return { kind: "error", message: "The Twitch sign-in code expired" }
+      return { kind: "error", message: "El código para vincular la cuenta ha caducado" }
     }
     if (now - pending.lastPollAt < pending.challenge.intervalSeconds * 1000) {
       return { challenge: pending.challenge, kind: "authorizing" }
@@ -165,7 +165,13 @@ export class TwitchAuth {
         tokenError.message === "invalid device code"
       ) {
         this.#pending = undefined
-        return { kind: "error", message: tokenError.message }
+        return {
+          kind: "error",
+          message:
+            tokenError.message === "access_denied"
+              ? "Has rechazado el permiso en Twitch"
+              : "El código para vincular la cuenta ha caducado",
+        }
       }
       return { challenge: pending.challenge, kind: "authorizing" }
     }
@@ -221,7 +227,7 @@ export class TwitchAuth {
   async #requireClientId(): Promise<string> {
     const settings = await this.#settings.load()
     if (settings.clientId === "") {
-      throw new ConfigurationError("This build has no Twitch Client ID")
+      throw new ConfigurationError("Esta compilación no tiene Client ID de Twitch")
     }
     return settings.clientId
   }

@@ -1,3 +1,4 @@
+import { t } from "@goodttv/interfaz"
 import {
   ArrowClockwiseIcon,
   ArrowCounterClockwiseIcon,
@@ -84,7 +85,9 @@ const Saltar = ({
   readonly onSaltar: () => void
 }) => (
   <button
-    aria-label={adelante ? `Avanzar ${SALTO_S} s` : `Retroceder ${SALTO_S} s`}
+    aria-label={
+      adelante ? t("Avanzar {n} s", { n: SALTO_S }) : t("Retroceder {n} s", { n: SALTO_S })
+    }
     className="boton-icono boton-icono--claro saltar"
     disabled={disabled}
     onClick={onSaltar}
@@ -114,13 +117,13 @@ export const Centro = ({
   <div className="centro">
     <Saltar adelante={false} disabled={false} onSaltar={() => onSaltar(-SALTO_S)} />
     <button
-      aria-label={pausado ? "Reproducir" : "Pausa"}
+      aria-label={pausado ? t("Reproducir") : t("Pausa")}
       className="boton-icono boton-icono--claro centro__pausa"
       onClick={onPausa}
       type="button"
     >
       {esperando ? (
-        <span aria-label="Cargando" className="girando girando--centro" role="status" />
+        <span aria-label={t("Cargando")} className="girando girando--centro" role="status" />
       ) : pausado ? (
         <PlayIcon weight="fill" />
       ) : (
@@ -217,5 +220,17 @@ export const Pestanas = ({
         {nombre}
       </button>
     ))}
+  </div>
+)
+
+// Ha fallado y la app lo vuelve a intentar sola (Reproductor.fallo): no hay nada que pulsar.
+export const AvisoReconexion = ({ fase }: { readonly fase: "reconectando" | "sin-red" }) => (
+  <div className="escenario__aviso" role="status">
+    <div aria-hidden="true" className="girando girando--centro" />
+    <p>
+      {fase === "sin-red"
+        ? t("Sin conexión. Seguirá solo cuando vuelva la red.")
+        : t("Se ha cortado. Volviendo a conectar…")}
+    </p>
   </div>
 )

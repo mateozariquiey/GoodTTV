@@ -9,6 +9,8 @@ export type Route =
   // Un VOD (VOD-1): #/vod/<id>. Al retroceder un directo (DVR-1), en un segundo (?t=) y con el canal para volver al
   // directo (?directo=).
   | { readonly view: "vod"; readonly id: string; readonly at?: number; readonly live?: string }
+  // Varios canales en una pestaña (EXT-6): #/cuadricula/<login>,<login>…
+  | { readonly view: "grid"; readonly logins: readonly string[] }
 
 const LOGIN = /^[a-z0-9_]{1,25}$/
 
@@ -19,6 +21,13 @@ export const parseRoute = (hash: string): Route => {
     return { login: login.toLowerCase(), view: "channel" }
   }
   if (view === "ajustes") return { view: "settings" }
+  if (view === "cuadricula") {
+    const logins = login.toLowerCase().split(",")
+    return {
+      logins: [...new Set(logins.filter((each) => LOGIN.test(each)))].slice(0, 4),
+      view: "grid",
+    }
+  }
   if (view === "vod" && /^\d{1,20}$/.test(login)) {
     const params = new URLSearchParams(query)
     const at = Number(params.get("t") ?? "")
@@ -40,7 +49,9 @@ export const routeHash = (route: Route): string =>
       ? "#/ajustes"
       : route.view === "vod"
         ? `#/vod/${route.id}${vodQuery(route)}`
-        : "#/"
+        : route.view === "grid"
+          ? `#/cuadricula/${route.logins.join(",")}`
+          : "#/"
 
 const vodQuery = (route: Extract<Route, { view: "vod" }>): string => {
   const params = new URLSearchParams()

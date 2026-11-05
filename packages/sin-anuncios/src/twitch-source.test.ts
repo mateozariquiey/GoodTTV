@@ -1,8 +1,53 @@
 import { afterEach, describe, expect, it, vi } from "vitest"
-import { openVariant, sessionKind, Vod, vodHour } from "./twitch-source"
+import { HttpError, NotLiveError, openVariant, sessionKind, Vod, vodHour } from "./twitch-source"
 
 afterEach(() => {
   vi.unstubAllGlobals()
+})
+
+describe("openVariant, cuando no se puede abrir", () => {
+  const conToken = (usher: number) =>
+    vi.fn(async (input: RequestInfo | URL) =>
+      new URL(input instanceof Request ? input.url : String(input)).hostname === "gql.twitch.tv"
+        ? Response.json({
+            data: { streamPlaybackAccessToken: { signature: "s", value: "{}" } },
+          })
+        : new Response("", { status: usher }),
+    ) as unknown as typeof fetch
+  const conGql = (cuerpo: unknown) =>
+    vi.fn(async () => Response.json(cuerpo)) as unknown as typeof fetch
+
+  it("usher rechaza el canal (sin emisión, solo para suscriptores): no se puede ver", async () => {
+    await expect(openVariant("c", "site", "d", null, conToken(404))).rejects.toBeInstanceOf(
+      NotLiveError,
+    )
+    await expect(openVariant("c", "site", "d", null, conToken(403))).rejects.toBeInstanceOf(
+      NotLiveError,
+    )
+  })
+
+  it("el canal no existe: no se puede ver", async () => {
+    const red = conGql({ data: { streamPlaybackAccessToken: null } })
+    await expect(openVariant("c", "site", "d", null, red)).rejects.toBeInstanceOf(NotLiveError)
+  })
+
+  it("Twitch falla o limita, o gql no da datos: es un fallo, no dice nada del canal", async () => {
+    await expect(openVariant("c", "site", "d", null, conToken(500))).rejects.toBeInstanceOf(
+      HttpError,
+    )
+    await expect(openVariant("c", "site", "d", null, conToken(429))).rejects.toBeInstanceOf(
+      HttpError,
+    )
+    const red = conGql({ data: null, errors: [{ message: "service error" }] })
+    await expect(openVariant("c", "site", "d", null, red)).rejects.not.toBeInstanceOf(NotLiveError)
+    const sinToken = conGql({
+      data: { streamPlaybackAccessToken: null },
+      errors: [{ message: "service error" }],
+    })
+    await expect(openVariant("c", "site", "d", null, sinToken)).rejects.not.toBeInstanceOf(
+      NotLiveError,
+    )
+  })
 })
 
 describe("sessionKind", () => {

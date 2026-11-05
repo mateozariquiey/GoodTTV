@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest"
 import { Empalme, type EmpalmeEvent, type EmpalmeOptions, type Published } from "./empalme"
-import type { VodSegment, VodSource } from "./twitch-source"
+import { NotLiveError, type VodSegment, type VodSource } from "./twitch-source"
 
 // Listas sintéticas. Índice común i ↔ PDT 12:00:00 + 2·i s, URL https://x/u{i}.ts (con una consulta propia de la
 // sesión, como en Twitch).
@@ -211,6 +211,21 @@ describe("arranque", () => {
     releaseSite()
   })
 
+  it("avisa de la lista de cada sesión que abre", async () => {
+    const lists: string[] = []
+    const empalme = new Empalme({
+      channel: "x",
+      fetchPlaylist: async () => playlist(100, 100, L(100, 104)),
+      onListOpened: (url) => lists.push(url),
+      openSession: async (_channel, type) => opened(variant("1920x1080", `https://x/${type}.m3u8`)),
+      sources: ["embed"],
+    })
+    created.push(empalme)
+    void empalme.start()
+    await empalme.waitFor(0, 1000)
+    expect(lists).toEqual(["https://x/embed.m3u8"])
+  })
+
   it("si otra sesión ya fijó la calidad, usa esa misma de su lista maestra", async () => {
     let releaseEmbed = (): void => undefined
     const empalme = new Empalme({
@@ -369,6 +384,53 @@ describe("arranque con aperturas a la vez", () => {
     resolution: "1920x1080",
     url,
     variants: [{ bandwidth: 6000, fps: 60, name: "1080p60", resolution: "1920x1080", url }],
+  })
+
+  it("solo da el canal por desconectado si lo dice Twitch, no si falla la red", async () => {
+    vi.useFakeTimers()
+    const abriendo = (error: Error) =>
+      new Empalme({
+        channel: "x",
+        fetchPlaylist: async () => playlist(100, 100, L(100, 104)),
+        openSession: async () => {
+          throw error
+        },
+        sources: ["site", "embed"],
+      })
+    const sinRed = abriendo(new TypeError("Failed to fetch"))
+    const sinEmision = abriendo(new NotLiveError("HTTP 404"))
+    created.push(sinRed, sinEmision)
+    void sinRed.start()
+    void sinEmision.start()
+    await vi.advanceTimersByTimeAsync(10)
+    expect(sinRed.status().offline).toBe(false)
+    expect(sinEmision.status().offline).toBe(true)
+  })
+
+  it("al terminar la emisión, con lo publicado, también dice que no emite", async () => {
+    vi.useFakeTimers()
+    let fin = false
+    const empalme = new Empalme({
+      channel: "x",
+      fetchPlaylist: async () => {
+        if (fin) throw new Error("HTTP 404")
+        return playlist(100, 100, L(100, 104))
+      },
+      openSession: async () => {
+        if (fin) throw new NotLiveError("HTTP 404")
+        return variant("b1", "https://x/1.m3u8")
+      },
+      sources: ["site", "embed"],
+    })
+    created.push(empalme)
+    void empalme.start()
+    await vi.advanceTimersByTimeAsync(3000)
+    const { offline, published } = empalme.status()
+    expect(offline).toBe(false)
+    expect(published).toBeGreaterThan(0)
+    fin = true
+    await vi.advanceTimersByTimeAsync(10_000)
+    expect(empalme.status()).toMatchObject({ offline: true, published })
   })
 
   it("no da el canal por desconectado mientras otra sesión sigue abriendo", async () => {
@@ -734,5 +796,41 @@ describe("relleno con el VOD", () => {
     await tick()
     expect(eventsLog.some((e) => e.ev === "nueva-emision")).toBe(true)
     expect(empalme.publishedForTests.some((o) => o.source === "vod")).toBe(false)
+  })
+})
+
+// El DNS de los fragmentos de Twitch tarda ~0,3 s (REN-3): con la lista ya se sabe el host.
+describe("la conexión de los fragmentos, por adelantado", () => {
+  const conFetch = () => {
+    const fetchMock = vi.fn((_url: RequestInfo | URL, _init?: RequestInit) =>
+      Promise.resolve(new Response(null)),
+    )
+    const { empalme, sessions } = make({ fetch: fetchMock as typeof fetch, sources: ["site"] })
+    const site = sessions[0]
+    if (site === undefined) throw new Error("sin sesión")
+    return { empalme, fetchMock, site }
+  }
+
+  it("pide la cabecera de un fragmento ya hecho, una vez por host", () => {
+    const { empalme, fetchMock, site } = conFetch()
+    empalme.receive(site, playlist(100, 100, [...L(100, 103), ["p", 104]]))
+    empalme.receive(site, playlist(101, 101, [...L(101, 104), ["p", 105]]))
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+    expect(fetchMock.mock.calls[0]?.[0]).toBe("https://x/u103.ts?s=100")
+    expect(fetchMock.mock.calls[0]?.[1]?.method).toBe("HEAD")
+  })
+
+  it("con solo anuncios no pide nada: su host no es el de los fragmentos", () => {
+    const { empalme, fetchMock, site } = conFetch()
+    empalme.receive(site, playlist(0, null, A(3)))
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
+  it("si falla, no pasa nada: el fragmento hará lo de siempre", async () => {
+    const { empalme, fetchMock, site } = conFetch()
+    fetchMock.mockRejectedValueOnce(new Error("sin red"))
+    empalme.receive(site, playlist(100, 100, L(100, 103)))
+    await tick()
+    expect(empalme.publishedForTests.length).toBeGreaterThan(0)
   })
 })
