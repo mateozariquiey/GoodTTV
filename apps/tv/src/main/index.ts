@@ -1,9 +1,17 @@
 import { X509Certificate } from "node:crypto"
 import { join } from "node:path"
-import { EmoteCatalog, EventSubChat, LocalStore, TwitchService } from "@goodttv/servicios"
+import {
+  EmoteCatalog,
+  EventSubChat,
+  guestCatalog,
+  LocalStore,
+  TwitchService,
+} from "@goodttv/servicios"
+import { channelByLogin, popularStreams, searchChannels } from "@goodttv/sin-anuncios"
 import { app, BrowserWindow, dialog, Menu, powerSaveBlocker, safeStorage, session } from "electron"
 import { CHANNELS } from "../shared/channels"
 import { type StaticHttpsServer, startStaticHttpsServer } from "./https-server"
+import { idiomaDelSistema, idiomaEfectivo, idiomaStore } from "./idioma"
 import { createInputRouter } from "./input-router"
 import { registerIpc } from "./ipc"
 import { loadLocalCertificate } from "./local-certificate"
@@ -167,7 +175,16 @@ const createWindow = async (): Promise<void> => {
   })
   registerIpc({
     chat,
+    // Como invitado, desde main (con su red, sin CORS): buscar, un canal por su nombre y los más vistos.
+    guest: guestCatalog({
+      byLogin: (login) => channelByLogin(login),
+      popular: (language) => popularStreams({ language }),
+      search: (query, first) => searchChannels(query, { first }),
+    }),
     home: savedHomeStore(app.getPath("userData")),
+    idioma: Object.assign(idiomaStore(app.getPath("userData")), {
+      sistema: idiomaDelSistema(app.getPreferredSystemLanguages(), app.getLocale()),
+    }),
     input,
     local: new LocalStore(localDataFile(app.getPath("userData"))),
     mainWindow,
@@ -220,7 +237,16 @@ if (!app.requestSingleInstanceLock()) {
     .then(createWindow)
     .catch(async (error: unknown) => {
       const message = error instanceof Error ? error.message : "Unknown startup failure"
-      dialog.showErrorBox(`${app.getName()} could not start`, message)
+      const idioma = idiomaEfectivo(
+        idiomaStore(app.getPath("userData")).elegido(),
+        idiomaDelSistema(app.getPreferredSystemLanguages(), app.getLocale()),
+      )
+      dialog.showErrorBox(
+        idioma === "es"
+          ? `${app.getName()} no ha podido arrancar`
+          : `${app.getName()} could not start`,
+        message,
+      )
       await staticServer?.close()
       app.exit(1)
     })

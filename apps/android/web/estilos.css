@@ -1,11 +1,11 @@
-/* GoodTTV en el teléfono. La misma esencia que la tele y la extensión (apps/navegador/src/escritorio/desktop.css): fondo
+/* GoodTTV en el teléfono. La misma esencia que la TV y la extensión (apps/navegador/src/escritorio/desktop.css): fondo
  * casi negro, Atkinson Hyperlegible, el blanco como única marca de selección y el rojo solo para «en directo». A escala
  * de dedo: objetivos de 44 px como mínimo, respuesta al tocar y nada que dependa de pasar el ratón. Maqueta de
  * referencia: investigacion/android/interfaz/propuesta-and3.html (la B, «lista con miniatura»).
  * La página es transparente: el fondo lo pone la app (MainActivity.kt), y en el canal, donde va el vídeo, se ve Media3,
  * que está debajo. Por eso cada pantalla pinta su fondo, salvo el sitio del vídeo. */
 
-/* Cifras (y separadores) en Inter, como en la tele: el cero y el 6/9 de Atkinson leen raro en cifras y horas. */
+/* Cifras (y separadores) en Inter, como en la TV: el cero y el 6/9 de Atkinson leen raro en cifras y horas. */
 @font-face {
   font-family: "GoodTTV Digits";
   font-style: normal;

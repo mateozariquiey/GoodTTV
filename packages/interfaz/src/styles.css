@@ -619,8 +619,10 @@ kbd {
   gap: 0.75rem;
 }
 
-.settings__group--account {
-  grid-row: span 3;
+.settings__column {
+  display: grid;
+  align-content: start;
+  gap: 2.5rem;
 }
 
 .settings__group h2 {

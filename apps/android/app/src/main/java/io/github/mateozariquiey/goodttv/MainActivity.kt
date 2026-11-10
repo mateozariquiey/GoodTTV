@@ -113,7 +113,7 @@ class MainActivity : Activity() {
         // La página no lee archivos del teléfono ni de otras apps (file:// y content://).
         web.settings.allowFileAccess = false
         web.settings.allowContentAccess = false
-        // El directo empieza a sonar sin tocar la pantalla, como en la tele y la extensión.
+        // El directo empieza a sonar sin tocar la pantalla, como en la TV y la extensión.
         web.settings.mediaPlaybackRequiresUserGesture = false
         // localStorage: preferencias, recientes e Inicio de la última vez (api.ts). Queda en los datos de la app.
         web.settings.domStorageEnabled = true

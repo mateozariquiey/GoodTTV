@@ -11,18 +11,31 @@ that removes the ads, the account and the chat.
 
 | App | For | Status |
 | --- | --- | --- |
-| [Browser](#browser) (`apps/navegador`) | Chrome, Chromium, Firefox and Zen, with mouse and keyboard | 0.5.0 |
+| [Browser](#browser) (`apps/navegador`) | Chrome, Chromium, Firefox and Zen, with mouse and keyboard | 0.5.1 |
 | [Android](#android) (`apps/android`) | Phones with Android 13 or later | 0.5.0, experimental |
-| [TV](#tv) (`apps/tele`) | A Linux mini PC connected to the TV, with a remote | 0.5.0, no longer tested on a real TV |
+| [TV](#tv) (`apps/tv`) | A Linux mini PC connected to the TV, with a remote | 0.5.1, no longer tested on a real TV |
 
-The extension and the Android app come in English and Spanish: they follow your system, and you can change it in the settings. The TV version is in Spanish.
+All three come in English and Spanish: they follow your system, and you can change it in the settings.
 
 ![Extension: a channel with its controls on top of the video, its card and chat; on the left, followed channels that are live](docs/media/escritorio-canal.jpg)
+
+## New in 0.5.1
+
+Only the TV app changes. The extension gets the same version number with no visible changes, and Android stays at
+0.5.0, which is still the latest version for the phone.
+
+- **English, and a language setting, in the TV app too:** System, English or Español, in Settings. Each press of OK
+  moves to the next one, without reloading or stopping the video. System follows your Linux language: Spanish if it is
+  Spanish, English otherwise.
+- **Search and popular streams without an account** in the TV app, and a channel opened by its name shows its picture,
+  category and title.
+- **Settings in two columns** in the TV app: your account, the language and the remote on the left; chat, playback and
+  "About" on the right.
 
 ## New in 0.5.0
 
 - **English, and a language setting,** in the extension and on Android: System, English or Spanish, in the settings.
-  System means Spanish if your browser or phone is in Spanish, and English otherwise. The TV version stays in Spanish.
+  System means Spanish if your browser or phone is in Spanish, and English otherwise. The TV app got it in 0.5.1.
 - **The first channel opens much faster** in the extension: on the first click after opening the page, the first frame
   takes 1.0-1.2 s instead of about 1.9 s, because the connections to Twitch are opened ahead of time. Changing
   channels after watching one for over a minute gains about 0.3 s. Android opens its connections ahead of time too, but that hasn't been measured on a phone yet.
@@ -88,11 +101,11 @@ Firefox.
 
 **Install:** it is not in the stores. Download it from the
 [releases](https://github.com/mateozariquiey/GoodTTV/releases).
-- **Zen** (and Firefox Developer Edition or Nightly), with `goodttv-0.5.0.xpi`: in `about:config`, set
+- **Zen** (and Firefox Developer Edition or Nightly), with `goodttv-0.5.1.xpi`: in `about:config`, set
   `xpinstall.signatures.required` to `false`. Then, in `about:addons`, gear menu → "Install Add-on From File…".
 - **Firefox:** it only accepts unsigned add-ons temporarily: `about:debugging` → "This Firefox" → "Load Temporary
   Add-on…" and the `.xpi`. It is removed when Firefox closes.
-- **Chrome and Chromium,** on Windows too, with `goodttv-0.5.0-chrome.zip`:
+- **Chrome and Chromium,** on Windows too, with `goodttv-0.5.1-chrome.zip`:
   1. Unzip it into a folder you will keep.
   2. In `chrome://extensions`, turn on "Developer mode" (top right).
   3. Click "Load unpacked" and choose that folder.
@@ -122,7 +135,7 @@ It has been tested on one phone only (a Galaxy S25 Ultra with Android 17). Wheth
 has been checked by eye, not measured.
 
 **Install** (Android 13 or later): download `GoodTTV-0.5.0.apk` from the
-[releases](https://github.com/mateozariquiey/GoodTTV/releases) on the phone and open it. Android will ask you to allow
+[0.5.0 release](https://github.com/mateozariquiey/GoodTTV/releases/tag/v0.5.0) on the phone and open it. Android will ask you to allow
 installing apps from the browser or the file manager, and Play Protect may warn that it does not know the developer.
 New versions install over the old one and keep your account, because they are signed with the same key. From a
 computer, `adb install -r GoodTTV-0.5.0.apk` does the same. The signing certificate's SHA-256 fingerprint is
@@ -133,8 +146,8 @@ To build it you need the Android SDK and JDK 21: see [apps/android/README.md](ap
 ## TV
 
 Made to be used from the couch on a Linux mini PC with a small remote: arrows, OK, Back and Play/Pause. Watch the live
-channels you follow, search for channels, and read chat with 7TV, BTTV, FFZ and Twitch emotes. The VODs, rewinding and
-writing in chat of the other apps are not here.
+channels you follow, search for channels (also without an account), and read chat with 7TV, BTTV, FFZ and Twitch emotes.
+In English or Spanish. The VODs, rewinding and writing in chat of the other apps are not here.
 
 **Status:** since October 2026 it no longer runs on a real TV. It is still built and checked with the automated tests
 (unit and end-to-end, in Electron), but nobody uses it day to day. 0.2.2 was the last version tested on the mini PC with
@@ -170,7 +183,7 @@ x86_64) and run it; it starts full screen and needs `libfuse2`. To build it:
 ```bash
 bun install --frozen-lockfile
 bun run build && bun run start   # in a window, for testing
-bun run package:appimage         # apps/tele/dist/GoodTTV-0.5.0-x86_64.AppImage
+bun run package:appimage         # apps/tv/dist/GoodTTV-0.5.1-x86_64.AppImage
 ```
 
 ## The code
@@ -181,7 +194,7 @@ A monorepo with Bun workspaces:
 | --- | --- |
 | `apps/navegador` | The extension (Manifest V3) |
 | `apps/android` | The Android app (Kotlin and the web interface, built with Gradle; not a Bun workspace) |
-| `apps/tele` | The TV app (Electron) |
+| `apps/tv` | The TV app (Electron) |
 | `packages/sin-anuncios` | Session splicing and VOD fill |
 | `packages/interfaz` | What the interfaces share: player, chat and data |
 | `packages/servicios` | Account, Twitch API (Helix), chat and storage |

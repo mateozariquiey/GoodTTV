@@ -35,6 +35,7 @@ export {
   activarIdioma,
   type Clave,
   elegirIdioma,
+  type FuenteIdioma,
   type Idioma,
   type IdiomaElegido,
   idiomaActual,

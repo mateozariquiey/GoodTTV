@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "GoodTTV",
-  "version": "0.5.0",
+  "version": "0.5.1",
   "description": "__MSG_descripcion__",
   "default_locale": "en",
   "minimum_chrome_version": "121",

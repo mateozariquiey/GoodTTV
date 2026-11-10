@@ -2,7 +2,7 @@ import type { SavedHome } from "@goodttv/contratos"
 import type { HlsConfig } from "hls.js"
 import { createContext, useContext } from "react"
 
-// Lo que cambia entre versiones de GoodTTV en lo común. Por defecto, la tele.
+// Lo que cambia entre versiones de GoodTTV en lo común. Por defecto, la TV.
 export type Platform = {
   // Configuración de hls.js que añade la versión (la extensión: el FetchLoader, para que las peticiones a /stream/
   // pasen por la página).

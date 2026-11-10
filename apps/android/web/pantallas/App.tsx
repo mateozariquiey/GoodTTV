@@ -25,7 +25,7 @@ import { Vod } from "./Vod"
 
 // GoodTTV en el teléfono: Inicio, la búsqueda, el canal, los VOD y la cuenta, según la dirección (rutas.ts), sin barra
 // de pestañas. Reutiliza de @goodttv/interfaz los datos y el chat; las pantallas son propias, para el dedo (las de la
-// tele van con mando y las de la extensión, con ratón). Inicio no se desmonta: las demás pantallas van encima, y al
+// TV van con mando y las de la extensión, con ratón). Inicio no se desmonta: las demás pantallas van encima, y al
 // volver está donde se dejó. El canal o el VOD que se deja sigue en una esquina (lo pinta la app, MainActivity.kt), y
 // desde allí se vuelve a él.
 
@@ -34,7 +34,7 @@ type Mini =
   | { readonly accion: "ampliar"; readonly vod: string }
   | { readonly accion: "cerrar" }
 
-const REFRESH_MS = 120_000 // como Inicio en la tele y la extensión
+const REFRESH_MS = 120_000 // como Inicio en la TV y la extensión
 
 const prewarmInApp = (login: string, mode: LatencyMode): void =>
   android.canalPrecalentar(login, mode)
@@ -98,7 +98,7 @@ export const App = () => {
     const known = [...following, ...popular, ...recents].find((each) => each.login === route.login)
     return known ?? { displayName: route.login, login: route.login }
   }, [following, opened, popular, recents, route])
-  // Las flechas del canal recorren la lista de la que salió, como ↑ ↓ en la tele y la extensión.
+  // Las flechas del canal recorren la lista de la que salió, como ↑ ↓ en la TV y la extensión.
   const lineup = useMemo(() => {
     const login = channel?.login
     for (const list of [following, popular, recents.filter((each) => each.live === true)]) {

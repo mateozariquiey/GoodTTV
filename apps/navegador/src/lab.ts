@@ -12,7 +12,7 @@ import { parseRoute } from "./escritorio/routes"
 import { WAITS } from "./escritorio/sonido"
 
 // Lo del laboratorio en las páginas de la extensión, por la dirección (como GOODTTV_PAUSA_SIMULADA y
-// GOODTTV_REGISTRO_EMPALME en la tele): ?pausa=cada,duración[,arranque] simula pausas globales para probar el relleno
+// GOODTTV_REGISTRO_EMPALME en la TV): ?pausa=cada,duración[,arranque] simula pausas globales para probar el relleno
 // con el VOD, y ?registro guarda los eventos del empalme en window.registroEmpalme para las pruebas. Con ?registro,
 // además, la prueba de rendimiento lee el hls.js del reproductor (window.hlsPrueba) y sus hitos de arranque
 // (window.marcasPrueba). ?sinred: comprobar la cuenta falla como sin red hasta que la prueba ponga
@@ -21,7 +21,7 @@ import { WAITS } from "./escritorio/sonido"
 // tarda en volver a ella desde cada escalón. ?twitchfalso[=ms]: una cuenta y un Helix falsos, con esa espera por
 // petición, para medir el arranque de Inicio con cuenta (twitch-falso.ts); no guarda recientes, como el chat de abajo.
 
-// Campos del empalme que se pueden guardar (los mismos que registra la tele, más los de nueva-numeracion y
+// Campos del empalme que se pueden guardar (los mismos que registra la TV, más los de nueva-numeracion y
 // url-distinta): los errores y las URL pueden llevar el token de Twitch.
 const SAFE_FIELDS = new Set([
   "ahora",

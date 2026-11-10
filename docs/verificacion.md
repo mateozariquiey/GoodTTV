@@ -61,8 +61,8 @@ Fallos encontrados y corregidos en estas pruebas:
 
 ## En el mini PC, la TV y el mando
 
-El mini PC dejó de hacer de tele hacia el 19 de octubre, así que esto es lo comprobado mientras lo fue; desde la 0.3.0,
-la app de la tele solo se comprueba con las pruebas automáticas.
+El mini PC dejó de hacer de TV hacia el 19 de octubre, así que esto es lo comprobado mientras lo fue; desde la 0.3.0,
+la app de la TV solo se comprueba con las pruebas automáticas.
 
 16 de octubre, con la 0.2.2 (Electron 44.2.0) instalada desde el AppImage de la release:
 - **Equipo:** el mini PC (Ryzen 5 7640HS, Radeon 760M) con Kubuntu 26.04 y Plasma en Wayland, a 3840×2160 a 60 Hz,
@@ -73,13 +73,13 @@ la app de la tele solo se comprueba con las pruebas automáticas.
 
 | Punto | Cómo | Resultado |
 | --- | --- | --- |
-| Audio por HDMI | Un directo y `apps/tele/scripts/diagnostico.sh` | Suena por la TV; la salida activa es la HDMI de la Radeon |
+| Audio por HDMI | Un directo y `apps/tv/scripts/diagnostico.sh` | Suena por la TV; la salida activa es la HDMI de la Radeon |
 | Aceleración de vídeo | El decodificador que elige Chromium (dominio `Media` de CDP) y la carga del motor de vídeo de la GPU | Decodifica la GPU: `VaapiVideoDecoder` en los 14 reproductores de la sesión (H.264 High, 1080p60), con el motor de vídeo al 8 % y la CPU a menos de un tercio de un núcleo |
 | Mando | Ajustes → Probar el mando | Flechas, OK, Atrás y Play/Pausa salen con su acción |
 | Foco | Abrirla desde Kodi y mandar una notificación del escritorio con ella abierta | Recibe el mando al abrirse. La notificación no se ve encima de la app a pantalla completa, y el mando sigue en ella |
 | Suspensión y reanudación | — | No aplica a este mini PC: no se suspende, porque aloja otros servicios. Al apagar la TV se cierran las apps. Sin comprobar en un equipo que se suspenda |
 | Legibilidad a 3 m | Desde el sofá, en la TV de 65″ | Se lee bien: la lista, los títulos y el chat |
-| Inicio al abrir | Abrirla dos veces | La primera, «Cargando canales…» (no había nada guardado); la segunda, la lista nada más abrir ([Inicio al abrir en la tele](#inicio-al-abrir-en-la-tele)) |
+| Inicio al abrir | Abrirla dos veces | La primera, «Cargando canales…» (no había nada guardado); la segunda, la lista nada más abrir ([Inicio al abrir en la TV](#inicio-al-abrir-en-la-tv)) |
 
 Por diseño (D11), el reproductor no usa la cuenta: pide el vídeo con sesiones de invitado, así que Turbo y las
 suscripciones no cuentan. La cuenta sirve para los seguidos y el chat.
@@ -104,7 +104,7 @@ ventana y sin sonido.
   Chrome da por visibles todas las pestañas, y lanza Chromium sin el freno a las pestañas en segundo
   plano.
 
-Hito 3 (11 de octubre): la interfaz de la tele en la extensión, con el teclado (en el hito 4 la sustituyó la de escritorio). La prueba de la
+Hito 3 (11 de octubre): la interfaz de la TV en la extensión, con el teclado (en el hito 4 la sustituyó la de escritorio). La prueba de la
 interfaz ([desarrollo.md](desarrollo.md#prueba-de-la-interfaz)) pasa sus 18 pasos en Chrome y en
 Firefox:
 - pestañas con flechas y OK;
@@ -154,7 +154,7 @@ La prueba del reproductor sigue a 1080p y sin errores.
 
 Hito 5 (11 de octubre): el relleno con el VOD y los modos de retraso en la interfaz de escritorio, con
 la prueba de los modos ([desarrollo.md](desarrollo.md#prueba-de-los-modos-de-retraso)) y los mismos
-criterios que la tele:
+criterios que la TV:
 
 | Escenario | Chrome | Firefox |
 | --- | --- | --- |
@@ -329,15 +329,15 @@ frente a `7df4a65`, la de antes de D16. Misma prueba, con otros 6 canales:
   859 ms) y misma CPU, latencia 1,8 frente a 2,0 s, ninguna parada.
 - Sin comprobar: cómo se comporta en muchas más pausas y canales, y si Twitch la cambia.
 
-**La tele** (`herramientas/laboratorio/arranque.mjs`, Electron en el Weston del laboratorio, 4 canales ×
+**La TV** (`herramientas/laboratorio/arranque.mjs`, Electron en el Weston del laboratorio, 4 canales ×
 2 rondas a la vez): primer fotograma de 1640 a 1075 ms de mediana; con las conexiones ya abiertas,
 700-940 ms. Las 7 pruebas e2e pasan en Weston sin pantalla (`E2E_WAYLAND`).
 
-**La tele frente a la extensión** (12 oct, noche, antes de publicar la 0.2.0):
-- **Las dos a la vez** (6 canales × 2 rondas, en dos Weston): primer fotograma de 1019 ms de mediana en la tele y de
+**La TV frente a la extensión** (12 oct, noche, antes de publicar la 0.2.0):
+- **Las dos a la vez** (6 canales × 2 rondas, en dos Weston): primer fotograma de 1019 ms de mediana en la TV y de
   787 ms en la extensión.
 - **Por fases, hasta conectar el reproductor van igual:** la espera de las sesiones (`info`) es de ~600 ms en las dos.
-  La diferencia está en el primer fragmento, que las dos piden al CDN de Twitch. La tele tarda 330-390 ms y la
+  La diferencia está en el primer fragmento, que las dos piden al CDN de Twitch. La TV tarda 330-390 ms y la
   extensión 115-215 ms (1,68 MB en 133 ms con Chrome 155).
 - **Descartado:**
   - **El salto al servidor local:** la conexión cuesta 1 ms y la lista llega 1-2 ms después de `info`.
@@ -347,12 +347,12 @@ frente a `7df4a65`, la de antes de D16. Misma prueba, con otros 6 canales:
   pública, y cada conexión nueva de Electron perdía ~310 ms esperando a IPv6 antes de pasar a IPv4. Con Happy Eyeballs
   (`app.configureHostResolver({ enableHappyEyeballs: true })`) tarda 7-19 ms. El primer fotograma apenas cambia
   (~1010 ms), pero sí todas las demás conexiones nuevas: API, chat, emotes y miniaturas.
-- **Lo que quedaba:** la tele (Electron 44, Chromium 152) descargaba el primer fragmento más despacio que Chrome 155,
+- **Lo que quedaba:** la TV (Electron 44, Chromium 152) descargaba el primer fragmento más despacio que Chrome 155,
   con el mismo código y la misma configuración. El 16 de octubre resultó ser la red, no Electron
-  ([El primer fragmento, más lento en la tele](#el-primer-fragmento-más-lento-en-la-tele-ren-4)).
-- **Paridad de la interfaz:** la tele usa ya el mismo chat que baja al final al cambiar de altura o cargar un emote
+  ([El primer fragmento, más lento en la TV](#el-primer-fragmento-más-lento-en-la-tv-ren-4)).
+- **Paridad de la interfaz:** la TV usa ya el mismo chat que baja al final al cambiar de altura o cargar un emote
   (`useChatAtBottom`) y muestra «x s por detrás» junto a «En directo» (`useBehind`), como la extensión.
-- **Pruebas:** las 7 e2e de la tele pasan en Weston, y `test:interfaz`, en Chrome y Firefox.
+- **Pruebas:** las 7 e2e de la TV pasan en Weston, y `test:interfaz`, en Chrome y Firefox.
 
 **Modos de retraso** ([desarrollo.md](desarrollo.md#prueba-de-los-modos-de-retraso), sin ventana): pasan
 los tres escenarios.
@@ -396,7 +396,7 @@ por segundo con emotes e insignias de Twitch), en Chrome con la GPU, 3 canales:
   En `plaqueboymax` las dos variantes se pararon a la vez 27 s: algo de la emisión o de sus sesiones,
   no del chat. Desde entonces la prueba guarda qué pasó en el empalme de cada canal desde que se abrió
   (anuncios por sesión, rellenos, huecos).
-- En la tele la lista lleva la misma contención; ahí no se ha medido: la tele no tiene chat de
+- En la TV la lista lleva la misma contención; ahí no se ha medido: la TV no tiene chat de
   laboratorio.
 
 **Sin comprobar:**
@@ -430,7 +430,7 @@ lista, y apunta cada `seeking`, cada error de hls.js y los eventos del empalme.
 - **El arreglo:** la lista abarca 100 s, más que lo que hls.js deja quedarse atrás (84 s), y el retraso conservado se
   queda 10 s por debajo de ese tope ([arquitectura.md](arquitectura.md#reproducción)). Los fragmentos en directo de
   Twitch se pueden descargar hasta unos 4,5 min: a los 268 s, sí; a los 328 s, ya no.
-- **Pruebas:** pasan los 7 e2e de la tele, la prueba de la interfaz y la de los modos (`carola`, Chrome y Firefox):
+- **Pruebas:** pasan los 7 e2e de la TV, la prueba de la interfaz y la de los modos (`carola`, Chrome y Firefox):
   - *Sin paradas*, `150,45`: ninguna parada, dos rellenos y vuelta con 0 s de salto;
   - *Adaptativo*: una parada de 12-14 s en la primera pausa, como antes, ninguna después y vuelta con 0 s de salto.
 - **Sin comprobar:** el canal del usuario (`elxokas`); en él es probable que se sumen pausas de anuncios con un VOD más
@@ -469,7 +469,7 @@ lista, y apunta cada `seeking`, cada error de hls.js y los eventos del empalme.
   | `carola` (TS) | Chrome | 2,5 min | — | fijo en 20,5 s; búfer ~20,8 s |
 
   Pasan `bun run verify` (con una prueba nueva en `reproductor-propio.test.ts`), los 25 pasos de la prueba de la
-  interfaz en Chrome y Firefox (`illojuan,carola`) y los 7 e2e de la tele.
+  interfaz en Chrome y Firefox (`illojuan,carola`) y los 7 e2e de la TV.
 - **Rendimiento, en *Adaptativo*** (margen de 5 s, donde más pesa la carga progresiva), las dos versiones a la vez en
   Chrome sin ventana, 2 rondas de 45 s por canal:
   - **fMP4** (`illojuan`, `buster`): antes, ~21 s parado de cada 45 s y ~1000 fotogramas pintados; ahora, 2-3 s
@@ -477,7 +477,7 @@ lista, y apunta cada `seeking`, cada error de hls.js y los eventos del empalme.
   - **TS** (`carola`): igual en las dos;
   - **arranque:** igual (primer fotograma, mediana de 889 frente a 897 ms).
 - **El usuario** lo probó en Zen, con su perfil, el 16 de octubre: `illojuan` va perfecto. Sale en la 0.2.1, que
-  también probó en la tele, en el mini PC y con el mando: todo bien.
+  también probó en la TV, en el mini PC y con el mando: todo bien.
 - **Sin comprobar:** si las paradas de 2-3 s en *Adaptativo* con fMP4 son el precio de cargar fragmento a fragmento o
   ruido de las dos pruebas a la vez.
 - **Límite:** se decide al crear el reproductor. Si una emisión nueva cambia de formato con él abierto, sigue con lo
@@ -499,22 +499,22 @@ de fMP4 configurable en una compilación aparte (`.lab/roadmap/rend-margen.mjs`)
   `bratishkinoff`), 2 rondas de 60 s alternando márgenes. Antes, `illojuan` solo, 2 rondas de 90 s con 2,5, 3, 3,5 y 4:
   ninguna parada desde 3, y con 3,5 y 4 la latencia subía 1,3-2 s sin más ganancia.
 - **Ahora** el reproductor usa 3 fragmentos con fMP4 (`FMP4_SYNC_SEGMENTS`, en `useHlsPlayer`), en la extensión y en la
-  tele; con MPEG-TS sigue en 2,5. *Sin paradas* (24 s) y el arranque desde el VOD (16 s) ya tenían más.
+  TV; con MPEG-TS sigue en 2,5. *Sin paradas* (24 s) y el arranque desde el VOD (16 s) ya tenían más.
 - **Confirmado** con la compilación final frente a la anterior, en `lirik`, `bratishkinoff` y `emiru` alternando:
   la anterior, 7 s de paradas en 2 de 6 visitas, 19 esperas y un 1,03 % de fotogramas perdidos; la nueva, 2 s en 1
   de 6 (`emiru`, con el búfer en 0,06 s), 4 esperas y un 0,72 % (casi todo de esa parada). La latencia pasa de 2,76 a
   3,33 s y el primer fotograma, de 758 a 759 ms (medianas). En total, con 3 fragmentos, 1 parada en 18 visitas; con
   2,5, 7 en 18. Si se quieren cero, 3,5 dio ninguna en 2 visitas, con ~1 s más de retraso: queda para medir más.
 
-## Inicio al abrir en la tele
+## Inicio al abrir en la TV
 
-16 de octubre. El usuario, en la tele con la 0.2.1: al abrir, menos de medio segundo de una pantalla que no llegaba a
+16 de octubre. El usuario, en la TV con la 0.2.1: al abrir, menos de medio segundo de una pantalla que no llegaba a
 distinguir, luego «Cargando canales…» y luego la lista, en total ~1 s. Por el código, la primera era la bienvenida sin
 cuenta: Inicio se pedía sin cuenta mientras se comprobaba la sesión (dos peticiones a Twitch), como en la extensión
 antes del 15 de octubre ([Icono y arranque](#icono-y-arranque)).
 - **El arreglo:** el de la extensión, ahora común
   (`useHome`, [arquitectura.md](arquitectura.md#las-tres-piezas-de-electron)): lo de la última vez con esa cuenta
-  mientras llega lo de ahora, y ni bienvenida ni «Cargando canales…» mientras no se sabe si hay cuenta. La tele lo
+  mientras llega lo de ahora, y ni bienvenida ni «Cargando canales…» mientras no se sabe si hay cuenta. La TV lo
   guarda en `saved-home.json`, por IPC, y el foco del mando entra cuando Inicio ya tiene algo.
 - **Medido en la app real** (Electron sin ventana, perfil temporal, `.lab/inicio-tele/probar.mjs`), con la cuenta y
   los seguidos simulados en el proceso principal, 0,5 s por petición:
@@ -527,15 +527,15 @@ antes del 15 de octubre ([Icono y arranque](#icono-y-arranque)).
 - **Revisión de Codex** (`gpt-6.1-sol`), con dos arreglos:
   - la vista previa guardaba el canal enfocado entero, así que tras un refresco seguía con su título y sus espectadores
     de antes hasta mover el foco. Ahora guarda solo cuál es y lo busca en las listas de ahora;
-  - la tele no guarda un Inicio de más de 1 MB (unos 100 kB con 100 seguidos en directo), para que un renderer
+  - la TV no guarda un Inicio de más de 1 MB (unos 100 kB con 100 seguidos en directo), para que un renderer
     comprometido no deje un archivo enorme que se lea en cada arranque.
 
   Lo que no se cambió: el foco puede quedarse en las pestañas si la cuenta resulta ser otra en los 16 ms entre que sale
   lo guardado y el primer fotograma (la cuenta necesita al menos una petición de red), o si lo guardado no tiene ni un
   canal, tampoco en populares.
-- **Pruebas:** `bun run verify`, con pruebas nuevas del hook (React, `inicio.test.ts`), del archivo de la tele y del
-  IPC; los 7 e2e de la tele y los 25 pasos de la interfaz en Chrome y Firefox.
-- **En la tele de verdad** (16 oct, 0.2.2, con la cuenta del usuario y el mando): la primera vez tras actualizar,
+- **Pruebas:** `bun run verify`, con pruebas nuevas del hook (React, `inicio.test.ts`), del archivo de la TV y del
+  IPC; los 7 e2e de la TV y los 25 pasos de la interfaz en Chrome y Firefox.
+- **En la TV de verdad** (16 oct, 0.2.2, con la cuenta del usuario y el mando): la primera vez tras actualizar,
   «Cargando canales…» (aún no había nada guardado) y luego la lista; desde la segunda, la lista nada más abrir.
 
 ## Inicio al abrir, sin esperas en cadena
@@ -577,7 +577,7 @@ versiones a la vez, 5 cargas por escenario (mediana; entre la más rápida y la 
     lo de la primera se guardaba como de la segunda. Ahora se vuelve a pedir si cambia la cuenta;
   - **una renovación de la validación de al lado podía hacer fallar Inicio** (`SessionChangedError`) aunque la sesión
     siguiera bien: las credenciales se vuelven a leer una vez;
-  - **las fotos guardadas en memoria (la tele) se quedaban solo con las del último lote;**
+  - **las fotos guardadas en memoria (la TV) se quedaban solo con las del último lote;**
   - **las fotos podían volver a guardarse tras cerrar sesión** (una respuesta en camino), y no se olvidaban si la sesión
     caducaba o la cerraba otra página;
   - **la lista y los datos del VOD en curso se renovaban cada 4 min con una caché de 5:** la llamada del minuto 4 no
@@ -586,14 +586,14 @@ versiones a la vez, 5 cargas por escenario (mediana; entre la más rápida y la 
     `channels/followed` y el chat), si la cuenta cambiaba entre las dos lecturas de credenciales o al renovar. Ahora se
     arma con la cuenta de las credenciales con que sale.
 
-  Se sostuvo, según la revisión: guardar la cuenta con el token en la tele, sin bloqueo, no pisa una renovación; y esperar
+  Se sostuvo, según la revisión: guardar la cuenta con el token en la TV, sin bloqueo, no pisa una renovación; y esperar
   a las fotos que faltan. Queda, sin arreglar: entre pestañas, guardar las fotos no es atómico (puede perderse alguna,
   que se vuelve a pedir), y si la validación de al lado cierra la sesión antes de que la cuenta pregunte, sale «sin
   cuenta» en vez de «caducada» (en la app la cuenta pregunta la primera).
 
 ## Cuenta sin red al abrir (EXT-4)
 
-16 de octubre. Si comprobar la cuenta fallaba por la red al abrir, Inicio salía como sin cuenta, en la tele y en la
+16 de octubre. Si comprobar la cuenta fallaba por la red al abrir, Inicio salía como sin cuenta, en la TV y en la
 extensión: la bienvenida y «Vincula tu cuenta», aunque la sesión siguiera guardada. Ajustes ofrecía vincularla otra
 vez. Pasaba desde antes de guardar Inicio; lo encontró la revisión de Codex del 15 de octubre.
 - **La causa:** `useAuth` convertía cualquier fallo de `auth.snapshot()` en `error`, y `error` es también lo que
@@ -605,19 +605,19 @@ vez. Pasaba desde antes de guardar Inicio; lo encontró la revisión de Codex de
   - Con `unreachable` no se sabe la cuenta: Inicio sigue con lo de la última vez, sin pedir nada a Twitch ni borrar
     nada, y avisa con «Reintentar». Lo guardado es de la última cuenta: se olvida al cerrar sesión y se sustituye al
     entrar con otra.
-  - Ajustes dice que la sesión no se ha cerrado y ofrece «Reintentar» y «Cerrar sesión». En la tele, el foco entra en
+  - Ajustes dice que la sesión no se ha cerrado y ofrece «Reintentar» y «Cerrar sesión». En la TV, el foco entra en
     «Reintentar», nunca en «Cerrar sesión». Sin red, cerrar sesión la borra aquí, pero no la revoca en Twitch.
   - Se vuelve a comprobar sola con el evento `online` y cada 30 s. Vale la última comprobación: una anterior que falla
     tarde no deshace una que acertó.
   - Con `error` (sesión caducada), lo guardado ahora se olvida, como sin cuenta.
-  - En la tele, el foco entra en el primer canal guardado, con «Reintentar» justo encima (↑). Sin nada guardado, en
+  - En la TV, el foco entra en el primer canal guardado, con «Reintentar» justo encima (↑). Sin nada guardado, en
     «Reintentar».
 - **Por el camino real**, con una sesión ficticia guardada (un token que Twitch rechaza) y scripts en `.lab/ext-4/`
   (no se suben):
   - **Extensión** (Chrome for Testing, red cortada con CDP): lo guardado con el aviso, sin la bienvenida. Al volver la
     red, el evento `online` comprobó la cuenta solo, en 0,5 s. Twitch rechazó el token: salió la bienvenida, y se
     borraron lo guardado y la sesión.
-  - **Tele** (la app real, con el `fetch` del proceso principal cortado para twitch.tv): el error cruza el IPC. Salió
+  - **TV** (la app real, con el `fetch` del proceso principal cortado para twitch.tv): el error cruza el IPC. Salió
     lo guardado con el aviso y el foco en su primer canal, y la sesión siguió guardada. Con red, «Reintentar»: la
     bienvenida con el foco en «Vincular cuenta», y lo guardado y la sesión borrados.
   - **«Cerrar sesión» con la red cortada**, en las dos: se borran la sesión y lo guardado, y sale la bienvenida.
@@ -628,7 +628,7 @@ vez. Pasaba desde antes de guardar Inicio; lo encontró la revisión de Codex de
     comprobar la cuenta, con y sin nada guardado, al volver la red, con la sesión caducada y después de cerrar sesión;
     y en `useAuth`, el fallo que pasa a `unreachable`, «Reintentar», el reintento con `online` y cada 30 s, y que vale
     la última comprobación.
-  - Las e2e de la tele: 3 nuevas en `recovery.spec.ts`, que sustituyen los manejadores IPC de la cuenta; una cierra
+  - Las e2e de la TV: 3 nuevas en `recovery.spec.ts`, que sustituyen los manejadores IPC de la cuenta; una cierra
     sesión con el mando. Las 10 pasan con Xvfb y xdotool.
   - `test:interfaz`: 7 pasos nuevos con `?sinred` (`lab.ts`), también cerrar sesión. Pasan los 32 en Chrome y en
     Firefox.
@@ -640,8 +640,8 @@ vez. Pasaba desde antes de guardar Inicio; lo encontró la revisión de Codex de
   - un `error` con la sesión aún guardada, o una excepción con la sesión ya borrada: necesitan empezar a vincular con
     la sesión abierta (la interfaz no lo permite) o que falle leer el Client ID. Se corrigen en la siguiente
     comprobación.
-- **Sin comprobar:** en la tele de verdad y con una cuenta real, y el evento `online` en la tele, cuando vuelve la red
-  del mini PC. En la tele solo se ha probado «Reintentar»; los 30 s, solo en las pruebas del hook.
+- **Sin comprobar:** en la TV de verdad y con una cuenta real, y el evento `online` en la TV, cuando vuelve la red
+  del mini PC. En la TV solo se ha probado «Reintentar»; los 30 s, solo en las pruebas del hook.
 
 ## Rendimiento en el mini PC (HW-2)
 
@@ -662,7 +662,7 @@ el chat a la vista.
 | --- | --- |
 | Decodificador | `VaapiVideoDecoder` (por hardware) en los 14 reproductores, H.264 High 1080p60. Chromium da `video_decode: enabled`, aunque `SystemInfo` no lista perfiles |
 | Primer fotograma | 990 ms de mediana (868-1105, 8 aperturas); avanza a los ~1,2 s. Dos aperturas más tardaron 6,4 y 6,9 s (abajo) |
-| Primer fragmento del CDN | 380 ms de mediana (307-531, 10 aperturas): la espera de IPv6 de [REN-4](#el-primer-fragmento-más-lento-en-la-tele-ren-4), ya corregida |
+| Primer fragmento del CDN | 380 ms de mediana (307-531, 10 aperturas): la espera de IPv6 de [REN-4](#el-primer-fragmento-más-lento-en-la-tv-ren-4), ya corregida |
 | Fotogramas perdidos | 1,5 % (321 de 21 842, sin los 5 primeros segundos de cada canal), a rachas (abajo) |
 | CPU, suma de los procesos | 29 % de un núcleo de media (p95 39 %): renderer 12 %, GPU 10 %, principal 4 %, red 3 %. Unos 2,4 % de los 12 hilos |
 | GPU | Motor de vídeo (VCN) al 8 %, gráficos al 7 % |
@@ -679,12 +679,12 @@ Dos cosas que no se explican todavía:
   canales tardaron 0,6-0,75 s en `info` (0,8-1 s al primer fotograma): no es algo fijo del canal, aunque pudo ser
   algo de ese momento. Una explicación posible es un anuncio de entrada en todas las sesiones de invitado, que hace
   arrancar desde el VOD: con uno simulado (`GOODTTV_PAUSA_SIMULADA=0,20,1`), `info` tarda 2-3,3 s en el laboratorio,
-  no 5,8. No está demostrado: falta el registro del empalme en la tele.
+  no 5,8. No está demostrado: falta el registro del empalme en la TV.
 
-## El primer fragmento, más lento en la tele (REN-4)
+## El primer fragmento, más lento en la TV (REN-4)
 
-16 de octubre. Con el mismo código, la tele descargaba el primer fragmento ~200 ms más despacio que la extensión
-([La tele frente a la extensión](#rendimiento-del-reproductor-propio)). No era Electron, sino la red: en una red sin IPv6
+16 de octubre. Con el mismo código, la TV descargaba el primer fragmento ~200 ms más despacio que la extensión
+([La TV frente a la extensión](#rendimiento-del-reproductor-propio)). No era Electron, sino la red: en una red sin IPv6
 no hay diferencia, y en la de casa cada conexión nueva al CDN probaba antes IPv6, que no sale. Comprobado en la app,
 con y sin la ruta IPv6, y corregido en el mini PC (abajo).
 - **En una red sin IPv6 no hay diferencia.** Las tres versiones, a la vez, en tres Weston sin pantalla de una VM sin
@@ -692,12 +692,12 @@ con y sin la ruta IPv6, y corregido en el mini PC (abajo).
 
   | Versión | Descarga del primer fragmento | Primer fotograma |
   | --- | --- | --- |
-  | Tele, Electron 44.2.0 | 76 ms (37-481) | 842 ms |
-  | Tele, Electron 44.8.0 | 70 ms (38-577) | 912 ms |
+  | TV, Electron 44.2.0 | 76 ms (37-481) | 842 ms |
+  | TV, Electron 44.8.0 | 70 ms (38-577) | 912 ms |
   | Extensión, Chrome for Testing 155 | 85 ms (48-427) | 832 ms |
 
   Medianas. La espera de las sesiones (`info`) es de ~594 ms en las tres. El vídeo se decodifica por software en la
-  VM, así que el primer fotograma es aproximado. La tele mide la descarga con Resource Timing
+  VM, así que el primer fotograma es aproximado. La TV mide la descarga con Resource Timing
   (`.lab/ren4/arranque-red.mjs`, copia de `arranque.mjs`) y la extensión, entre los eventos de hls.js.
 - **En la red de casa, IPv6 a medias.** El router anuncia una ruta IPv6 por defecto, pero no da direcciones. El mini PC
   solo tiene la dirección de Tailscale (una ULA, de ámbito global para Linux), así que cree tener IPv6. Los
@@ -709,12 +709,12 @@ con y sin la ruta IPv6, y corregido en el mini PC (abajo).
   | Por defecto (IPv6 primero) | 205 ms |
   | Solo IPv4 | 4-5 ms |
 
-  `curl` lanza el intento por IPv4 a los 200 ms; Chromium, a los 300 ms, salvo que la tele lo cambie: activa *Happy
+  `curl` lanza el intento por IPv4 a los 200 ms; Chromium, a los 300 ms, salvo que la TV lo cambie: activa *Happy
   Eyeballs* (`configureHostResolver`), y no se ha medido cuánto espera con él. El host de los fragmentos cambia con
-  cada emisión, así que cada canal abre una conexión nueva: en la tele, el primer fragmento tardó 307-531 ms, frente
+  cada emisión, así que cada canal abre una conexión nueva: en la TV, el primer fragmento tardó 307-531 ms, frente
   a 37-577 ms (mediana 70) en la VM.
 - **El sobremesa** está en la misma red y ya mostró esa espera de ~300 ms con IPv6
-  ([La tele frente a la extensión](#rendimiento-del-reproductor-propio)). Es lo más probable que la diferencia que
+  ([La TV frente a la extensión](#rendimiento-del-reproductor-propio)). Es lo más probable que la diferencia que
   quedaba allí sea esta misma, pero no se ha medido.
 - **Con y sin la ruta, en el mini PC.** Se alternaron cuatro rondas, con la ruta y sin ella, quitándola solo en tiempo de
   ejecución (`nmcli device modify … ipv6.never-default`). En cada ronda, 6 canales, cada uno en una GoodTTV 0.2.3 nueva
@@ -737,13 +737,13 @@ con y sin la ruta IPv6, y corregido en el mini PC (abajo).
 
 ## Electron 44.8.0 (MAN-1)
 
-16 de octubre. La tele pasa de Electron 44.2.0 a 44.8.0, el último de la 44, con los parches de seguridad de Chromium
+16 de octubre. La TV pasa de Electron 44.2.0 a 44.8.0, el último de la 44, con los parches de seguridad de Chromium
 152 (152.0.7977.167) y Node 24.22. Electron 45 (Chromium 156) aún está en beta. Sale en la 0.2.3, instalada en la
 TV el mismo día: el usuario la probó con el mando (abrir, reproducir, cambiar de canal con ↑/↓, volver y salir).
 - **Pruebas:**
   - `bun run verify`: 303 pruebas, más 4 fallos esperados;
-  - las 10 e2e de la tele, dos veces en un Weston sin pantalla (`E2E_WAYLAND`);
-  - en la comparación de [REN-4](#el-primer-fragmento-más-lento-en-la-tele-ren-4), el arranque igual que con la 44.2.0;
+  - las 10 e2e de la TV, dos veces en un Weston sin pantalla (`E2E_WAYLAND`);
+  - en la comparación de [REN-4](#el-primer-fragmento-más-lento-en-la-tv-ren-4), el arranque igual que con la 44.2.0;
   - el AppImage arranca y reproduce un minuto en un Weston sin pantalla, se cierra sin errores y conserva los *fuses*
     de `after-pack.cjs`. Si se matan a la vez todos sus procesos (también el de la GPU), acaba con «GPU process isn't
     usable»: es por cómo se cierra, no por la versión.
@@ -762,7 +762,7 @@ TV el mismo día: el usuario la probó con el mando (abrir, reproducir, cambiar 
 ## Electron 44.10.2 y el `SIGSEGV` de `verify`
 
 4 de noviembre. `bun run verify` llevaba desde octubre fallando en `D-cycle-20-1` (la prueba del bloqueo de perfil de la
-tele) con un `SIGSEGV` en el segundo proceso. **Era un fallo de la combinación entre la prueba y el entorno, no del
+TV) con un `SIGSEGV` en el segundo proceso. **Era un fallo de la combinación entre la prueba y el entorno, no del
 producto,** y su causa es un error de Chromium.
 
 - **Causa:** `XCursorLoader` crea `rm_cache_` antes que `rm_xcursor_theme_` (en ese orden se declaran). Con la conexión a X
@@ -774,9 +774,9 @@ producto,** y su causa es un error de Chromium.
   - `--headless` en Electron **no** cambia a Ozone headless: sigue en X11 y además se salta el error «Missing X server».
   - Ningún servidor X al que conectarse: es lo normal en un servicio sin sesión gráfica, como los agentes. Con Xvfb no falla.
   - Unos restos concretos en memoria. Con la 44.8.0 y la misma prueba fallaba desde la raíz del repo (3 de 3), y pasaba desde
-    `apps`, `apps/tele`, `packages`, `/tmp` y el directorio personal. En un barrido de 71 carpetas de trabajo, cayó en 2.
+    `apps`, `apps/tv`, `packages`, `/tmp` y el directorio personal. En un barrido de 71 carpetas de trabajo, cayó en 2.
 - **Dos errores de la nota anterior:** «solo con todo el repo» era en realidad la carpeta de trabajo. Lanzar ese archivo
-  solo desde la raíz fallaba 5 de 5, y desde `apps/tele` pasaba 3 de 3, así que no influían las demás pruebas ni la
+  solo desde la raíz fallaba 5 de 5, y desde `apps/tv` pasaba 3 de 3, así que no influían las demás pruebas ni la
   carga. «Desde el reinicio del 31 de octubre» tampoco era cierto: hay volcados iguales del 24 de octubre.
 - **El producto no cae:** con la app real, desde la raíz, la segunda instancia sale con 0 en 0,2-0,3 s y la primera sigue viva,
   tanto en X11 (Xvfb) como en Wayland (Weston), con y sin `--ozone-platform`. Sin pantalla da exit 1 con «Missing X server». La
@@ -796,8 +796,8 @@ de eMudhra comprometidos, corregido en la 44.9.1).
 | `verify`, con la 44.8.0 y la prueba arreglada (8,0 s de media) | 25 | 0 |
 | `verify`, tras la subida (7,2 s de media) | 30 | 0 |
 | Vitest con 2 núcleos (31 s) y con 1 (25 s), para simular un equipo lento | 20 | 0 |
-| Las 10 e2e de la tele en Xvfb | 7 | 0 |
-| Las 10 e2e de la tele en Weston | 2 | 0 |
+| Las 10 e2e de la TV en Xvfb | 7 | 0 |
+| Las 10 e2e de la TV en Weston | 2 | 0 |
 | `test:interfaz`, en Chrome (58 pasos) y en Firefox (50) | 7 | 0 |
 
 - **Arranque:** el mismo código sobre los dos binarios, alternando y con los dos órdenes, 45 aperturas por versión en 5
@@ -838,10 +838,10 @@ fotogramas perdidos son fiables, 0,1-0,4 %; en un Weston 14 sin pantalla salían
   arrancaba con las preferencias por defecto y, al llegar las guardadas, volvía a abrir el canal. Pasa al abrir una
   pestaña en un canal o con «Abrir en GoodTTV». Con *Sin paradas* guardado, `.lab/roadmap/abrir.mjs` contó 8 sesiones
   abiertas antes y 4 ahora: el reproductor espera a las preferencias (`usePreferences` da `loaded`). En Android era el
-  doble arranque de una «ruta» de adb (notas de AND-3), arreglado igual. La tele no abre canales antes de tenerlas.
+  doble arranque de una «ruta» de adb (notas de AND-3), arreglado igual. La TV no abre canales antes de tenerlas.
 - **REN-1:** al abrir GoodTTV en Inicio, se precalienta el último canal visto si emite (`useOpeningPrewarm`, con
   pruebas). El arranque que se gana es el de precalentar (D16: ~0,5 s en vez de ~0,9 s si se abre tras medio segundo).
-  Solo en la extensión: la tele ya precalienta el canal con el foco al abrir, y Android aún no precalienta (no hay ratón).
+  Solo en la extensión: la TV ya precalienta el canal con el foco al abrir, y Android aún no precalienta (no hay ratón).
   Desde el 24 de octubre, Android también lo hace al abrir, en el motor de la app.
 - **REP-1:** `/info` dice aparte la calidad que suena (`playing`), y el menú enseña esa. Pidiendo 720p60 a dos canales
   pequeños en directo: `meromeruu` (solo 30 fps) sonaba en 1080p30 y el menú decía «Auto». Además, sin la pedida, el
@@ -1000,7 +1000,7 @@ detrás); para un salto hacia atrás no se nota. Corregirlo con la hora (PDT) de
 - **Descartado, `content-visibility: auto` en los mensajes:** con el chat real, el hilo de la página subió de 8,2 a 9,9 %
   y de 6,9 a 9,0 % en dos rondas, y la maquetación, de 0,25 a 0,7 %.
 - **Pruebas:** las unitarias (con el recorte por tandas y la ventana del chat de un VOD), `test:interfaz` en Chrome
-  (43 pasos) y Firefox (41), y las 10 e2e de la tele.
+  (43 pasos) y Firefox (41), y las 10 e2e de la TV.
 
 ## Fallos encontrados probando (24 oct)
 
@@ -1058,7 +1058,7 @@ de Android y dos que también tenía la extensión; cada uno se comprobó antes 
     (`espacio3.mjs`: ahora pausa).
 
   Sostuvo, revisándolo en hls.js 1.7.3, que `LEVEL_UPDATED` llega antes de pedir el primer trozo, y que la calidad que se
-  queda no hace que el precalentado y el reproductor pidan calidades distintas. En la tele, la calidad elegida también
+  queda no hace que el precalentado y el reproductor pidan calidades distintas. En la TV, la calidad elegida también
   se queda al cerrar el reproductor y volver a abrirlo.
 
 ## Solo audio, la calidad recordada e imagen en imagen (D32)
@@ -1090,7 +1090,7 @@ de Android y dos que también tenía la extensión; cada uno se comprobó antes 
   botón de más, la fila de controles desbordaba 4-10 px con el vídeo estrecho (`controles-ancho.mjs`, de 1280 a 440 px de
   ventana); por debajo de 580 px de vídeo ya no sale, y no desborda en ninguno.
 - **Pruebas:** las unitarias (la calidad guardada y «Auto», `levelFor`, el solo audio en `pickVariant` y en el directo),
-  `test:interfaz` en Chrome (43 pasos) y Firefox (41), y las 10 e2e de la tele.
+  `test:interfaz` en Chrome (43 pasos) y Firefox (41), y las 10 e2e de la TV.
 - **Revisión de Codex** (`gpt-6.1-sol`, razonamiento alto, solo lectura). Se aceptaron sus cuatro hallazgos, comprobados
   antes de arreglarlos y después en el emulador (`android-audio2.mjs`):
   - **encender la pantalla mientras se abría el solo audio lo dejaba en solo audio, a la vista.** Ahora vuelve el vídeo
@@ -1136,7 +1136,7 @@ de Android y dos que también tenía la extensión; cada uno se comprobó antes 
   botón del modo teatro; C pone el chat al lado; al salir, sigue en modo teatro con el chat de la ventana; y la vez
   siguiente, F ya lo pone al lado. En Zen 1.23.4b (`.lab/teatro-zen/zen.mjs`, con la pantalla completa permitida sin
   gesto), igual: solo el vídeo a 1920 × 1080, T no hace nada, y C pone el chat a 340 px.
-- **Pruebas:** las unitarias (436), `test:interfaz` en Chrome (45 pasos) y Firefox (41), y las 10 e2e de la tele (con
+- **Pruebas:** las unitarias (436), `test:interfaz` en Chrome (45 pasos) y Firefox (41), y las 10 e2e de la TV (con
   `E2E_CHANNELS`: de su lista, a esa hora solo emitía uno).
 
 ## El audio desincronizado y saltar en vez de acelerar (D34)
@@ -1193,7 +1193,7 @@ después en `herramientas/laboratorio/sincronia/`, [REN-4](#hlsjs-174-ren-4)). `
   tapaba el centro del vídeo, donde hace clic la prueba. Ahora solo cuenta una pausa de más de 1 s: 4 de 4 bien, sin
   «Ir al directo» tras las pausas cortas. Con una de 5 s en Chrome (`pausa.mjs`), la latencia pasa de 5,9 a 10,9 s y
   se queda, con «Ir al directo», y Fin la devuelve a 5,2 s.
-- **Pruebas:** las unitarias (451), `bun run verify`, las 10 e2e de la tele y `test:interfaz` en Chrome (45 pasos) y
+- **Pruebas:** las unitarias (451), `bun run verify`, las 10 e2e de la TV y `test:interfaz` en Chrome (45 pasos) y
   Zen (41).
 - **El usuario lo probó en Zen** (29 oct, el `.xpi` de D34 en el sobremesa): va bien. No en `jaimemellado_`, que no
   emitía.
@@ -1262,8 +1262,54 @@ cada hueco y en cada relleno).
   pausaron su vídeo todos los navegadores de la máquina (las vigías y una visita de `rendimiento.mjs`, en Weston y sin
   ventana). El medidor graba el de por defecto, con un cerrojo para que haya una sola medida a la vez.
 - **Pruebas:** las unitarias (451, con la de la carga progresiva en fMP4 cambiada), `bun run verify`, las 10 e2e de la
-  tele (el recorrido crítico, en `t2x2` y `sasavot`, en fMP4) y `test:interfaz` en Chrome (45 pasos) y Zen (41), en
+  TV (el recorrido crítico, en `t2x2` y `sasavot`, en fMP4) y `test:interfaz` en Chrome (45 pasos) y Zen (41), en
   `t2x2`. Android no usa hls.js (Media3), así que no cambia.
+
+## La TV en inglés y sin cuenta (D44)
+
+6 de noviembre de 2026, en `mini-agentes`, con canales en directo y sin cuenta de Twitch. Sin TV ni mando de verdad: las
+teclas fueron de `xdotool` en Xvfb y de `sendInputEvent` en Weston, como las del mando, a 1920 × 1080.
+
+- **Automático:** `bun run verify` (541 pruebas: el idioma con otra fuente, el almacén de `idioma.json`, el IPC con su
+  llamada síncrona y el catálogo de invitado, y ninguna frase de las pantallas de la TV sin `t()`), `test:interfaz` de la
+  extensión (58 pasos en Chrome y 50 en Zen) y las 12 e2e de la TV con canales en directo, entre ellas las dos nuevas del
+  idioma: con `LANG` en inglés sale en inglés, sin ninguna frase en español a la vista en Inicio, Ajustes y Buscar; OK en
+  el ajuste pasa a English, Español y Sistema sin recargar ni perder el foco, y lo guarda en `idioma.json`.
+- **El AppImage empaquetado** (`bun run package:appimage`, extraído y recorrido con `herramientas/laboratorio/appimage.mjs`):
+  «Sistema» da inglés con `LANG=en_US.UTF-8`, `de_DE.UTF-8` o `C`, y español con `es_ES.UTF-8` o con `LANGUAGE=es:en` y
+  `LANG` en inglés. Con las flechas y OK: un directo de Populares suena y se ve (1920 × 1080, el tiempo y los bytes de audio
+  decodificados crecen), ↓ cambia de canal y también suena, y en Ajustes, Español queda guardado: al reabrir con `LANG` en
+  inglés sale en español. Su entrada de escritorio va en inglés, con `Comment[es]`.
+- **Recorrido en la app compilada, en Weston,** empezando sin datos: en inglés y en español, Inicio enseña los Populares sin
+  cuenta en el idioma de la interfaz, y al cambiarlo en Ajustes, los del nuevo; Buscar da resultados como invitado; abrir un
+  canal por su nombre exacto lo completa con su foto, su categoría y su título; el reproductor, la franja y el chat, en los dos
+  idiomas, sin textos cortados (lo comprueba el recorrido, con la anchura de cada texto, y se ve en las capturas). Ajustes, en
+  dos columnas: → desde la cuenta lleva a los ajustes de la derecha, como antes, y ↓ al idioma.
+- **Rendimiento frente a la 0.5.0,** sin cuenta (la rama completa el canal como invitado al abrirlo):
+  - **Primer fotograma,** con `arranque.mjs` y las dos versiones a la vez en dos Weston, 4 canales y 48 visitas por versión:
+    mediana de 580 ms frente a 586 (por parejas, −2 ms), y el vídeo avanzando en 756 frente a 755. Las mismas esperas, sin
+    errores ni cambios de `<video>`.
+  - **Fotogramas perdidos,** en la sesión GNOME, A, B, A, B, 24 visitas de 40 s por versión a 1080p60: mediana del 0,18 %
+    frente al 0,16 %, y en total, 1,55 % frente a 0,51 %, por debajo del umbral de ~1,5 puntos. Pero la rama tuvo 6 visitas por
+    encima del 1 % (hasta el 13 %, a ráfagas), y la 0.5.0, 1. Está en el límite del azar, así que no se puede afirmar ni
+    descartar que haya empeorado. Un aviso de GNOME tapaba una franja arriba en todas las visitas de las dos.
+  - **Segunda tanda, 10 de noviembre,** para salir de esa duda, con `herramientas/laboratorio/fotogramas-tv.mjs` (los guiones
+    de la primera se perdieron con su worktree). La 0.5.0 (`7f6ab64`) frente a la rama (`cfcf884`), en la sesión GNOME, a
+    pantalla completa, sin los avisos de GNOME y con una muestra por segundo; 6 canales (`buster`, `caedrel`, `kaicenat`,
+    `t2x2`, `therealknossi` y `xaryu`) y 4 rondas, alternando cuál va primero: 24 visitas de 40 s por versión, todas a 1080p
+    y ~60 fps, visibles y con el foco. Mediana del 0,25 % en las dos, y en total, 0,53 % la 0.5.0 frente a 0,46 % la rama.
+    Por encima del 1 %, 3 visitas de la 0.5.0 (hasta el 4,9 %, en `xaryu`) y 2 de la rama (hasta el 2,7 %); por parejas, la
+    rama pierde más en 13 y menos en 10, con una mediana de +0,04 puntos. Los segundos con más de 5 perdidos caen a ráfagas
+    en las dos (10 en la 0.5.0, 7 en la rama), sin un momento fijo de la visita. **No ha empeorado:** las 6 visitas malas de
+    la primera tanda fueron azar o el aviso que la tapaba.
+- **Al publicarla como 0.5.1 (10 nov),** tras pasar `apps/tele` a `apps/tv` (D45): `bun run verify` (541 pruebas),
+  `test:interfaz` (58 pasos en Chrome y 50 en Zen) y las 12 e2e de la TV, con `E2E_CHANNELS` porque ninguno de los canales
+  por defecto estaba en directo. Los Populares sin cuenta de la extensión ya cambiaban de idioma en la 0.5.0 al volver de
+  Ajustes, porque Inicio se vuelve a montar: el arreglo de `useGuestPopular` solo se nota donde no se desmonta (la TV y
+  Android).
+- **Sin comprobar:** nada en una TV ni con un mando de verdad, ni a 3 m, ni en 4K; el audio, solo por los bytes
+  decodificados (las pruebas van con `--mute-audio`); y con cuenta (vincular, seguidos y chat en inglés), que solo cubren las
+  pruebas unitarias y las e2e sin red de `recovery.spec.ts`.
 
 ## El idioma a mano (D35)
 
@@ -1280,14 +1326,14 @@ cada hueco y en cada relleno).
 - **Pestañas ocultas y aviso:** `refresh-visible.test.ts` (oculta no refresca, y al volver lo hace una vez) y `test:interfaz`
   (el aviso sale en la ventana muda y pasa a la otra al darle el sonido; el clic, en Chrome). Con una extensión de verdad no
   se ha contado cuántas peticiones ahorra.
-- **La tele:** las e2e (10) pasan, y sigue en español.
+- **La TV:** las e2e (10) pasan, y sigue en español.
 
 ## El certificado de localhost por instalación
 
-La tele traía de serie un certificado autofirmado de VacuumStream, con `CA:TRUE` y su clave privada en el repo y en cada
+La TV traía de serie un certificado autofirmado de VacuumStream, con `CA:TRUE` y su clave privada en el repo y en cada
 instalación. Ahora cada instalación crea el suyo al arrancar y lo guarda en `localhost-certificate.json`, en su carpeta de
 datos y solo legible por su dueño: ECDSA P-256, `CA:FALSE`, 10 años, y otro nuevo si el archivo está roto o el reloj queda
-fuera de sus fechas ([`local-certificate.ts`](../apps/tele/src/main/local-certificate.ts)). La aceptación por huella no
+fuera de sus fechas ([`local-certificate.ts`](../apps/tv/src/main/local-certificate.ts)). La aceptación por huella no
 cambia, y el exportador ya no tiene la excepción que dejaba pasar esa clave. El historial del repo público la sigue teniendo.
 
 Con Electron 44.10.2 y la app empaquetada (`electron-builder --dir`, el contenido del AppImage), en Xvfb, con el mismo perfil:
@@ -1329,7 +1375,7 @@ mismos guiones antes y después de D38, ahora en `herramientas/laboratorio/andro
 
 «Antes» en blanco: esa escena no se llegó a medir sin el arreglo. La extensión, en Chrome for Testing y con reglas en su
 `fetch`: 30 s sin nada de Twitch, sigue sola en 6 s tras volver (hls.js); gql a 500 al abrir, «Twitch no responde» a los 20 s,
-con «Reintentar», y sigue sola 33 s tras volver; el fin de la emisión, «no está en directo» a los 32 s. La tele no se ha
+con «Reintentar», y sigue sola 33 s tras volver; el fin de la emisión, «no está en directo» a los 32 s. La TV no se ha
 recorrido con estos casos, porque ya no hay aparato de pruebas: pasa sus e2e (10 de 10).
 
 Sin comprobar: nada de esto en el S25 (el sueño profundo y el ahorro de Samsung, sobre todo), reconectar un VOD y medidas de

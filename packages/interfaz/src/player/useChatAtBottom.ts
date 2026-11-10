@@ -4,7 +4,7 @@ const ALWAYS: RefObject<boolean> = { current: true }
 
 // El chat baja al final con cada mensaje nuevo y también si cambia la altura sin mensajes nuevos: la de la lista (otro
 // tamaño de letra, modo teatro, pantalla completa) o la de un mensaje (un emote sin tamaño conocido crece al cargar).
-// Con «stick», solo si se estaba abajo: en el escritorio, quien sube a leer se queda donde está. En la tele no se puede
+// Con «stick», solo si se estaba abajo: en el escritorio, quien sube a leer se queda donde está. En la TV no se puede
 // subir, así que siempre baja.
 export const useChatAtBottom = (
   list: RefObject<HTMLElement | null>,

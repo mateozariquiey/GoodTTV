@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react"
-import { type Channel, fromStream, toRecent } from "./channel"
+import { type Channel, fromSearch, fromStream, toRecent } from "./channel"
 import { useAppStatus, useAuth, useHome, usePreferences } from "./data"
+import { type Clave, t, useIdioma } from "./idioma"
 import { useLayer, useRemoteInput } from "./navigation"
 import { PlayerScreen } from "./player/PlayerScreen"
 import { AccountScreen } from "./screens/AccountScreen"
@@ -10,15 +11,27 @@ import { Avatar } from "./ui"
 
 type Tab = "home" | "search" | "account"
 
-const TABS: readonly { readonly id: Tab; readonly label: string }[] = [
+const TABS: readonly { readonly id: Tab; readonly label: Clave }[] = [
   { id: "home", label: "Siguiendo" },
   { id: "search", label: "Buscar" },
   { id: "account", label: "Ajustes" },
 ]
 
+const lookUpChannel = async (login: string, signedIn: boolean): Promise<Channel | undefined> => {
+  const { catalog } = window.api
+  // Con cuenta, Helix, que también da desde cuándo emite.
+  if (signedIn) {
+    const [stream] = await catalog.streamsByLogin([login])
+    if (stream !== undefined) return fromStream(stream)
+  }
+  const card = await catalog.channel?.(login)
+  return card == null ? undefined : fromSearch(card)
+}
+
 type Watching = { readonly channel: Channel; readonly lineup: readonly Channel[] }
 
 export const App = () => {
+  useIdioma() // al cambiar de idioma, se vuelve a pintar todo
   useRemoteInput()
   const status = useAppStatus()
   const account = useAuth()
@@ -70,13 +83,12 @@ export const App = () => {
     (channel: Channel, lineup: readonly Channel[]) => {
       setWatching({ channel, lineup })
       void window.api.recents.add(toRecent(channel)).catch(() => undefined)
-      // Opened by name: fill in title, viewers and the id chat needs, if the channel is live.
-      if (signedIn && channel.userId === undefined) {
-        void window.api.catalog
-          .streamsByLogin([channel.login])
-          .then(([stream]) => {
-            if (stream === undefined) return
-            const enriched = fromStream(stream)
+      // Opened by name: fill in its name, picture and the id chat needs and, if it is live, title and viewers. As a guest
+      // when the version can (catalog.channel), so also without an account.
+      if (channel.userId === undefined) {
+        void lookUpChannel(channel.login, signedIn)
+          .then((enriched) => {
+            if (enriched === undefined) return
             setWatching((current) =>
               current?.channel.login === channel.login
                 ? { ...current, channel: enriched }
@@ -100,7 +112,7 @@ export const App = () => {
       <div className="shell" hidden={watching !== undefined} ref={shell}>
         <header className="topbar">
           <span aria-hidden="true" className="topbar__logo" />
-          <nav aria-label="Secciones" className="tabs">
+          <nav aria-label={t("Secciones")} className="tabs">
             {TABS.map((item) => (
               <button
                 aria-current={tab === item.id ? "page" : undefined}
@@ -113,7 +125,7 @@ export const App = () => {
                 onClick={() => setTab(item.id)}
                 type="button"
               >
-                {item.label}
+                {t(item.label)}
               </button>
             ))}
           </nav>
@@ -134,7 +146,7 @@ export const App = () => {
           ) : null}
         </header>
         <main className="content">
-          <section aria-label="Siguiendo" hidden={tab !== "home"}>
+          <section aria-label={t("Siguiendo")} hidden={tab !== "home"}>
             <HomeScreen
               active={watching === undefined && tab === "home"}
               home={home}
@@ -146,10 +158,10 @@ export const App = () => {
               onWatch={play}
             />
           </section>
-          <section aria-label="Buscar" hidden={tab !== "search"}>
-            <SearchScreen onWatch={play} signedIn={signedIn} />
+          <section aria-label={t("Buscar")} hidden={tab !== "search"}>
+            <SearchScreen onWatch={play} />
           </section>
-          <section aria-label="Ajustes" hidden={tab !== "account"}>
+          <section aria-label={t("Ajustes")} hidden={tab !== "account"}>
             <AccountScreen
               auth={account.auth}
               authBusy={account.busy}

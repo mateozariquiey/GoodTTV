@@ -1,4 +1,4 @@
-// Modos de retraso y relleno con el VOD en la interfaz de escritorio, con los criterios de la tele
+// Modos de retraso y relleno con el VOD en la interfaz de escritorio, con los criterios de la TV
 // (herramientas/laboratorio/README.md): pausas globales simuladas (?pausa=, como GOODTTV_PAUSA_SIMULADA) y muestras
 // del <video> cada 2 s. Escenarios:
 //   adaptativo   Adaptativo, una pausa de 45 s cada 150 s, 400 s: una parada en la primera pausa y ninguna después.

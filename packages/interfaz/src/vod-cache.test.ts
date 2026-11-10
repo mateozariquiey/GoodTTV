@@ -84,7 +84,7 @@ describe("los VOD pedidos de antemano (vod-cache.ts)", () => {
     expect(await prefetchedVodMaster("21")).toBeUndefined()
   })
 
-  it("sin VOD en la plataforma (la tele), falla", async () => {
+  it("sin VOD en la plataforma (la TV), falla", async () => {
     vi.stubGlobal("window", { api: {} })
     await expect(vodDetail("12")).rejects.toThrow("sin VOD")
   })

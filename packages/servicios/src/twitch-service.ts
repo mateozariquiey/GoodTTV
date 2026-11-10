@@ -92,7 +92,7 @@ export class TwitchService {
   readonly #pictures: ProfilePictures
   readonly #userEmotes = new Map<string, { at: number; emotes: Promise<readonly ChatEmote[]> }>()
 
-  // scopes: los que se piden al vincular (por defecto, solo lectura: la tele). pictures: dónde guardar las fotos de los
+  // scopes: los que se piden al vincular (por defecto, solo lectura: la TV). pictures: dónde guardar las fotos de los
   // canales entre una página y otra (profile-pictures.ts); sin él, en memoria.
   public constructor(
     settings: SettingsSource,

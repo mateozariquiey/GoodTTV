@@ -40,6 +40,8 @@ export type Remote = {
 }
 
 type Fixtures = {
+  // El idioma del sistema (LANG): español por defecto, que es lo que buscan las pruebas.
+  lang: string
   app: ElectronApplication
   page: Page
   remote: Remote
@@ -77,12 +79,14 @@ const fitWindow = (pid: number): void => {
 }
 
 export const test = base.extend<Fixtures>({
-  app: async ({ seed }, use) => {
+  app: async ({ lang, seed }, use) => {
     const profile = await mkdtemp(join(tmpdir(), "twitch-port-e2e-"))
     await writeSeed(profile, seed)
     const env = { ...process.env }
     delete env["ELECTRON_RUN_AS_NODE"]
     delete env["WAYLAND_DISPLAY"]
+    for (const name of ["LANGUAGE", "LC_ALL", "LC_MESSAGES"]) delete env[name]
+    env["LANG"] = lang
     if (WAYLAND !== undefined) delete env["DISPLAY"]
     const app = await electron.launch({
       args: [
@@ -138,6 +142,7 @@ export const test = base.extend<Fixtures>({
       },
     })
   },
+  lang: ["es_ES.UTF-8", { option: true }],
   seed: [{}, { option: true }],
 })
 

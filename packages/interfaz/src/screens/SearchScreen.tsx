@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react"
 import { type Channel, fromSearch } from "../channel"
 import { searchChannels } from "../data"
+import { t } from "../idioma"
 import { ChannelRow, StateMessage } from "../ui"
 
 const KEY_ROWS = [
@@ -21,12 +22,12 @@ type Results =
 
 type SearchScreenProps = {
   readonly onWatch: (channel: Channel, lineup: readonly Channel[]) => void
-  readonly signedIn: boolean
 }
 
 // Typing with a remote: an alphabetical on-screen keyboard. A physical keyboard also works:
-// while the field has focus, main lets letters, Space and Backspace through.
-export const SearchScreen = ({ onWatch, signedIn }: SearchScreenProps) => {
+// while the field has focus, main lets letters, Space and Backspace through. Busca como invitado, con la relevancia de
+// twitch.tv, también sin cuenta (guestCatalog, como en la extensión y Android).
+export const SearchScreen = ({ onWatch }: SearchScreenProps) => {
   const [query, setQuery] = useState("")
   const [results, setResults] = useState<Results>({ kind: "idle" })
   const [attempt, setAttempt] = useState(0)
@@ -34,7 +35,7 @@ export const SearchScreen = ({ onWatch, signedIn }: SearchScreenProps) => {
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: `attempt` re-runs the search on Retry.
   useEffect(() => {
-    if (!signedIn || trimmed.length < 2) {
+    if (trimmed.length < 2) {
       setResults({ kind: "idle" })
       return undefined
     }
@@ -53,7 +54,7 @@ export const SearchScreen = ({ onWatch, signedIn }: SearchScreenProps) => {
       active = false
       clearTimeout(timer)
     }
-  }, [attempt, signedIn, trimmed])
+  }, [attempt, trimmed])
 
   const type = (character: string) => setQuery((current) => `${current}${character}`.slice(0, 50))
   const exact: Channel | undefined = LOGIN.test(trimmed)
@@ -66,7 +67,7 @@ export const SearchScreen = ({ onWatch, signedIn }: SearchScreenProps) => {
     <div className="search">
       <div className="search__input">
         <label className="search__field">
-          <span className="search__label">Buscar canal</span>
+          <span className="search__label">{t("Buscar canal")}</span>
           <input
             autoComplete="off"
             data-nav
@@ -75,13 +76,13 @@ export const SearchScreen = ({ onWatch, signedIn }: SearchScreenProps) => {
             onBlur={() => void window.api.input.setTextEntry(false)}
             onChange={(event) => setQuery(event.currentTarget.value)}
             onFocus={() => void window.api.input.setTextEntry(true)}
-            placeholder="Nombre del canal"
+            placeholder={t("Nombre del canal")}
             spellCheck={false}
             value={query}
           />
         </label>
         <fieldset className="keyboard">
-          <legend className="visually-hidden">Teclado en pantalla</legend>
+          <legend className="visually-hidden">{t("Teclado en pantalla")}</legend>
           {KEY_ROWS.map((row) => (
             <div className="keyboard__row" key={row.join("")}>
               {row.map((character) => (
@@ -107,7 +108,7 @@ export const SearchScreen = ({ onWatch, signedIn }: SearchScreenProps) => {
               onClick={() => type(" ")}
               type="button"
             >
-              Espacio
+              {t("Espacio")}
             </button>
             <button
               className="key key--wide"
@@ -116,7 +117,7 @@ export const SearchScreen = ({ onWatch, signedIn }: SearchScreenProps) => {
               onClick={() => setQuery((current) => Array.from(current).slice(0, -1).join(""))}
               type="button"
             >
-              Borrar
+              {t("Borrar letra")}
             </button>
             <button
               className="key key--wide"
@@ -125,19 +126,22 @@ export const SearchScreen = ({ onWatch, signedIn }: SearchScreenProps) => {
               onClick={() => setQuery("")}
               type="button"
             >
-              Vaciar
+              {t("Vaciar")}
             </button>
           </div>
         </fieldset>
       </div>
       <div className="search__results">
         {exact === undefined ? null : (
-          <section aria-label="Ir directamente" className="guide__section">
-            <h2 className="guide__heading">Ir directamente</h2>
+          <section aria-label={t("Ir directamente")} className="guide__section">
+            <h2 className="guide__heading">{t("Ir directamente")}</h2>
             <ul className="guide__list">
               <li>
                 <ChannelRow
-                  channel={{ ...exact, title: `Abrir twitch.tv/${exact.login}` }}
+                  channel={{
+                    ...exact,
+                    title: t("Abrir twitch.tv/{login}", { login: exact.login }),
+                  }}
                   navId="search-exact"
                   onOpen={() => onWatch(exact, [])}
                 />
@@ -145,29 +149,28 @@ export const SearchScreen = ({ onWatch, signedIn }: SearchScreenProps) => {
             </ul>
           </section>
         )}
-        {!signedIn ? (
-          <p className="guide__empty">
-            Sin cuenta vinculada solo puedes abrir un canal por su nombre exacto.
-          </p>
-        ) : results.kind === "idle" ? (
-          <p className="guide__empty">Escribe al menos dos letras.</p>
+        {results.kind === "idle" ? (
+          <p className="guide__empty">{t("Escribe al menos dos letras.")}</p>
         ) : results.kind === "loading" ? (
-          <StateMessage kind="loading" title={`Buscando «${results.query}»…`} />
+          <StateMessage kind="loading" title={t("Buscando «{query}»…", { query: results.query })} />
         ) : results.kind === "error" ? (
           <StateMessage
             action={{
               id: "search-retry",
-              label: "Reintentar",
+              label: t("Reintentar"),
               run: () => setAttempt((value) => value + 1),
             }}
             kind="error"
-            title="No se pudo buscar en Twitch"
+            title={t("No se pudo buscar en Twitch")}
           />
         ) : channels.length === 0 ? (
-          <StateMessage kind="empty" title={`No hay canales para «${results.query}»`} />
+          <StateMessage
+            kind="empty"
+            title={t("No hay canales para «{query}»", { query: results.query })}
+          />
         ) : (
-          <section aria-label="Resultados" className="guide__section">
-            <h2 className="guide__heading">Resultados</h2>
+          <section aria-label={t("Resultados")} className="guide__section">
+            <h2 className="guide__heading">{t("Resultados")}</h2>
             <ul className="guide__list">
               {channels.map((channel) => (
                 <li key={channel.login}>

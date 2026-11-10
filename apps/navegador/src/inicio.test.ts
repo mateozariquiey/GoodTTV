@@ -323,7 +323,7 @@ describe("La cuenta sin red (useAuth)", () => {
   })
 
   it("si window.api.auth.snapshot() no contesta, es «unreachable», no «error»", async () => {
-    // Como llega en la tele: el error del proceso principal, con el prefijo de Electron.
+    // Como llega en la TV: el error del proceso principal, con el prefijo de Electron.
     api.auth.snapshot.mockRejectedValue(
       new Error("Error invoking remote method 'auth:snapshot': TypeError: fetch failed"),
     )

@@ -7,7 +7,9 @@ import {
   ChatSendInputSchema,
   type ChatSendResult,
   type LiveArchive,
+  type Page,
   type ReplayMessage,
+  type SearchInput,
   SearchInputSchema,
   type Storyboard,
   type StreamCard,
@@ -122,13 +124,33 @@ export type VodSource = {
   readonly storyboard: (url: string) => Promise<Storyboard | null>
 }
 
+// Lo que se ve de Twitch sin cuenta, con la fuente de @goodttv/sin-anuncios (canales.ts): buscar con la relevancia de
+// twitch.tv, un canal por su nombre y los directos más vistos. La extensión y Android lo usan en la página; la TV, en
+// su proceso principal (apps/tv/src/main/index.ts).
+export const guestCatalog = (channels: ChannelSource) => ({
+  channel: async (login: string): Promise<ChannelCard | null> => {
+    const result = await channels.byLogin(login)
+    return result === null ? null : toChannelCard(result)
+  },
+  popularSinCuenta: async (language: string): Promise<readonly StreamCard[]> =>
+    (await channels.popular(language)).map(toPopularCard),
+  search: async (input: SearchInput): Promise<Page<ChannelCard>> => {
+    const { first, query } = SearchInputSchema.parse(input)
+    const items = (await channels.search(query, first)).flatMap((result) => {
+      const card = toChannelCard(result)
+      return card === null ? [] : [card]
+    })
+    return { cursor: undefined, items }
+  },
+})
+
 const VIDEO_ID = /^\d{1,20}$/
 const STORYBOARD_URL =
   /^https:\/\/[a-z0-9.-]+\.(cloudfront\.net|twitch\.tv|ttvnw\.net|jtvnw\.net)\/[^?#]*\.json$/
 const LOGIN = /^[a-z0-9_]{1,25}$/
 
-// window.api en una página privilegiada (la extensión; más adelante, Android): lo mismo que en la tele hacen el
-// proceso principal y su IPC (apps/tele/src/main/ipc.ts), pero en la propia página. Los tokens se quedan en los
+// window.api en una página privilegiada (la extensión; más adelante, Android): lo mismo que en la TV hacen el
+// proceso principal y su IPC (apps/tv/src/main/ipc.ts), pero en la propia página. Los tokens se quedan en los
 // servicios; la interfaz solo recibe datos.
 export const createPageApi = ({
   channels,
@@ -163,6 +185,7 @@ export const createPageApi = ({
     },
   })
   const local = new LocalStore(localData)
+  const guest = channels === undefined ? undefined : guestCatalog(channels)
 
   return {
     app: {
@@ -180,27 +203,12 @@ export const createPageApi = ({
     catalog: {
       followed: (input) => twitch.followed(input),
       live: (input) => twitch.live(input),
-      search: async (input) => {
-        if (channels === undefined) return twitch.search(input)
-        const { first, query } = SearchInputSchema.parse(input)
-        const items = (await channels.search(query, first)).flatMap((result) => {
-          const card = toChannelCard(result)
-          return card === null ? [] : [card]
-        })
-        return { cursor: undefined, items }
-      },
+      search: (input) => (guest === undefined ? twitch.search(input) : guest.search(input)),
       streamsByLogin: (logins) => twitch.streamsByLogin(logins),
       follows: (broadcasterId) => twitch.follows(broadcasterId),
-      ...(channels === undefined
+      ...(guest === undefined
         ? {}
-        : {
-            channel: async (login: string) => {
-              const result = await channels.byLogin(login)
-              return result === null ? null : toChannelCard(result)
-            },
-            popularSinCuenta: async (language: string) =>
-              (await channels.popular(language)).map(toPopularCard),
-          }),
+        : { channel: guest.channel, popularSinCuenta: guest.popularSinCuenta }),
     },
     chat: {
       close: async () => chat.close(),
@@ -210,7 +218,7 @@ export const createPageApi = ({
           batches.delete(listener)
         }
       },
-      // Como el IPC de la tele: un identificador que no sea válido no llega a tocar el chat.
+      // Como el IPC de la TV: un identificador que no sea válido no llega a tocar el chat.
       open: async (input) => chat.open(ChatOpenInputSchema.parse(input).broadcasterId),
       // Lo enviado se enseña ya, con sus emotes y el color de la persona; el de EventSub, que llega después (con las
       // insignias), lo sustituye.

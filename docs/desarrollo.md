@@ -2,7 +2,7 @@
 
 El repo es un monorepo con espacios de trabajo de bun (estructura en
 [arquitectura.md](arquitectura.md#la-familia-y-el-monorepo)). Todos los comandos se lanzan desde la
-raíz: los de la app de la tele delegan en `apps/tele`.
+raíz: los de la app de la TV delegan en `apps/tv`.
 
 ## Requisitos
 
@@ -21,21 +21,21 @@ bun install --frozen-lockfile   # instala dependencias y descarga Electron
 ## Ejecutar
 
 ```bash
-bun run build      # compila main, preload y renderer en apps/tele/out/
+bun run build      # compila main, preload y renderer en apps/tv/out/
 bun run start      # abre la app en una ventana
-bun run start -- --fullscreen   # como en la tele
+bun run start -- --fullscreen   # como en la TV
 ```
 
 Hay que usar la app compilada (`build` + `start`). El servidor de desarrollo de electron-vite
 sirve la interfaz por `http://`, y el embed de Twitch exige HTTPS. Producción usa un servidor
 `https://localhost` con certificado fijado, heredado de VacuumStream, salvo que cada instalación crea el suyo en su
-carpeta de datos (`localhost-certificate.json`, [`local-certificate.ts`](../apps/tele/src/main/local-certificate.ts)).
+carpeta de datos (`localhost-certificate.json`, [`local-certificate.ts`](../apps/tv/src/main/local-certificate.ts)).
 
 ## Comprobaciones
 
 ```bash
 bun run verify     # Biome + TypeScript estricto + pruebas unitarias (Vitest) + build
-bun run test -- apps/tele/src/main/input-router.test.ts   # una prueba concreta
+bun run test -- apps/tv/src/main/input-router.test.ts   # una prueba concreta
 ```
 
 ### Pruebas e2e
@@ -71,7 +71,7 @@ X11. La tecla Atrás del navegador no se puede simular así y se envía Escape, 
 
 ```bash
 bun run package:appimage
-sha256sum apps/tele/dist/GoodTTV-0.2.3-x86_64.AppImage
+sha256sum apps/tv/dist/GoodTTV-0.2.3-x86_64.AppImage
 ```
 
 - El AppImage arranca a pantalla completa (`--fullscreen` va en su lanzador).
@@ -88,7 +88,7 @@ En el mini PC:
 chmod +x GoodTTV-0.2.3-x86_64.AppImage
 ./GoodTTV-0.2.3-x86_64.AppImage                 # necesita libfuse2
 APPIMAGE_EXTRACT_AND_RUN=1 ./GoodTTV-…AppImage   # alternativa sin FUSE
-bash diagnostico.sh > diagnostico.txt           # apps/tele/scripts: GPU, VA-API, pantallas, audio, mando
+bash diagnostico.sh > diagnostico.txt           # apps/tv/scripts: GPU, VA-API, pantallas, audio, mando
 ```
 
 Si el sistema no tiene almacén de secretos (GNOME Keyring o KWallet), la sesión de Twitch se
@@ -100,7 +100,7 @@ Ajustes lo avisa.
 `apps/navegador` (D13) compila una sola carpeta para Chrome y Firefox. El botón de la extensión
 abre GoodTTV, con pantallas para ratón y teclado (D14; los atajos están en Ajustes). En twitch.tv,
 el menú contextual de un enlace o de la página de un canal tiene «Abrir en GoodTTV». Para vincular
-la cuenta, el mismo código que en la tele.
+la cuenta, el mismo código que en la TV.
 
 ```bash
 bun run build:navegador   # apps/navegador/dist
@@ -175,7 +175,7 @@ ahora de lo guardado (`apps/navegador/src/twitch-falso.ts`).
 
 ### Prueba de los modos de retraso
 
-Los mismos criterios que en la tele, en la interfaz de escritorio y en los dos navegadores. Usa las
+Los mismos criterios que en la TV, en la interfaz de escritorio y en los dos navegadores. Usa las
 pausas globales simuladas de la página: `goodttv.html?pausa=cada,duración[,arranque]`, como
 `GOODTTV_PAUSA_SIMULADA`; `?registro` guarda los eventos del empalme sin datos sensibles.
 
@@ -225,6 +225,7 @@ node apps/navegador/test/humo/rendimiento.mjs --canales canal1 --detalle   # una
   `--wayland wayland-0`. Da de 0,1 a 1,3 % en total, y a 1,05× ~6,7 % (con `--detalle`, por tramos). Una visita suelta llega a un 5 %,
   así que compara al menos 15 visitas por versión, y solo cuenta una diferencia de más de ~1,5 puntos. Comprueba que nada tapa la ventana, porque tapada da 0 %. Si dudas de un
   compositor, `node herramientas/laboratorio/sonda-fotogramas.mjs <socket>` dice lo que pierde él solo.
+  En la app de la TV, `herramientas/laboratorio/fotogramas-tv.mjs` hace esa alternancia con dos compilaciones.
 - **Para comparar lo demás entre dos versiones** (arranque, latencia, paradas, CPU), lánzalas a la vez en dos Weston, con
   los mismos canales y en el mismo orden: así comparten red y anuncios. Eso sí, sus fotogramas perdidos no cuentan.
 - **La latencia** se mide como «ahora − hora (PDT) del fragmento en pantalla». Cada canal tiene su
@@ -271,7 +272,7 @@ https://dev.twitch.tv/console/apps. No es un secreto y nunca hay que generar un 
 app. Un fork debería registrar el suyo:
 
 - **Al compilar:** `MAIN_VITE_TWITCH_CLIENT_ID=… bun run build`. Si prefieres un archivo `.env`, va en
-  `apps/tele/` (electron-vite lo busca en la carpeta de la app, no en la raíz del monorepo).
+  `apps/tv/` (electron-vite lo busca en la carpeta de la app, no en la raíz del monorepo).
 - **Al arrancar:** `TWITCH_CLIENT_ID=… bun run start`.
 
 Cambiar de Client ID invalida las sesiones guardadas. Cada persona puede revocar el acceso en

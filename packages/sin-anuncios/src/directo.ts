@@ -1,5 +1,5 @@
 // Directo sin anuncios para un reproductor hls.js, sin depender del transporte. Atiende las rutas /stream/ con
-// Response estándar: en la tele las sirve el servidor HTTPS local (apps/tele/src/main/stream/stream-service.ts) y en
+// Response estándar: en la TV las sirve el servidor HTTPS local (apps/tv/src/main/stream/stream-service.ts) y en
 // la extensión, la propia página atiende con ellas sus fetch (directo-fetch.ts).
 //   /stream/<login>/live.m3u8?modo=…[&q=WxH@fps][&visita=…]  lista HLS (recarga bloqueante con _HLS_msn)
 //   /stream/<login>/info?…                 duración de los fragmentos, calidades y si el canal emite
@@ -56,7 +56,7 @@ export type SimulatedPause = {
 }
 
 // "cada,duración[,arranque]" (s): pausas globales simuladas para probar el relleno; con arranque=1, también una al
-// abrir el canal (todas las sesiones con anuncio de entrada). cada=0: solo esa. En la tele llega en
+// abrir el canal (todas las sesiones con anuncio de entrada). cada=0: solo esa. En la TV llega en
 // GOODTTV_PAUSA_SIMULADA.
 export const parseSimulatedPause = (text: string): SimulatedPause | null => {
   const [every = 0, length = 0, atStart = 0] = text.split(",").map(Number)
@@ -107,7 +107,7 @@ const reply = (status: number, type: string, body?: string | Bytes): Response =>
   })
 const TEXT = "text/plain; charset=utf-8"
 
-// En Node (la tele), que un temporizador pendiente no impida cerrar el proceso; en el navegador no hace falta.
+// En Node (la TV), que un temporizador pendiente no impida cerrar el proceso; en el navegador no hace falta.
 const unref = (timer: ReturnType<typeof setTimeout>): void => {
   ;(timer as unknown as { unref?: () => void }).unref?.()
 }

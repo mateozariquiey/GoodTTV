@@ -58,7 +58,7 @@ export const routeHash = (route: Route): string => {
   }
 }
 
-// Con «sustituir», sin dejar la pantalla de ahora en el historial (cambiar de canal con las flechas, como en la tele:
+// Con «sustituir», sin dejar la pantalla de ahora en el historial (cambiar de canal con las flechas, como en la TV:
 // Atrás vuelve a Inicio, no recorre los canales vistos; o retroceder un directo y volver a él, que es seguir viendo lo
 // mismo).
 export const navigate = (route: Route, sustituir = false): void => {

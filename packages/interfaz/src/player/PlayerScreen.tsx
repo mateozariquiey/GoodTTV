@@ -11,6 +11,7 @@ import {
 } from "@phosphor-icons/react"
 import { useCallback, useEffect, useRef, useState } from "react"
 import type { Channel } from "../channel"
+import { t } from "../idioma"
 import { navigation, useLayer } from "../navigation"
 import { Avatar, LiveBadge, Uptime, Viewers } from "../ui"
 import { ChatPanel } from "./ChatPanel"
@@ -224,7 +225,9 @@ export const PlayerScreen = ({
                 <strong className="player__name">{channel.displayName}</strong>
                 {state.phase === "offline" ? null : <LiveBadge />}
                 {engine === "propio" && state.phase === "ready" && behind !== null ? (
-                  <span className="player__behind">{behind} s por detrás</span>
+                  <span className="player__behind">
+                    {behind} {t("s por detrás")}
+                  </span>
                 ) : null}
                 {channel.category === undefined ? null : (
                   <span className="player__category">{channel.category}</span>
@@ -247,7 +250,7 @@ export const PlayerScreen = ({
                   {lineup.length > 1 ? (
                     <span className="player__zap">
                       <kbd>↑</kbd>
-                      <kbd>↓</kbd> canal anterior/siguiente
+                      <kbd>↓</kbd> {t("canal anterior/siguiente")}
                     </span>
                   ) : null}
                 </p>
@@ -270,7 +273,7 @@ export const PlayerScreen = ({
             </div>
           </div>
           <div
-            aria-label="Controles"
+            aria-label={t("Controles")}
             className="player__controls"
             hidden={qualityOpen}
             role="toolbar"
@@ -283,7 +286,7 @@ export const PlayerScreen = ({
               type="button"
             >
               <ArrowLeftIcon aria-hidden="true" />
-              Volver
+              {t("Volver")}
             </button>
             <button
               className="button"
@@ -298,7 +301,7 @@ export const PlayerScreen = ({
               ) : (
                 <PlayIcon aria-hidden="true" weight="fill" />
               )}
-              {state.playing ? "Pausa" : "Reanudar"}
+              {state.playing ? t("Pausa") : t("Reanudar")}
             </button>
             <button
               className="button"
@@ -313,7 +316,7 @@ export const PlayerScreen = ({
               ) : (
                 <SpeakerHighIcon aria-hidden="true" />
               )}
-              {state.muted ? "Activar sonido" : "Silencio"}
+              {state.muted ? t("Activar sonido") : t("Silencio")}
             </button>
             <button
               aria-expanded={qualityOpen}
@@ -326,7 +329,7 @@ export const PlayerScreen = ({
               type="button"
             >
               <SlidersHorizontalIcon aria-hidden="true" />
-              Calidad: {qualityLabel(state.quality)}
+              {t("Calidad")}: {qualityLabel(state.quality)}
             </button>
             <button
               aria-pressed={preferences.chatVisible}
@@ -337,7 +340,7 @@ export const PlayerScreen = ({
               type="button"
             >
               <ChatTextIcon aria-hidden="true" />
-              {preferences.chatVisible ? "Ocultar chat" : "Chat"}
+              {preferences.chatVisible ? t("Ocultar chat") : "Chat"}
             </button>
             {engine === "twitch" ? (
               <button
@@ -349,7 +352,7 @@ export const PlayerScreen = ({
                 type="button"
               >
                 <TwitchLogoIcon aria-hidden="true" />
-                Controles de Twitch
+                {t("Controles de Twitch")}
               </button>
             ) : null}
           </div>
@@ -386,49 +389,56 @@ const noticeFor = (
 ): Notice | undefined => {
   if (interacting) {
     return {
-      text: "Controles de Twitch: ↑ ↓ para moverte, OK para elegir y Atrás para volver.",
+      text: t("Controles de Twitch: ↑ ↓ para moverte, OK para elegir y Atrás para volver."),
       tone: "info",
     }
   }
   if (state.phase === "error" && engine === "propio") {
     return {
-      action: { id: "player-retry", label: "Usar el reproductor de Twitch", run: actions.embed },
-      text: "No se pudo preparar el directo sin anuncios.",
+      action: {
+        id: "player-retry",
+        label: t("Usar el reproductor de Twitch"),
+        run: actions.embed,
+      },
+      text: t("No se pudo preparar el directo sin anuncios."),
       tone: "warning",
     }
   }
   if (state.phase === "error") {
     return {
-      action: { id: "player-retry", label: "Reintentar", run: actions.retry },
-      text: "No se pudo cargar el reproductor de Twitch. Comprueba la conexión.",
+      action: { id: "player-retry", label: t("Reintentar"), run: actions.retry },
+      text: t("No se pudo cargar el reproductor de Twitch. Comprueba la conexión."),
       tone: "warning",
     }
   }
   if (state.phase === "stalled") {
     return {
-      action: { id: "player-retry", label: "Reintentar", run: actions.retry },
-      text: "Twitch no responde.",
+      action: { id: "player-retry", label: t("Reintentar"), run: actions.retry },
+      text: t("Twitch no responde."),
       tone: "warning",
     }
   }
   if (state.phase === "offline") {
-    return { text: `${channel.displayName} no está en directo ahora.`, tone: "info" }
+    return {
+      text: t("{displayName} no está en directo ahora.", { displayName: channel.displayName }),
+      tone: "info",
+    }
   }
   if (state.blocked) {
     return {
-      action: { id: "player-play", label: "Reproducir", run: actions.play },
-      text: "Twitch ha bloqueado el arranque.",
+      action: { id: "player-play", label: t("Reproducir"), run: actions.play },
+      text: t("Twitch ha bloqueado el arranque."),
       tone: "warning",
     }
   }
   if (state.gateHint) {
     return {
-      action: { id: "player-gate", label: "Abrir controles de Twitch", run: actions.twitch },
-      text: "Twitch puede estar pidiendo que confirmes el contenido («Start Watching»).",
+      action: { id: "player-gate", label: t("Abrir controles de Twitch"), run: actions.twitch },
+      text: t("Twitch puede estar pidiendo que confirmes el contenido («Start Watching»)."),
       tone: "info",
     }
   }
-  if (state.phase === "loading") return { text: "Conectando con Twitch…", tone: "info" }
+  if (state.phase === "loading") return { text: t("Conectando con Twitch…"), tone: "info" }
   return undefined
 }
 
@@ -458,7 +468,7 @@ const QualityChooser = ({
   })
   return (
     <fieldset className="player__qualities" ref={root}>
-      <legend className="visually-hidden">Calidad</legend>
+      <legend className="visually-hidden">{t("Calidad")}</legend>
       {qualities.map((quality) => (
         <button
           aria-pressed={quality.id === current}

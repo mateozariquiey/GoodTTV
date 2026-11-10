@@ -36,7 +36,7 @@ import { VodView } from "./VodView"
 // Ajustes). Reutiliza de @goodttv/interfaz los datos, el reproductor y el chat; las pantallas son propias, para
 // ratón y teclado (docs/arquitectura.md).
 
-const REFRESH_MS = 120_000 // como Inicio en la tele
+const REFRESH_MS = 120_000 // como Inicio en la TV
 
 export const Desktop = () => {
   const address = useRoute()

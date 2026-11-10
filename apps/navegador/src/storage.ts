@@ -1,7 +1,7 @@
 import { StoredTokenSchema, type TextStorage, type TokenStore } from "@goodttv/servicios"
 
 // Lo que la extensión guarda va en chrome.storage.local, dentro del perfil del navegador y sin cifrar (Ajustes lo
-// avisa, como la tele cuando no hay llavero del sistema).
+// avisa, como la TV cuando no hay llavero del sistema).
 type Area = Pick<chrome.storage.StorageArea, "get" | "remove" | "set">
 
 // Varias pestañas comparten lo guardado: lo que lee, cambia y escribe (los recientes, renovar el token) va en un

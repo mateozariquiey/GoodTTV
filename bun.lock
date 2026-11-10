@@ -35,7 +35,7 @@
         "vite": "8.2.4",
       },
     },
-    "apps/tele": {
+    "apps/tv": {
       "name": "goodttv",
       "version": "0.4.1",
       "dependencies": {
@@ -625,7 +625,7 @@
 
     "globalthis": ["globalthis@1.0.4", "", { "dependencies": { "define-properties": "^1.2.1", "gopd": "^1.0.1" } }, "sha512-DpLKbNU4WylpxJykQujfCcwYWiV/Jhm50Goo0wrVILAv5jOr9d+H+UR3PhSCD2rCCEIg0uc+G+muBTwD54JhDQ=="],
 
-    "goodttv": ["goodttv@workspace:apps/tele"],
+    "goodttv": ["goodttv@workspace:apps/tv"],
 
     "gopd": ["gopd@1.2.0", "", {}, "sha512-ZUKRh6/kUFoAiTAtTYPZJ3hw9wNxx+BIBOijnlG9PnrJsCcSjs1wyyD6vJpaYtgnzDrKYRSqf3OO6Rfa93xsRg=="],
 

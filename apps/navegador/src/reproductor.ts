@@ -62,7 +62,7 @@ form?.addEventListener("submit", (event) => {
 // Otro canal en la dirección: se empieza de cero.
 addEventListener("hashchange", () => location.reload())
 
-// El <video> se crea aquí, como en la tele: sin pistas de subtítulos (la interfaz no los usa).
+// El <video> se crea aquí, como en la TV: sin pistas de subtítulos (la interfaz no los usa).
 const video = document.createElement("video")
 video.autoplay = true
 video.playsInline = true
@@ -74,7 +74,7 @@ const NO_STOP_TARGET = 24
 const LIVE_MAX_BEHIND = 4
 const VOD_START_TARGET = 16
 
-// Como useHlsPlayer.ts de la tele (hasta que la extensión use la misma interfaz): info, margen inicial y configuración
+// Como useHlsPlayer.ts de la TV (hasta que la extensión use la misma interfaz): info, margen inicial y configuración
 // de hls.js, más el FetchLoader para que sus peticiones a /stream/ pasen por la página. Sin el ajuste de velocidad que
 // recupera o conserva el margen.
 const start = async (element: HTMLVideoElement): Promise<void> => {

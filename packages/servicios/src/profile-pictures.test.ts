@@ -63,7 +63,7 @@ describe("las fotos de los canales (profile-pictures.ts)", () => {
     expect(none.known(["1"]).size).toBe(1)
   })
 
-  it("sin almacén (la tele), en memoria: conserva todas, no solo las últimas", () => {
+  it("sin almacén (la TV), en memoria: conserva todas, no solo las últimas", () => {
     const pictures = new ProfilePictures()
     pictures.add(new Map([["1", "https://example.com/1.png"]]), 0)
     pictures.add(new Map([["2", "https://example.com/2.png"]]), 0)

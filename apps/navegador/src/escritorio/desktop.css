@@ -1,8 +1,8 @@
-/* GoodTTV en el ordenador. La misma esencia que la tele (fondo casi negro, Atkinson Hyperlegible, el blanco como única
+/* GoodTTV en el ordenador. La misma esencia que la TV (fondo casi negro, Atkinson Hyperlegible, el blanco como única
  * marca de selección y el rojo solo para «en directo»), a escala de escritorio: texto de 14 px, menos botones con
  * marco y los controles sobre el vídeo. Maqueta de referencia: docs/arquitectura.md, «La extensión». */
 
-/* Cifras (y separadores) en Inter, como en la tele: el cero y el 6/9 de Atkinson leen raro en cifras y horas. */
+/* Cifras (y separadores) en Inter, como en la TV: el cero y el 6/9 de Atkinson leen raro en cifras y horas. */
 @font-face {
   font-family: "GoodTTV Digits";
   font-style: normal;
@@ -1173,7 +1173,7 @@ kbd {
   font-weight: 600;
 }
 
-/* Chat de solo lectura, con los mensajes de la tele (@goodttv/interfaz). */
+/* Chat de solo lectura, con los mensajes de la TV (@goodttv/interfaz). */
 .chat {
   position: relative; /* la ficha de un emote se coloca respecto al chat */
   display: grid;

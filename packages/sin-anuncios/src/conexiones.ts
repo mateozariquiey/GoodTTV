@@ -17,7 +17,7 @@ const pageStorage = (): AlmacenHosts | null => {
   try {
     return typeof localStorage === "undefined" ? null : localStorage
   } catch {
-    return null // sin acceso (la tele no tiene): solo los de esta sesión
+    return null // sin acceso (la TV no tiene): solo los de esta sesión
   }
 }
 

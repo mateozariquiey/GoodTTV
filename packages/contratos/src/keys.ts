@@ -1,9 +1,9 @@
 import type { InputAction } from "./contracts"
 
-// Teclas → acciones de la interfaz (arriba, OK, atrás, play/pausa…). La tele las traduce antes de que lleguen a
-// Chromium (apps/tele/src/main/input-router.ts); la versión de navegador, en la propia página.
+// Teclas → acciones de la interfaz (arriba, OK, atrás, play/pausa…). La TV las traduce antes de que lleguen a
+// Chromium (apps/tv/src/main/input-router.ts); la versión de navegador, en la propia página.
 
-// Lo que hace falta saber de una pulsación: la tele lo saca de las Input de Electron; la página, de un KeyboardEvent.
+// Lo que hace falta saber de una pulsación: la TV lo saca de las Input de Electron; la página, de un KeyboardEvent.
 export type KeyInput = {
   readonly alt: boolean
   readonly control: boolean

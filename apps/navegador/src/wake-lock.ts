@@ -1,4 +1,4 @@
-// Que la pantalla no se apague mientras se ve un directo (la tele usa powerSaveBlocker). El navegador suelta el
+// Que la pantalla no se apague mientras se ve un directo (la TV usa powerSaveBlocker). El navegador suelta el
 // bloqueo al ocultar la pestaña; se vuelve a pedir al volver.
 export const createWakeLock = () => {
   let wanted = false

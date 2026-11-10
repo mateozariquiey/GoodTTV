@@ -45,7 +45,10 @@ test("searches by name with the on-screen keyboard only", async ({ page, remote 
   await remote.waitForFocus("key-a")
   await typeWithRemote(remote, "ibai_2")
   await expect(page.locator(".search__field input")).toHaveValue("ibai_2")
+  // Sin cuenta también salen resultados (como invitado): → lleva a la lista y ↑ sube a «Ir directamente», arriba.
   await remote.press(...Array<string>(10).fill("Right"))
+  for (let step = 0; step < 8 && (await remote.focusId()) !== "search-exact"; step++)
+    await remote.press("Up")
   await remote.waitForFocus("search-exact")
   await expect(page.locator('[data-nav-id="search-exact"]')).toContainText("ibai_2")
 })

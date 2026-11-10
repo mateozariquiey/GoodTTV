@@ -43,7 +43,7 @@ app/src/main/…/goodttv/  el proyecto de Android (Kotlin)
 ```
 
 No es un espacio de trabajo de bun (no tiene `package.json`): la página usa el `node_modules` de la raíz. Ahí
-Vite está porque lo declaran la tele y la extensión; TypeScript, porque lo declara la raíz.
+Vite está porque lo declaran la TV y la extensión; TypeScript, porque lo declara la raíz.
 
 ## Entorno
 

@@ -63,7 +63,7 @@
   },
   "overrides": [
     {
-      "includes": ["**/*.config.ts", "apps/tele/test/e2e/support/display.ts"],
+      "includes": ["**/*.config.ts", "apps/tv/test/e2e/support/display.ts"],
       "linter": {
         "rules": {
           "style": {

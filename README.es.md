@@ -2,7 +2,7 @@
 
 [English](README.md) · **Español**
 
-Twitch sin anuncios, con apps propias: una extensión para el navegador, una app de Android y otra para la tele. Las
+Twitch sin anuncios, con apps propias: una extensión para el navegador, una app de Android y otra para la TV. Las
 tres comparten el código que quita los anuncios, la cuenta y el chat.
 
 > [!WARNING]
@@ -11,19 +11,31 @@ tres comparten el código que quita los anuncios, la cuenta y el chat.
 
 | App | Para qué | Estado |
 | --- | --- | --- |
-| [Navegador](#navegador) (`apps/navegador`) | Chrome, Chromium, Firefox y Zen, con ratón y teclado | 0.5.0 |
+| [Navegador](#navegador) (`apps/navegador`) | Chrome, Chromium, Firefox y Zen, con ratón y teclado | 0.5.1 |
 | [Android](#android) (`apps/android`) | Teléfonos con Android 13 o posterior | 0.5.0, experimental |
-| [Tele](#tele) (`apps/tele`) | Un mini PC Linux conectado a la tele, con un mando | 0.5.0, ya no se prueba en una tele |
+| [TV](#tv) (`apps/tv`) | Un mini PC Linux conectado a la TV, con un mando | 0.5.1, ya no se prueba en una TV |
 
-La extensión y la app de Android están en español y en inglés: siguen al sistema, y se puede cambiar en los ajustes. La de
-la tele está en español.
+Las tres están en español y en inglés: siguen al sistema, y se puede cambiar en los ajustes.
 
 ![Extensión: un canal con los controles encima del vídeo, su ficha y el chat; a la izquierda, los seguidos en directo](docs/media/escritorio-canal.jpg)
+
+## Lo nuevo de la 0.5.1
+
+Solo cambia la app de la TV. La extensión lleva el mismo número sin cambios a la vista, y Android sigue en la 0.5.0, que
+es aún la última versión para el teléfono.
+
+- **Inglés, y un ajuste de idioma, también en la app de la TV:** Sistema, English o Español, en Ajustes. Cada OK pasa al
+  siguiente, sin recargar ni cortar el vídeo. Sistema sigue el idioma de Linux: español si está en español, y si no,
+  inglés.
+- **Buscar y los directos populares sin cuenta** en la app de la TV, y un canal abierto por su nombre enseña su foto, su
+  categoría y su título.
+- **Ajustes en dos columnas** en la app de la TV: la cuenta, el idioma y el mando a la izquierda; el chat, la
+  reproducción y «Acerca de», a la derecha.
 
 ## Lo nuevo de la 0.5.0
 
 - **Inglés, y un ajuste de idioma,** en la extensión y en Android: Sistema, Español o English, en los ajustes. Sistema es
-  español si el navegador o el teléfono lo están, y si no, inglés. La versión de la tele sigue en español.
+  español si el navegador o el teléfono lo están, y si no, inglés. La app de la TV lo tiene desde la 0.5.1.
 - **El primer canal abre mucho más rápido** en la extensión: en el primer clic tras abrir la página, el primer fotograma
   tarda 1,0-1,2 s en vez de unos 1,9 s, porque las conexiones con Twitch se abren por adelantado. Cambiar de canal
   tras ver uno más de un minuto gana unos 0,3 s. Android
@@ -32,7 +44,7 @@ la tele está en español.
   casi 5 minutos y después ofrece «Reintentar». Sin red, espera a que vuelva sin gastar batería, y vuelve en menos de 3 s y a
   unos 3 s del directo. Si el sistema cierra la app, vuelve a la misma pantalla. De momento, probado en el emulador.
 - **«No está en directo» solo si lo dice Twitch,** en todas las versiones: un fallo de red o un error del servidor de Twitch ya
-  no dicen que el canal no emite. La extensión y la app de la tele también se enteran de que la emisión ha terminado, en vez
+  no dicen que el canal no emite. La extensión y la app de la TV también se enteran de que la emisión ha terminado, en vez
   de quedarse esperando.
 - **Menos paradas en los canales que entregan a trompicones,** en el modo Adaptativo de la extensión: el retraso que añade una
   parada de unos segundos se conserva durante esa visita, y así el siguiente hueco no vuelve a parar. Con huecos de 6 s cada
@@ -40,7 +52,7 @@ la tele está en español.
   repitieron los suyos durante la prueba.
 - **Varias pestañas:** si se cierra o deja su canal la que suena, suena otra a la vista, y un clic en el vídeo de una ventana
   en silencio le da el sonido sin pausarla. Las pestañas ocultas esperan a que vuelvas para refrescar los seguidos.
-- **Seguridad:** la app de la tele crea su propio certificado de localhost en cada instalación, en vez de traer uno con su
+- **Seguridad:** la app de la TV crea su propio certificado de localhost en cada instalación, en vez de traer uno con su
   clave privada. Electron 44.10.2, y zod y Vite actualizados por sus avisos.
 
 ## Cómo quita los anuncios
@@ -88,12 +100,12 @@ Chrome y para Firefox.
 
 **Instalarla:** no está en las tiendas. Descárgala de las
 [releases](https://github.com/mateozariquiey/GoodTTV/releases).
-- **Zen** (y Firefox Developer Edition o Nightly), con `goodttv-0.5.0.xpi`: en `about:config`, pon
+- **Zen** (y Firefox Developer Edition o Nightly), con `goodttv-0.5.1.xpi`: en `about:config`, pon
   `xpinstall.signatures.required` a `false`. Después, en `about:addons`, menú del engranaje → «Instalar complemento
   desde archivo…».
 - **Firefox:** solo admite complementos sin firmar de forma temporal: `about:debugging` → «Este Firefox» → «Cargar
   complemento temporal…» y el `.xpi`. Se quita al cerrar Firefox.
-- **Chrome y Chromium,** también en Windows, con `goodttv-0.5.0-chrome.zip`:
+- **Chrome y Chromium,** también en Windows, con `goodttv-0.5.1-chrome.zip`:
   1. Descomprímelo en una carpeta que vayas a conservar.
   2. En `chrome://extensions`, activa el «Modo Desarrollador» (arriba a la derecha).
   3. Pulsa «Cargar descomprimida» y elige esa carpeta.
@@ -122,8 +134,8 @@ una esquina, deslizar hacia abajo sobre el vídeo vuelve atrás, y al salir de l
 Solo se ha probado en un teléfono (un Galaxy S25 Ultra con Android 17). Que el chat vaya a la par de la imagen se ha
 comprobado a ojo, sin medirlo.
 
-**Instalarla** (Android 13 o posterior): descarga `GoodTTV-0.5.0.apk` de las
-[releases](https://github.com/mateozariquiey/GoodTTV/releases) en el teléfono y ábrelo. Android te pedirá permiso para
+**Instalarla** (Android 13 o posterior): descarga `GoodTTV-0.5.0.apk` de la
+[release 0.5.0](https://github.com/mateozariquiey/GoodTTV/releases/tag/v0.5.0) en el teléfono y ábrelo. Android te pedirá permiso para
 instalar apps desde el navegador o el gestor de archivos, y Play Protect puede avisar de que no conoce al
 desarrollador. Las versiones nuevas se instalan encima de la anterior y conservan la cuenta, porque van firmadas con la
 misma clave. Desde un ordenador, `adb install -r GoodTTV-0.5.0.apk` hace lo mismo. La huella SHA-256 del certificado de
@@ -131,18 +143,19 @@ la firma es `38:CF:EA:F9:1C:2F:8C:C4:B8:35:27:11:BD:77:7F:56:0E:A8:D5:4F:87:37:C
 
 Para compilarla hacen falta el SDK de Android y un JDK 21: lo explica [apps/android/README.md](apps/android/README.md).
 
-## Tele
+## TV
 
 Pensada para usarla desde el sofá en un mini PC Linux con un mando pequeño: flechas, OK, Atrás y Reproducir/Pausa.
-Sirve para ver los directos de los canales que sigues, buscar canales y leer el chat con los emotes de 7TV, BTTV, FFZ y
-Twitch. Los VOD, retroceder y escribir en el chat de las otras apps no están aquí.
+Sirve para ver los directos de los canales que sigues, buscar canales (también sin cuenta) y leer el chat con los emotes
+de 7TV, BTTV, FFZ y Twitch. En español o en inglés. Los VOD, retroceder y escribir en el chat de las otras apps no están
+aquí.
 
-**Estado:** desde octubre de 2026 ya no funciona en una tele de verdad. Se sigue compilando y comprobando con las
+**Estado:** desde octubre de 2026 ya no funciona en una TV de verdad. Se sigue compilando y comprobando con las
 pruebas automáticas (unitarias y de extremo a extremo, en Electron), pero nadie la usa a diario. La 0.2.2 fue la última
 probada en el mini PC con su mando: el audio por HDMI, la decodificación de vídeo por hardware (VA-API), el mando y la
 legibilidad a 3 m ([detalle](docs/verificacion.md#en-el-mini-pc-la-tv-y-el-mando)).
 
-![Inicio de la tele: canales que sigues en directo y vista previa del enfocado](docs/media/inicio.jpg)
+![Inicio de la TV: canales que sigues en directo y vista previa del enfocado](docs/media/inicio.jpg)
 
 De la 0.1.0, con el reproductor oficial de Twitch: [reproducción](docs/media/reproduccion.jpg) ·
 [vídeo de demostración (84 s, solo teclas de mando)](docs/media/demo.mp4) ·
@@ -171,7 +184,7 @@ x86_64) y ejecútalo; arranca a pantalla completa y necesita `libfuse2`. Para co
 ```bash
 bun install --frozen-lockfile
 bun run build && bun run start   # en una ventana, para probar
-bun run package:appimage         # apps/tele/dist/GoodTTV-0.5.0-x86_64.AppImage
+bun run package:appimage         # apps/tv/dist/GoodTTV-0.5.1-x86_64.AppImage
 ```
 
 ## El código
@@ -182,7 +195,7 @@ Un monorepo con espacios de trabajo de Bun:
 | --- | --- |
 | `apps/navegador` | La extensión (Manifest V3) |
 | `apps/android` | La app de Android (Kotlin y la interfaz web, compiladas con Gradle; no es un espacio de trabajo de Bun) |
-| `apps/tele` | La app de la tele (Electron) |
+| `apps/tv` | La app de la TV (Electron) |
 | `packages/sin-anuncios` | El empalme de las sesiones y el relleno con el VOD |
 | `packages/interfaz` | Lo común de las interfaces: reproductor, chat y datos |
 | `packages/servicios` | Cuenta, API de Twitch (Helix), chat y almacén |
@@ -202,14 +215,14 @@ La documentación de diseño está en español: [arquitectura](docs/arquitectura
 ## Origen
 
 GoodTTV empezó como una variante de [VacuumStream](https://github.com/eliottness/VacuumStream) 0.2.1, de Eliott
-Bouhana, con licencia MIT. Este repositorio conserva su historial completo. De VacuumStream se conserva, en la tele:
+Bouhana, con licencia MIT. Este repositorio conserva su historial completo. De VacuumStream se conserva, en la TV:
 - el proceso principal y su modelo de seguridad: aislamiento, IPC verificado y servidor HTTPS local con certificado
   fijado;
 - el inicio de sesión por código y el almacén de tokens;
 - el adaptador de Helix y el cargador del SDK de Twitch;
 - el algoritmo de foco espacial y el empaquetado con electron-builder.
 
-Lo demás es de GoodTTV: las interfaces de la tele, del escritorio y del teléfono, el chat con emotes de terceros, el
+Lo demás es de GoodTTV: las interfaces de la TV, del escritorio y del teléfono, el chat con emotes de terceros, el
 reproductor sin anuncios, la extensión y la app de Android. El porqué de cada decisión está en
 [docs/decisiones.md](docs/decisiones.md).
 

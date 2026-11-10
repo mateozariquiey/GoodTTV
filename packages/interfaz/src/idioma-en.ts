@@ -307,4 +307,89 @@ export const EN = {
   "Cuadrícula de canales (en pruebas)": "Channel grid (testing)",
   "Hasta 4 canales en una pestaña, con un + en la columna y un botón en el canal. Suena el que eliges, y su chat es el que se ve.":
     "Up to 4 channels in one tab, with a + in the column and a button on the channel. The one you pick plays sound, and its chat is the one shown.",
+
+  // La TV (sus pantallas, en @goodttv/interfaz)
+  Secciones: "Sections",
+  "EN DIRECTO": "LIVE",
+  "{displayName}, desconectado": "{displayName}, offline",
+  Recientes: "Recent",
+  "No se pudo comprobar tu cuenta": "Couldn't check your account",
+  "Lo que ves es de la última vez ({error}).": "What you see is from last time ({error}).",
+  "La sesión no se ha cerrado ({error}).": "You haven't been signed out ({error}).",
+  "Cargando canales…": "Loading channels…",
+  "No se pudo cargar la lista de Twitch": "Couldn't load the list from Twitch",
+  "Vincula tu cuenta para ver aquí a quién sigues en directo.":
+    "Link your account to see which channels you follow are live.",
+  "1 canal que sigues": "1 channel you follow",
+  "{n} canales que sigues": "{n} channels you follow",
+  "Nadie a quien sigues está en directo ahora.": "Nobody you follow is live right now.",
+  "Los canales que veas aparecerán aquí.": "Channels you watch will show up here.",
+  "No hay directos populares disponibles.": "No popular streams available.",
+  "Cuando alguien a quien sigues esté en directo, lo verás aquí.":
+    "When someone you follow goes live, you'll see them here.",
+  "Busca un canal por su nombre o vincula tu cuenta de Twitch.":
+    "Search for a channel by name or link your Twitch account.",
+  "desde hace": "live for",
+  "para abrir el canal": "to open the channel",
+  "para ver": "to watch",
+  "Nombre del canal": "Channel name",
+  "Teclado en pantalla": "On-screen keyboard",
+  "Borrar letra": "Delete",
+  Vaciar: "Clear all",
+  "Ir directamente": "Go straight there",
+  "Abrir twitch.tv/{login}": "Open twitch.tv/{login}",
+  "Escribe al menos dos letras.": "Type at least two letters.",
+  "Buscando «{query}»…": "Searching for “{query}”…",
+  "No se pudo buscar en Twitch": "Couldn't search Twitch",
+  "No hay canales para «{query}»": "No channels for “{query}”",
+  Resultados: "Results",
+  "Mostrar el chat al ver un canal": "Show chat when watching a channel",
+  Sí: "Yes",
+  "El chat se retrasa lo mismo que la imagen, aproximadamente, para ir a la par.":
+    "Chat is delayed about as much as the picture, to stay in step with it.",
+  Mando: "Remote",
+  "Probar el mando": "Test the remote",
+  "Ver qué tecla envía cada botón": "See which key each button sends",
+  "GoodTTV {version}. Basado en VacuumStream de Eliott Bouhana (licencia MIT).":
+    "GoodTTV {version}. Based on VacuumStream by Eliott Bouhana (MIT license).",
+  "No está afiliado a Twitch. La reproducción usa un reproductor propio sin anuncios; si falla, el reproductor oficial de Twitch.":
+    "Not affiliated with Twitch. Playback uses its own ad-free player, and the official Twitch player if that fails.",
+  "Aceleración de vídeo disponible:": "Video acceleration available:",
+  sí: "yes",
+  "Este sistema no tiene un almacén de secretos: la sesión se guarda sin cifrar, solo legible por tu usuario.":
+    "This system has no secret store: the session is saved unencrypted, readable only by your user.",
+  "La cuenta sirve para la lista de seguidos y el chat. El reproductor de Twitch no recibe esta sesión: Turbo y las ventajas de suscriptor no se aplican aquí.":
+    "The account is used for your follow list and the chat. The Twitch player doesn't get this session, so Turbo and subscriber perks don't apply here.",
+  "Escanea el código con el móvil": "Scan the code with your phone",
+  "o entra en": "or go to",
+  "y escribe:": "and enter:",
+  "Vincula tu cuenta para ver a quién sigues y leer el chat.":
+    "Link your account to see who you follow and read the chat.",
+  "Necesitarás el móvil para aprobarlo. Solo se piden permisos de lectura.":
+    "You'll need your phone to approve it. It only asks for read permissions.",
+  "Intentar de nuevo": "Try again",
+  "Pulsa cada botón. Atrás cierra esta ventana.": "Press each button. Back closes this window.",
+  Tecla: "Key",
+  Acción: "Action",
+  "canal anterior/siguiente": "previous/next channel",
+  Controles: "Controls",
+  Reanudar: "Resume",
+  "Activar sonido": "Unmute",
+  "Ocultar chat": "Hide chat",
+  "Controles de Twitch": "Twitch controls",
+  "Controles de Twitch: ↑ ↓ para moverte, OK para elegir y Atrás para volver.":
+    "Twitch controls: ↑ ↓ to move, OK to choose and Back to return.",
+  "Usar el reproductor de Twitch": "Use the Twitch player",
+  "No se pudo cargar el reproductor de Twitch. Comprueba la conexión.":
+    "Couldn't load the Twitch player. Check your connection.",
+  "{displayName} no está en directo ahora.": "{displayName} isn't live right now.",
+  "Twitch ha bloqueado el arranque.": "Twitch blocked playback from starting.",
+  "Abrir controles de Twitch": "Open Twitch controls",
+  "Twitch puede estar pidiendo que confirmes el contenido («Start Watching»).":
+    "Twitch may be asking you to confirm the content (“Start Watching”).",
+  "Conectando con Twitch…": "Connecting to Twitch…",
+  "↪ a @{nombre}": "↪ to @{nombre}",
+  "Solo lectura · a la par de la imagen (−{delay} s)":
+    "Read only · in step with the picture (−{delay} s)",
+  "Solo lectura": "Read only",
 } as const

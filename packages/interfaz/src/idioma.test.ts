@@ -22,7 +22,7 @@ describe("idioma", () => {
   beforeEach(() => vi.unstubAllGlobals())
   afterEach(() => vi.unstubAllGlobals())
 
-  it("sin activar sigue en español, como la tele, aunque el sistema vaya en inglés", async () => {
+  it("sin activar sigue en español, como la TV, aunque el sistema vaya en inglés", async () => {
     const { t } = await cargar("en-US")
     expect(t("Ajustes")).toBe("Ajustes")
   })
@@ -80,6 +80,21 @@ describe("idioma", () => {
     expect(tMensaje("Failed to fetch 2")).toBe("Failed to fetch 2")
   })
 
+  it("con otra fuente (la TV), lee y guarda allí, y el sistema es el que ella diga", async () => {
+    const { activarIdioma, elegirIdioma, idiomaDelCatalogo, t } = await cargar("es-ES")
+    const guardados: string[] = []
+    activarIdioma({
+      guardar: (valor) => guardados.push(valor),
+      leer: () => null,
+      sistema: () => "en-GB",
+    })
+    expect(t("Ajustes")).toBe("Settings")
+    expect(idiomaDelCatalogo()).toBe("en")
+    elegirIdioma("es")
+    expect(t("Ajustes")).toBe("Ajustes")
+    expect(guardados).toEqual(["es"])
+  })
+
   it("«Populares» va en el idioma elegido, y si no, en el del sistema aunque no esté traducido", async () => {
     const { activarIdioma, elegirIdioma, idiomaDelCatalogo } = await cargar("de-DE")
     activarIdioma()
@@ -131,9 +146,16 @@ describe("mensajes de @goodttv/servicios", () => {
 
 // La guarda contra lo que más fácil se escapa: escribir texto en una pantalla sin pasarlo por t(). Se mira el texto de
 // JSX y los atributos que se leen o se oyen (t() ya comprueba en los tipos que la frase esté traducida).
-describe("pantallas de la extensión y de Android", () => {
+describe("pantallas de las tres versiones", () => {
   const RAIZ = join(import.meta.dirname, "../../..")
-  const CARPETAS = ["apps/navegador/src/escritorio", "apps/android/web/pantallas"]
+  const CARPETAS = [
+    "apps/navegador/src/escritorio",
+    "apps/android/web/pantallas",
+    // La TV: sus pantallas son las de @goodttv/interfaz
+    "packages/interfaz/src",
+    "packages/interfaz/src/screens",
+    "packages/interfaz/src/player",
+  ]
   // Igual en los dos idiomas: marcas y palabras que no se traducen.
   const SIN_TRADUCIR = new Set([
     "Chat",
@@ -143,6 +165,7 @@ describe("pantallas de la extensión y de Android", () => {
     "Twitch",
     "Español",
     "English",
+    "OK", // la tecla del mando
   ])
 
   it("no dejan texto sin traducir", () => {

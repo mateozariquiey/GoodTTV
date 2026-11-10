@@ -36,7 +36,7 @@ const SAVED: SavedHome = {
   savedAt: 1_760_000_000_000,
 }
 
-describe("Inicio guardado en la tele", () => {
+describe("Inicio guardado en la TV", () => {
   it("sin nada guardado, null; después, lo guardado, también tras volver a abrir", async () => {
     expect(await savedHomeStore(directory).saved()).toBeNull()
     await savedHomeStore(directory).save(SAVED)

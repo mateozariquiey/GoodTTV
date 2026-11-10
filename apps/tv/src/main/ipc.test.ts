@@ -6,18 +6,30 @@ import { InvalidIpcSenderError, registerIpc } from "./ipc"
 
 type Handler = (event: IpcMainInvokeEvent, ...input: unknown[]) => unknown
 const handlers = vi.hoisted(() => new Map<string, Handler>())
+type SyncEvent = { returnValue?: unknown; sender: unknown; senderFrame: unknown }
+const syncHandlers = vi.hoisted(() => new Map<string, (event: SyncEvent) => void>())
 const preload = vi.hoisted(() => ({
   exposeInMainWorld: vi.fn<(name: string, api: AppApi) => void>(),
   invoke: vi.fn<(channel: string, ...input: unknown[]) => Promise<unknown>>(),
   on: vi.fn(),
   removeListener: vi.fn(),
+  sendSync: vi.fn<(channel: string) => unknown>(() => ({ elegido: "en", sistema: "es-ES" })),
 }))
 
 vi.mock("electron", () => ({
   app: { getGPUFeatureStatus: () => ({ video_decode: "enabled" }), getVersion: () => "0.1.0" },
   contextBridge: { exposeInMainWorld: preload.exposeInMainWorld },
-  ipcMain: { handle: (channel: string, handler: Handler) => handlers.set(channel, handler) },
-  ipcRenderer: { invoke: preload.invoke, on: preload.on, removeListener: preload.removeListener },
+  ipcMain: {
+    handle: (channel: string, handler: Handler) => handlers.set(channel, handler),
+    on: (channel: string, listener: (event: SyncEvent) => void) =>
+      syncHandlers.set(channel, listener),
+  },
+  ipcRenderer: {
+    invoke: preload.invoke,
+    on: preload.on,
+    removeListener: preload.removeListener,
+    sendSync: preload.sendSync,
+  },
 }))
 
 const mainFrame = { url: "https://localhost:1234/" }
@@ -25,6 +37,16 @@ const webContents = { id: 1, mainFrame }
 const event = { sender: webContents, senderFrame: mainFrame } as unknown as IpcMainInvokeEvent
 
 const chat = { close: vi.fn(), open: vi.fn(() => 3) }
+const guest = {
+  channel: vi.fn(async () => null),
+  popularSinCuenta: vi.fn(async () => []),
+  search: vi.fn(async () => ({ cursor: undefined, items: [] })),
+}
+const idioma = {
+  elegido: vi.fn(() => "en" as const),
+  elegir: vi.fn(async () => undefined),
+  sistema: "es-ES",
+}
 const home = {
   forget: vi.fn(async () => undefined),
   save: vi.fn(async () => undefined),
@@ -67,10 +89,13 @@ const call = (channel: string, sender: IpcMainInvokeEvent, ...args: unknown[]) =
 
 beforeEach(() => {
   handlers.clear()
+  syncHandlers.clear()
   vi.clearAllMocks()
   registerIpc({
     chat,
+    guest,
     home,
+    idioma,
     input,
     local,
     mainWindow: { webContents } as unknown as BrowserWindow,
@@ -89,8 +114,11 @@ describe("registerIpc", () => {
       CHANNELS.inputProbe,
       CHANNELS.playerInteractionEnded,
     ])
-    const expected = Object.values(CHANNELS).filter((channel) => !listenOnly.has(channel))
+    const expected = Object.values(CHANNELS).filter(
+      (channel) => !listenOnly.has(channel) && channel !== CHANNELS.idiomaInicial,
+    )
     expect([...handlers.keys()].sort()).toEqual([...expected].sort())
+    expect([...syncHandlers.keys()]).toEqual([CHANNELS.idiomaInicial])
   })
 
   it.each([
@@ -109,6 +137,9 @@ describe("registerIpc", () => {
     }
     expect(twitch.authSnapshot).not.toHaveBeenCalled()
     expect(player.begin).not.toHaveBeenCalled()
+    const sync: SyncEvent = { ...(sender as SyncEvent) }
+    syncHandlers.get(CHANNELS.idiomaInicial)?.(sync)
+    expect(sync.returnValue).toBeNull()
   })
 
   it("rejects calls from the right frame on another origin", async () => {
@@ -119,7 +150,9 @@ describe("registerIpc", () => {
     } as unknown as IpcMainInvokeEvent
     registerIpc({
       chat,
+      guest,
       home,
+      idioma,
       input,
       local,
       mainWindow: { webContents: { id: 1, mainFrame: foreignFrame } } as unknown as BrowserWindow,
@@ -138,6 +171,11 @@ describe("registerIpc", () => {
     await expect(call(CHANNELS.playerSetWatching, event, "yes")).rejects.toThrow()
     await expect(call(CHANNELS.homeSave, event, { account: { kind: "guest" } })).rejects.toThrow()
     await expect(call(CHANNELS.authSnapshot, event, "unexpected")).rejects.toThrow()
+    await expect(call(CHANNELS.catalogChannel, event, "a b")).rejects.toThrow()
+    await expect(call(CHANNELS.catalogPopularGuest, event, "english")).rejects.toThrow()
+    await expect(call(CHANNELS.idiomaElegir, event, "fr")).rejects.toThrow()
+    expect(guest.channel).not.toHaveBeenCalled()
+    expect(idioma.elegir).not.toHaveBeenCalled()
     expect(chat.open).not.toHaveBeenCalled()
     expect(twitch.search).not.toHaveBeenCalled()
     expect(local.addRecent).not.toHaveBeenCalled()
@@ -151,6 +189,24 @@ describe("registerIpc", () => {
     expect(twitch.streamsByLogin).toHaveBeenCalledWith(["ibai", "xqc"])
     await call(CHANNELS.playerSetWatching, event, true)
     expect(setWatching).toHaveBeenCalledWith(true)
+  })
+
+  it("searches and looks channels up as a guest, without an account", async () => {
+    await call(CHANNELS.catalogSearch, event, { query: "ibai" })
+    expect(guest.search).toHaveBeenCalledWith({ first: 20, query: "ibai" })
+    expect(twitch.search).not.toHaveBeenCalled()
+    await call(CHANNELS.catalogChannel, event, "Ibai")
+    expect(guest.channel).toHaveBeenCalledWith("ibai")
+    await call(CHANNELS.catalogPopularGuest, event, "es")
+    expect(guest.popularSinCuenta).toHaveBeenCalledWith("es")
+  })
+
+  it("hands the language over synchronously and saves a new choice", async () => {
+    const sync: SyncEvent = { sender: webContents, senderFrame: mainFrame }
+    syncHandlers.get(CHANNELS.idiomaInicial)?.(sync)
+    expect(sync.returnValue).toEqual({ elegido: "en", sistema: "es-ES" })
+    await call(CHANNELS.idiomaElegir, event, "sistema")
+    expect(idioma.elegir).toHaveBeenCalledWith("sistema")
   })
 
   it("closes chat when the viewer signs out", async () => {
@@ -181,11 +237,20 @@ describe("preload bridge", () => {
       "catalog",
       "chat",
       "home",
+      "idioma",
       "input",
       "player",
       "preferences",
       "recents",
     ])
+  })
+
+  it("leaves the language to the page when main gives nothing valid", async () => {
+    vi.resetModules()
+    preload.sendSync.mockReturnValueOnce(null)
+    await import("../preload/index")
+    const api = preload.exposeInMainWorld.mock.calls[0]?.[1]
+    expect(api?.idioma).toBeUndefined()
   })
 
   it("rejects malformed values coming back from main", async () => {

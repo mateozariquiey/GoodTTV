@@ -1,6 +1,6 @@
 import type { ChatEmote, ChatMessage, ChatToken } from "@goodttv/contratos"
 import { memo, useRef } from "react"
-import { t } from "../idioma"
+import { t, useIdioma } from "../idioma"
 import type { ChatState, ChatView } from "./useChat"
 import { useChatAtBottom } from "./useChatAtBottom"
 
@@ -65,32 +65,35 @@ const Token = ({ token }: { readonly token: ChatToken }) => {
 }
 
 // Memoizado: cada lote del chat (cada 100 ms) solo pinta los mensajes nuevos, no los 150 de la lista.
-export const Message = memo(({ message }: { readonly message: ChatMessage }) => (
-  <li className={`message${message.action ? " message--action" : ""}`}>
-    {message.replyTo === undefined ? null : (
-      <span className="message__reply">↪ a @{message.replyTo}</span>
-    )}
-    {message.badges.map((badge) => (
-      <img
-        alt={badge.title}
-        className="badge"
-        key={badge.url}
-        src={badge.url}
-        title={badge.title}
-      />
-    ))}
-    <span className="message__name" style={{ color: message.color }}>
-      {message.displayName}
-    </span>
-    {message.action ? " " : ": "}
-    <span className="message__text" style={message.action ? { color: message.color } : undefined}>
-      {message.tokens.map((token, index) => (
-        // biome-ignore lint/suspicious/noArrayIndexKey: tokens are an immutable sequence.
-        <Token key={index} token={token} />
+export const Message = memo(({ message }: { readonly message: ChatMessage }) => {
+  useIdioma() // con memo, el idioma no le llega desde arriba
+  return (
+    <li className={`message${message.action ? " message--action" : ""}`}>
+      {message.replyTo === undefined ? null : (
+        <span className="message__reply">{t("↪ a @{nombre}", { nombre: message.replyTo })}</span>
+      )}
+      {message.badges.map((badge) => (
+        <img
+          alt={badge.title}
+          className="badge"
+          key={badge.url}
+          src={badge.url}
+          title={badge.title}
+        />
       ))}
-    </span>
-  </li>
-))
+      <span className="message__name" style={{ color: message.color }}>
+        {message.displayName}
+      </span>
+      {message.action ? " " : ": "}
+      <span className="message__text" style={message.action ? { color: message.color } : undefined}>
+        {message.tokens.map((token, index) => (
+          // biome-ignore lint/suspicious/noArrayIndexKey: tokens are an immutable sequence.
+          <Token key={index} token={token} />
+        ))}
+      </span>
+    </li>
+  )
+})
 
 // Read-only chat beside the video. Never over it: Twitch requires the player unobscured.
 export const ChatPanel = ({
@@ -107,9 +110,14 @@ export const ChatPanel = ({
   const waiting = chat.status === "connected" && chat.messages.length === 0
   const status =
     CHAT_STATUS_TEXT[chat.status] ??
-    (waiting && delay === null ? "Sincronizando el chat con la imagen…" : undefined) ??
+    (waiting && delay === null ? t("Sincronizando el chat con la imagen…") : undefined) ??
     (waiting && delay !== null && delay >= 5
-      ? `El chat va a la par de la imagen: cada mensaje aparece unos ${delay} s después de llegar.`
+      ? t(
+          "El chat va a la par de la imagen: cada mensaje aparece unos {delay} s después de llegar.",
+          {
+            delay,
+          },
+        )
       : undefined)
   return (
     <aside aria-label="Chat" className={`chat chat--${scale}`}>
@@ -125,8 +133,8 @@ export const ChatPanel = ({
       </ol>
       <footer className="chat__footer">
         {chat.status === "connected" && delay !== null && delay >= 1
-          ? `Solo lectura · a la par de la imagen (−${delay} s)`
-          : "Solo lectura"}
+          ? t("Solo lectura · a la par de la imagen (−{delay} s)", { delay })
+          : t("Solo lectura")}
       </footer>
     </aside>
   )

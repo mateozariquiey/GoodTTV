@@ -1,24 +1,38 @@
 import {
   ChatOpenInputSchema,
   CursorInputSchema,
+  IdiomaElegidoSchema,
+  type IdiomaInicial,
+  LanguageSchema,
   LiveInputSchema,
+  LoginSchema,
   LoginsInputSchema,
   PreferencesPatchSchema,
   RecentChannelSchema,
   SavedHomeSchema,
   SearchInputSchema,
 } from "@goodttv/contratos"
-import type { EventSubChat, LocalStore, TwitchService } from "@goodttv/servicios"
-import { app, type BrowserWindow, type IpcMainInvokeEvent, ipcMain } from "electron"
+import type { EventSubChat, guestCatalog, LocalStore, TwitchService } from "@goodttv/servicios"
+import {
+  app,
+  type BrowserWindow,
+  type IpcMainEvent,
+  type IpcMainInvokeEvent,
+  ipcMain,
+} from "electron"
 import { z } from "zod"
 import { CHANNELS } from "../shared/channels"
+import type { IdiomaStore } from "./idioma"
 import type { InputRouter } from "./input-router"
 import type { PlayerInteraction } from "./player-interaction"
 import type { SavedHomeStore } from "./saved-home"
 
 type IpcOptions = {
   readonly chat: Pick<EventSubChat, "close" | "open">
+  // Lo que se ve sin cuenta (buscar, un canal por su nombre y los más vistos), como en la extensión y Android.
+  readonly guest: ReturnType<typeof guestCatalog>
   readonly home: SavedHomeStore
+  readonly idioma: IdiomaStore & { readonly sistema: string }
   readonly input: Pick<InputRouter, "setProbing" | "setTextEntry">
   readonly local: Pick<LocalStore, "addRecent" | "preferences" | "recents" | "updatePreferences">
   readonly mainWindow: BrowserWindow
@@ -47,7 +61,7 @@ export class InvalidIpcSenderError extends Error {
 
 export const registerIpc = (options: IpcOptions): void => {
   // Only the app's own top-level document may call in; never a Twitch frame.
-  const authorize = (event: IpcMainInvokeEvent): void => {
+  const authorize = (event: IpcMainInvokeEvent | IpcMainEvent): void => {
     const senderFrame = event.senderFrame
     if (
       senderFrame === null ||
@@ -89,7 +103,11 @@ export const registerIpc = (options: IpcOptions): void => {
   )
   handle(CHANNELS.catalogLive, z.tuple([LiveInputSchema]), (input) => options.twitch.live(input))
   handle(CHANNELS.catalogSearch, z.tuple([SearchInputSchema]), (input) =>
-    options.twitch.search(input),
+    options.guest.search(input),
+  )
+  handle(CHANNELS.catalogChannel, z.tuple([LoginSchema]), (login) => options.guest.channel(login))
+  handle(CHANNELS.catalogPopularGuest, z.tuple([LanguageSchema]), (language) =>
+    options.guest.popularSinCuenta(language),
   )
   handle(CHANNELS.catalogStreamsByLogin, z.tuple([LoginsInputSchema]), (logins) =>
     options.twitch.streamsByLogin(logins),
@@ -103,6 +121,23 @@ export const registerIpc = (options: IpcOptions): void => {
   handle(CHANNELS.homeSaved, none, () => options.home.saved())
   handle(CHANNELS.homeSave, z.tuple([SavedHomeSchema]), (home) => options.home.save(home))
   handle(CHANNELS.homeForget, none, () => options.home.forget())
+
+  // Síncrono: la página lo lee al cargar, antes de pintar (preload).
+  ipcMain.on(CHANNELS.idiomaInicial, (event) => {
+    try {
+      authorize(event)
+      const inicial: IdiomaInicial = {
+        elegido: options.idioma.elegido(),
+        sistema: options.idioma.sistema.slice(0, 40),
+      }
+      event.returnValue = inicial
+    } catch {
+      event.returnValue = null
+    }
+  })
+  handle(CHANNELS.idiomaElegir, z.tuple([IdiomaElegidoSchema]), (valor) =>
+    options.idioma.elegir(valor),
+  )
 
   handle(CHANNELS.inputSetTextEntry, z.tuple([z.boolean()]), (active) =>
     options.input.setTextEntry(active),

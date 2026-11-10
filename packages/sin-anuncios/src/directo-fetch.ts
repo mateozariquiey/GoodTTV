@@ -2,7 +2,7 @@ import { createDirecto, type Directo, type DirectoOptions } from "./directo"
 import { createDirectoHuecos } from "./directo-huecos"
 
 // En una página (la extensión, Android) no hay servidor local: las peticiones fetch de la página a sus propias rutas
-// /stream/ las atiende el directo en memoria, como un service worker. Así el reproductor pide igual que en la tele
+// /stream/ las atiende el directo en memoria, como un service worker. Así el reproductor pide igual que en la TV
 // (useHlsPlayer.ts), con hls.js usando su FetchLoader. Todo lo demás pasa al fetch del navegador.
 export const createDirectoFetch = (
   directo: Directo,

@@ -3,7 +3,7 @@ import { z } from "zod"
 // Las fotos de los canales de las listas (Helix users), que cambian poco: así cada lista se pinta con las que ya se
 // tienen, y a Twitch solo se piden las que faltan (TwitchService). Valen una semana: si un canal cambia la suya, Twitch
 // sigue sirviendo la vieja. En la extensión y en Android se guardan en el localStorage de la página, que comparten sus
-// pestañas; en la tele, en memoria, porque el proceso sigue abierto. Se olvidan al cerrar sesión, como Inicio guardado:
+// pestañas; en la TV, en memoria, porque el proceso sigue abierto. Se olvidan al cerrar sesión, como Inicio guardado:
 // dicen a quién sigues.
 const KEY = "fotos"
 const TTL_MS = 7 * 24 * 3_600_000

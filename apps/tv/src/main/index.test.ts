@@ -35,8 +35,10 @@ const setup = (ownsProfile = true) => {
     }),
     getAppPath: vi.fn(() => "/application"),
     configureHostResolver: vi.fn(),
+    getLocale: vi.fn(() => "en-US"),
     getName: vi.fn(() => "App"),
     getPath: vi.fn(() => "/profile"),
+    getPreferredSystemLanguages: vi.fn(() => ["en-US"]),
     isPackaged: false,
     quit: vi.fn(() => calls.push("quit")),
     requestSingleInstanceLock: vi.fn(() => {
@@ -167,7 +169,18 @@ const setup = (ownsProfile = true) => {
   }))
   vi.doMock("./input-router", () => ({ createInputRouter }))
   vi.doMock("./ipc", () => ({ registerIpc }))
-  vi.doMock("@goodttv/servicios", () => ({ EmoteCatalog, EventSubChat, LocalStore, TwitchService }))
+  vi.doMock("@goodttv/servicios", () => ({
+    EmoteCatalog,
+    EventSubChat,
+    guestCatalog: vi.fn(() => ({})),
+    LocalStore,
+    TwitchService,
+  }))
+  vi.doMock("./idioma", () => ({
+    idiomaDelSistema: (preferidos: readonly string[], locale: string) => preferidos[0] ?? locale,
+    idiomaEfectivo: () => "en",
+    idiomaStore: vi.fn(() => ({ elegido: () => "sistema", elegir: vi.fn() })),
+  }))
   vi.doMock("./local-store", () => ({ localDataFile }))
   vi.doMock("./player-interaction", () => ({ createPlayerInteraction }))
   vi.doMock("./saved-home", () => ({ savedHomeStore }))

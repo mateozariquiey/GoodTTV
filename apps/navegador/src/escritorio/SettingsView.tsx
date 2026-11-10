@@ -22,7 +22,7 @@ type Account = {
   readonly reload: () => Promise<void>
 }
 
-// Un grupo de opciones con su nombre, en vez de los botones grandes de la tele: radios con aspecto de segmentos
+// Un grupo de opciones con su nombre, en vez de los botones grandes de la TV: radios con aspecto de segmentos
 // (las flechas cambian de opción) y un interruptor.
 const Segmented = <Value extends string>({
   label,

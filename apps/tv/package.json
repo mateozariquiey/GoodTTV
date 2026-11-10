@@ -1,7 +1,7 @@
 {
   "name": "goodttv",
-  "version": "0.5.0",
-  "description": "Cliente de Twitch para la tele, manejado con un mando: directos, seguidos y chat con emotes de 7TV, BTTV y FFZ",
+  "version": "0.5.1",
+  "description": "Twitch client for the TV, driven with a remote: streams, who you follow and chat with 7TV, BTTV and FFZ emotes",
   "author": {
     "name": "Mateo Zariquiey",
     "url": "https://github.com/mateozariquiey"
@@ -78,13 +78,14 @@
       "category": "AudioVideo;Video",
       "icon": "build/icon.png",
       "syncDesktopName": true,
-      "synopsis": "Twitch en la tele con un mando",
+      "synopsis": "Twitch en la TV con un mando",
       "desktop": {
         "entry": {
           "Name": "GoodTTV",
-          "Comment": "Directos de Twitch y chat con un mando",
+          "Comment[es]": "Cliente de Twitch para la TV, manejado con un mando: directos, seguidos y chat con emotes de 7TV, BTTV y FFZ",
           "Categories": "AudioVideo;Video;",
-          "Keywords": "Twitch;directos;HTPC;TV;"
+          "Keywords": "Twitch;streams;HTPC;TV;",
+          "Keywords[es]": "Twitch;directos;HTPC;TV;"
         }
       },
       "executableArgs": [

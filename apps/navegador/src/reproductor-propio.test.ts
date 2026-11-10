@@ -264,7 +264,7 @@ describe("margen que sobra", () => {
     expect(current?.rewound).toBe(true)
   })
 
-  // La tele no tiene «Ir al directo»: conservarlo la dejaría atrás para siempre.
+  // La TV no tiene «Ir al directo»: conservarlo la dejaría atrás para siempre.
   it("sin «Ir al directo», tras una pausa, lo salta", async () => {
     canGoLive = false
     const { player, video } = await open()

@@ -1,7 +1,8 @@
 import type { LatencyMode } from "@goodttv/contratos"
 import { useEffect, useMemo, useState } from "react"
 import { type Channel, fromRecent, fromStream, previewAt } from "../channel"
-import type { Home } from "../data"
+import { type Home, useGuestPopular } from "../data"
+import { type Clave, t, tMensaje } from "../idioma"
 import { navigation } from "../navigation"
 import { usePrewarm } from "../player/useHlsPlayer"
 import { Avatar, ChannelRow, LiveBadge, RetryButton, StateMessage, Uptime, Viewers } from "../ui"
@@ -9,7 +10,7 @@ import { Avatar, ChannelRow, LiveBadge, RetryButton, StateMessage, Uptime, Viewe
 type Section = {
   readonly channels: readonly Channel[]
   readonly id: "following" | "recents" | "popular"
-  readonly title: string
+  readonly title: Clave // se traduce al pintarla
 }
 
 type HomeScreenProps = {
@@ -39,6 +40,8 @@ export const HomeScreen = ({
 }: HomeScreenProps) => {
   const { fromSaved, known, reading, refresh, resource, retry, signedIn, unreachable } = home
   const [previewedId, setPreviewedId] = useState<string>() // la fila enfocada (rowId)
+  // Sin cuenta, los directos más vistos, como invitado: la primera pantalla ya deja ver algo.
+  const guestPopular = useGuestPopular(known && !signedIn)
 
   // Refresh in place when coming back from playback and periodically while visible. Lo guardado de la última vez no
   // cuenta: lo de ahora ya está en camino.
@@ -62,12 +65,18 @@ export const HomeScreen = ({
     const followingIds = new Set(following.map((stream) => stream.userLogin))
     return [
       ...(signedIn
-        ? [{ channels: following.map(fromStream), id: "following" as const, title: "Siguiendo" }]
+        ? [
+            {
+              channels: following.map(fromStream),
+              id: "following" as const,
+              title: "Siguiendo" as const,
+            },
+          ]
         : []),
       {
         channels: recents.map((recent) => fromRecent(recent, recentLive.get(recent.login))),
         id: "recents" as const,
-        title: "Recientes",
+        title: "Recientes" as const,
       },
       ...(signedIn
         ? [
@@ -77,12 +86,20 @@ export const HomeScreen = ({
                 .slice(0, 12)
                 .map(fromStream),
               id: "popular" as const,
-              title: "Populares ahora",
+              title: "Populares ahora" as const,
             },
           ]
-        : []),
+        : guestPopular.channels.length > 0
+          ? [
+              {
+                channels: guestPopular.channels,
+                id: "popular" as const,
+                title: "Populares ahora" as const,
+              },
+            ]
+          : []),
     ]
-  }, [resource, signedIn])
+  }, [guestPopular.channels, resource, signedIn])
 
   // La fila enfocada, con lo que digan las listas de ahora: un refresco, o lo de ahora tras lo guardado, puede cambiar
   // su título, sus espectadores o si está en directo sin que la fila pierda el foco.
@@ -110,9 +127,11 @@ export const HomeScreen = ({
         {/* Sin poder comprobar la cuenta, lo de la última vez si lo hay; el foco, en la lista si la hay. */}
         {unreachable === undefined ? null : (
           <div className="state state--error" role="alert">
-            <p className="state__title">No se pudo comprobar tu cuenta</p>
+            <p className="state__title">{t("No se pudo comprobar tu cuenta")}</p>
             <p className="state__detail">
-              {`${fromSaved ? "Lo que ves es de la última vez" : "La sesión no se ha cerrado"} (${unreachable}).`}
+              {fromSaved
+                ? t("Lo que ves es de la última vez ({error}).", { error: tMensaje(unreachable) })
+                : t("La sesión no se ha cerrado ({error}).", { error: tMensaje(unreachable) })}
             </p>
             <RetryButton
               entry={firstChannel === undefined}
@@ -122,19 +141,19 @@ export const HomeScreen = ({
           </div>
         )}
         {resource.kind === "loading" && !reading && unreachable === undefined ? (
-          <StateMessage kind="loading" title="Cargando canales…" />
+          <StateMessage kind="loading" title={t("Cargando canales…")} />
         ) : null}
         {resource.kind === "error" ? (
           <StateMessage
-            action={{ id: "home-retry", label: "Reintentar", run: retry }}
-            detail={resource.message}
+            action={{ id: "home-retry", label: t("Reintentar"), run: retry }}
+            detail={tMensaje(resource.message)}
             kind="error"
-            title="No se pudo cargar la lista de Twitch"
+            title={t("No se pudo cargar la lista de Twitch")}
           />
         ) : null}
         {signedIn || !known ? null : (
           <div className="guide__intro">
-            <p>Vincula tu cuenta para ver aquí a quién sigues en directo.</p>
+            <p>{t("Vincula tu cuenta para ver aquí a quién sigues en directo.")}</p>
             <div className="guide__actions">
               <button
                 className="button button--primary"
@@ -144,7 +163,7 @@ export const HomeScreen = ({
                 onClick={onLink}
                 type="button"
               >
-                Vincular cuenta
+                {t("Vincular cuenta")}
               </button>
               <button
                 className="button"
@@ -153,34 +172,34 @@ export const HomeScreen = ({
                 onClick={onSearch}
                 type="button"
               >
-                Buscar un canal
+                {t("Buscar un canal")}
               </button>
             </div>
           </div>
         )}
         {sections.map((section) => (
-          <section aria-label={section.title} className="guide__section" key={section.id}>
+          <section aria-label={t(section.title)} className="guide__section" key={section.id}>
             <h2 className="guide__heading">
               {section.id === "following" ? (
                 <>
                   <LiveBadge />
                   <span>
                     {liveFollowing === 1
-                      ? "1 canal que sigues"
-                      : `${liveFollowing} canales que sigues`}
+                      ? t("1 canal que sigues")
+                      : t("{n} canales que sigues", { n: liveFollowing })}
                   </span>
                 </>
               ) : (
-                section.title
+                t(section.title)
               )}
             </h2>
             {section.channels.length === 0 ? (
               <p className="guide__empty">
                 {section.id === "following"
-                  ? "Nadie a quien sigues está en directo ahora."
+                  ? t("Nadie a quien sigues está en directo ahora.")
                   : section.id === "recents"
-                    ? "Los canales que veas aparecerán aquí."
-                    : "No hay directos populares disponibles."}
+                    ? t("Los canales que veas aparecerán aquí.")
+                    : t("No hay directos populares disponibles.")}
               </p>
             ) : (
               <ul className="guide__list">
@@ -226,8 +245,8 @@ const Preview = ({
       <aside className="preview preview--empty">
         <p>
           {signedIn
-            ? "Cuando alguien a quien sigues esté en directo, lo verás aquí."
-            : "Busca un canal por su nombre o vincula tu cuenta de Twitch."}
+            ? t("Cuando alguien a quien sigues esté en directo, lo verás aquí.")
+            : t("Busca un canal por su nombre o vincula tu cuenta de Twitch.")}
         </p>
       </aside>
     )
@@ -247,7 +266,7 @@ const Preview = ({
       <h1 className="preview__title">{channel.title ?? channel.displayName}</h1>
       <p className="preview__meta">
         {channel.live === false ? (
-          <span className="preview__offline">Desconectado</span>
+          <span className="preview__offline">{t("Desconectado")}</span>
         ) : (
           <LiveBadge />
         )}
@@ -268,13 +287,13 @@ const Preview = ({
           <>
             <span aria-hidden="true">·</span>
             <span>
-              desde hace <Uptime channel={channel} />
+              {t("desde hace")} <Uptime channel={channel} />
             </span>
           </>
         )}
       </p>
       <p className="preview__hint">
-        <kbd>OK</kbd> {channel.live === false ? "para abrir el canal" : "para ver"}
+        <kbd>OK</kbd> {channel.live === false ? t("para abrir el canal") : t("para ver")}
       </p>
     </aside>
   )

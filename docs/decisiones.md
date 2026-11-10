@@ -169,7 +169,7 @@ que avanza no demuestra que la TV reciba imagen fluida ni sonido.
 
 **D11. Reproductor propio sin anuncios (de uso personal; se publica desde D18).** En lugar del embed
 oficial, un `<video>` con hls.js lee un directo que prepara el proceso principal
-(`packages/sin-anuncios`, servido por `apps/tele/src/main/stream`): varias sesiones de invitado del mismo canal (`site`, `embed`, `popout` y, desde D16, `mobile_feed` con `platform: android`), que
+(`packages/sin-anuncios`, servido por `apps/tv/src/main/stream`): varias sesiones de invitado del mismo canal (`site`, `embed`, `popout` y, desde D16, `mobile_feed` con `platform: android`), que
 reciben los anuncios por separado, se empalman por la numeración común de Twitch
 (`LIVE-SEQUENCE`), y las pausas en todas a la vez se rellenan con el VOD que Twitch graba del
 directo. Usa la API privada del reproductor web y bloquear anuncios incumple las condiciones de
@@ -192,7 +192,7 @@ a que acabe alguno.
 Investigación, mediciones y límites: `investigacion/informe/informe.md`.
 
 **D12. Familia GoodTTV en un monorepo privado (11 oct).** GoodTTV pasa a ser una familia de
-versiones: la tele, el navegador y, más adelante, Android. Todas viven en un solo repo privado,
+versiones: la TV, el navegador y, más adelante, Android. Todas viven en un solo repo privado,
 `goodttv-privado`, con espacios de trabajo de bun: `apps/` (una carpeta por versión) y `packages/`
 (código común). Así, cuando Twitch cambie algo, se arregla una vez para todas. El código común se
 extrae cuando lo necesita una segunda versión, no antes; de momento solo `packages/sin-anuncios`.
@@ -211,7 +211,7 @@ varias veces a los bloqueadores que lo usan.
 Alcance: el de GoodTTV (directos, seguidos, búsqueda y chat de lectura); para lo demás, twitch.tv.
 Investigación: `investigacion/navegador/informe.md`.
 
-**D14. La extensión tiene su propia interfaz de escritorio (11 oct).** La de la tele está hecha para
+**D14. La extensión tiene su propia interfaz de escritorio (11 oct).** La de la TV está hecha para
 un mando a 3 m: botones grandes, foco que se mueve con flechas, teclado en pantalla. Con ratón y
 teclado se maneja de otra forma, así que la extensión tiene pantallas propias
 (`apps/navegador/src/escritorio`):
@@ -222,9 +222,9 @@ teclado se maneja de otra forma, así que la extensión tiene pantallas propias
 - atajos de teclado.
 
 Conserva la esencia: fondo casi negro, Atkinson Hyperlegible, el blanco como única marca de
-selección y el rojo solo para «en directo». Comparte con la tele toda la lógica (reproductor sin
+selección y el rojo solo para «en directo». Comparte con la TV toda la lógica (reproductor sin
 anuncios, chat con su retraso, cuenta, datos), no las pantallas. Descartado: adaptar con CSS la
-interfaz de la tele (a escala de escritorio), que el usuario vio en prototipos y prefirió no seguir.
+interfaz de la TV (a escala de escritorio), que el usuario vio en prototipos y prefirió no seguir.
 Se eligió sobre una maqueta interactiva con datos reales.
 
 **D15. La extensión se instala sin firmar (11 oct).** Es de uso personal y no se publica:
@@ -261,7 +261,7 @@ la versión anterior y la nueva con los mismos canales. Lo que había y lo que s
 - **Esperas evitables tras una lista sin novedades:** hls.js deja entonces de bloquear y vuelve a
   preguntar cada 6,5 s, lo que podía retrasar hasta 6,5 s la llegada de un trozo del VOD. El directo
   retiene ahora la petición hasta 20 s, también la que llega sin `_HLS_msn`.
-- **Precalentar:** con el ratón parado sobre un canal (extensión) o el foco quieto en él (tele), el
+- **Precalentar:** con el ratón parado sobre un canal (extensión) o el foco quieto en él (TV), el
   directo abre ya ese empalme, aparte del que suena.
 - **Una cuarta sesión, `mobile_feed` con `platform: android`, de respaldo:** el 12 de octubre, en las cuatro
   pausas globales reales que hubo en 100 min (16-44 s, en `trymacs`, con anuncio en `site`, `embed` y
@@ -279,7 +279,7 @@ la versión anterior y la nueva con los mismos canales. Lo que había y lo que s
 Resultado (12 arranques por versión, mediana): primer fotograma de 1,36 a 1,12 s, y ~0,52 s si se
 precalienta medio segundo antes; latencia de 3,5 a 1,9 s; fotogramas perdidos del 5 % al 0,1 %, y búfer
 mínimo de 1,0 a 1,5 s, sin paradas. En Firefox, latencia de 3,1 a 1,7 s y el vídeo avanzando a los 2,1 s
-en vez de 4,0 s. En la tele, el primer fotograma pasa de 1,64 a 1,08 s. La primera
+en vez de 4,0 s. En la TV, el primer fotograma pasa de 1,64 a 1,08 s. La primera
 pausa global simulada en Adaptativo para 10-12 s, como antes (12 s). Detalle y límites en
 [verificacion.md](verificacion.md#rendimiento-del-reproductor-propio).
 
@@ -359,13 +359,13 @@ terminado se copia al repo público `mateozariquiey/GoodTTV` con un commit por v
   tienen sentido aquí. Después comprueba que no se cuelan secretos, correos personales ni rutas de un equipo. Nada se
   sube sin revisar el resultado.
 - **Sin tiendas:** ni Chrome Web Store ni AMO. Se instala desde las releases, como en D15. Lo cambia D30.
-- **Versiones:** la 0.2.0, con la tele y la extensión, sale como pre-release porque la tele no se ha probado en el
+- **Versiones:** la 0.2.0, con la TV y la extensión, sale como pre-release porque la TV no se ha probado en el
   mini PC. Android se publicará cuando esté terminada.
 
 Descartado:
 - **Hacer público este repo:** expondría todo lo anterior, y quitar el correo de los commits obligaría a reescribir
   su historial.
-- **Publicar sin el reproductor sin anuncios:** el público se quedaría en la tele con el reproductor oficial, sin
+- **Publicar sin el reproductor sin anuncios:** el público se quedaría en la TV con el reproductor oficial, sin
   extensión.
 
 **D19-D29. Las decisiones de Android, en resumen.** El detalle completo no se publica, porque está lleno de datos de los
@@ -390,8 +390,9 @@ equipos con los que se desarrolla:
   canal que se deja sigue en una esquina, y al salir de la app, en imagen en imagen.
 - **D24. Funciones nuevas sin paridad obligatoria.** Los arreglos y las mejoras de reproducción, del empalme y del
   rendimiento siguen yendo a las tres versiones, con el código común en `packages/`. Lo nuevo va a la extensión y a Android,
-  y a la tele solo si se decide. Seguir y dejar de seguir canales queda descartado: la API oficial lo quitó en 2021, y la
-  única vía conocida pide una sesión con mucho más poder sobre la cuenta.
+  y a la TV solo si se decide. Seguir y dejar de seguir canales queda descartado: la API oficial lo quitó en 2021, y la
+  única vía conocida pide una sesión con mucho más poder sobre la cuenta. Desde el 6 de noviembre, lo nuevo también va a
+  la TV cuando tiene sentido con un mando (D44).
 - **D25. Los VOD, retroceder el directo y los emotes en el teléfono.** Lo mismo que la extensión, adaptado al dedo. Un VOD
   va con Media3 y sin el motor. Se retrocede dentro de la lista del empalme y, más atrás, en el VOD de la emisión. Los saltos
   van al fotograma clave (0,05-0,2 s frente a 0,4-1,5 s), a cambio de hasta 1 s de precisión en un VOD y 2 s en directo.
@@ -402,7 +403,7 @@ equipos con los que se desarrolla:
   con los auriculares. Va con una sesión de medios sobre el reproductor de la app, sin `MediaSessionService`, porque este sale
   del primer plano como mucho a los 10 min de pausa, y sin primer plano Android corta la red a la app.
 - **D28. Deslizar hacia abajo sobre el vídeo para volver,** como en la app de Twitch, solo con el dedo.
-- **D29. Android se publica desde la 0.3.0, como experimental,** y la tele se sigue publicando sin comprobarla en una tele de
+- **D29. Android se publica desde la 0.3.0, como experimental,** y la TV se sigue publicando sin comprobarla en una TV de
   verdad, solo con las pruebas automáticas.
 
 **D30. La extensión, en las tiendas (24 oct).** Para que la instale y la actualice cualquiera sin el modo de
@@ -518,7 +519,7 @@ desincronizado en el canal de `jaimemellado_` con la 0.4.0, y pidió ← → par
   ([1762617](https://bugzilla.mozilla.org/show_bug.cgi?id=1762617)). Los VOD de `jaimemellado_` son solo para
   suscriptores, así que su canal nunca tiene relleno y *Adaptativo* no dejaba de acelerar, y tras una pausa de 40 s
   aceleraba unos 13 min. Ahora lo que sobra se salta de una vez, como ya se hacía al arrancar, y lo pausado (más de 1 s)
-  se conserva como lo retrocedido, con «Ir al directo» (en *Directo* y en la tele, que no tiene ese botón, se salta). La velocidad
+  se conserva como lo retrocedido, con «Ir al directo» (en *Directo* y en la TV, que no tiene ese botón, se salta). La velocidad
   que se elige en un VOD no cambia: es un cambio, no uno cada pocos segundos. Android no cambia: Media3 no ajusta la
   velocidad.
 - **Los VOD solo para suscriptores no se ofrecen para retroceder.** ← más allá de la lista, la barra o reanudar tras
@@ -546,15 +547,16 @@ texto estaba escrito en español en el código, así que hacía falta traducir (
   `idioma-en.ts`). Las pantallas se siguen leyendo igual, y los tipos no dejan usar una frase sin traducir. Una prueba
   avisa si queda texto en una pantalla sin pasar por `t()`, porque eso los tipos no lo ven.
 - **Se guarda en el `localStorage` de la página, y no en las preferencias:** se lee sin esperar, para no pintar Inicio primero
-  en el otro idioma, el evento `storage` avisa a las demás pestañas, y no cambia nada en el contrato que comparte la tele.
+  en el otro idioma, el evento `storage` avisa a las demás pestañas, y no cambia nada en el contrato que comparte la TV.
 - **Se aplica sin recargar:** la raíz vuelve a pintar todo, y el vídeo sigue sonando. Los componentes con `memo` piden
   `useIdioma()`. Lo que no pasa por la página se lo dice ella: el menú contextual del fondo, por `chrome.storage`, y lo poco que
   pinta la app de Android (la esquina, la imagen en imagen, el nombre del canal de notificaciones), por el puente.
 - **«Populares» va en el idioma elegido;** con «Sistema», en el del sistema, aunque la interfaz no esté traducida a él.
-- **La tele sigue en español:** no llama a `activarIdioma`, y hasta entonces `t()` devuelve la frase tal cual (D24).
+- **La TV sigue en español:** no llama a `activarIdioma`, y hasta entonces `t()` devuelve la frase tal cual (D24). Desde
+  el 6 de noviembre también está en inglés (D44).
 
 - **Los mensajes de `@goodttv/servicios` (4 nov) también van en español en el código,** y la pantalla los traduce al pintarlos
-  con `tMensaje`, porque servicios no conoce el idioma: en la tele corre en el proceso principal. Llegan como texto, así que los
+  con `tMensaje`, porque servicios no conoce el idioma: en la TV corre en el proceso principal. Llegan como texto, así que los
   tipos no los ven, y una prueba los busca en el código de servicios. Lo que no es nuestro (el motivo que da Twitch para no enviar
   un mensaje, los errores de red) se queda como viene. Antes llegaban en inglés con la interfaz en español (AND-2).
 - **La descripción del manifest (4 nov) va en `_locales`,** con `en` por defecto: un navegador en alemán la ve en inglés, como
@@ -585,8 +587,8 @@ Media3 por la red nativa). Así que el empalme, al ver un host nuevo en una list
 respuesta y por la misma red que el reproductor: en la extensión, el `fetch` de la página; en Android, `RedNativa`, que usa
 `HttpURLConnection`, como Media3 (`red-nativa.ts` le pasa los `HEAD`). Baja ~300 ms el primer fotograma si se ha precalentado
 ~0,5-0,9 s antes, y sin precalentar no cambia.
-- **La tele no gana:** su empalme corre en el proceso principal y hls.js en la página, con redes distintas. Haría falta
-  `session.preconnect`, y la tele está retirada, así que se queda como está; el `HEAD` no le hace daño.
+- **La TV no gana:** su empalme corre en el proceso principal y hls.js en la página, con redes distintas. Haría falta
+  `session.preconnect`, y la TV está retirada, así que se queda como está; el `HEAD` no le hace daño.
 - **Descartado, `<link rel="preconnect">`:** va igual de rápido, pero solo existe en una página, y el empalme no siempre está en ella.
 - **Descartado, abrir conexiones por adelantado a los hosts de otras veces:** cambian con cada emisión, y sería adivinar.
 
@@ -606,7 +608,7 @@ reintenta solo.
   notificación y un tic por segundo a la página.
 - **«No emite» (`NotLiveError`, común):** usher lo rechaza con un 4xx salvo 408 y 429, el canal no existe o no hay vídeo.
   La red y los 5xx no dicen nada del canal. Vale también con lo ya publicado, para enterarse del fin de la emisión.
-- **Fin de la emisión en la extensión y la tele:** la lista se queda como estaba, sin error, y hls.js no salía de la
+- **Fin de la emisión en la extensión y la TV:** la lista se queda como estaba, sin error, y hls.js no salía de la
   espera. Parado 20 s sin pausa, `useHlsPlayer` pregunta si sigue.
 - **Si el sistema mata la app** parada, vuelve a la misma dirección. Tras caerse la página, no: si fue por lo que había
   en ella, se caería sin fin.
@@ -624,7 +626,7 @@ también lo pagaba cambiar de canal tras un rato viendo otro. Ahora `conexiones.
   Gana ~320 ms tras más de un minuto viendo otro canal.
 - **Los hosts de listas sí se recuerdan** (hasta 3, en `localStorage`), a diferencia de los de los fragmentos que descartó D37: son unos
   pocos por región (`eus21` a `eus23` en las 9 aperturas medidas). Si cambian, se pierde un `HEAD`.
-- **La tele** no los recuerda (su proceso principal no tiene `localStorage`) ni abre al arrancar, porque está retirada; sí adelanta usher al
+- **La TV** no los recuerda (su proceso principal no tiene `localStorage`) ni abre al arrancar, porque está retirada; sí adelanta usher al
   crear el empalme, y como allí la red es una sola, debería ganar igual.
 - **Descartado, mantener las conexiones abiertas con un `HEAD` cada 25 s:** quitaría los ~310 ms que le quedan a gql al cambiar de
   canal, a cambio de tráfico constante a Twitch para algo que el precalentado con el ratón ya tapa en parte.
@@ -641,7 +643,7 @@ tardó 60 s en volver con la red ya de vuelta. Y de wifi a datos, con la 0.4.1 y
 - **Si las paradas han añadido más de 12 s de retraso en directo, al volver a avanzar se vuelve a abrir:** Media3 no lo recorta, y es el mismo límite de D36. Corta ~2 s una sola vez, frente a quedarse
   20 s detrás. Hasta 12 s se conserva como margen. Cuenta el retraso y no lo que dura cada parada: mirando la duración, una parada que se partió en dos dejó 20 s de latencia sin reabrir. Se prefirió a un botón porque quien lo sufre suele llevar el móvil en el bolsillo.
 - **No aplica** a lo retrocedido o pausado (se perdería dónde iba) ni a `ReproductorActivity`, que mide sin recuperar. **Paridad (D24):** solo Android, porque hls.js ya salta y reintenta en
-  la extensión y en la tele. Allí no se ha probado con una VPN.
+  la extensión y en la TV. Allí no se ha probado con una VPN.
 - **La causa exacta del atasco en el S25 es una suposición:** con la VPN, Android no cerraría los sockets al perder el wifi. En el emulador, sin VPN, sí los cierra, y de wifi a datos no hay corte.
   Se reprodujo el mecanismo con `iptables` (`datos-colgado` y `parada`), no el caso del S25.
 
@@ -655,7 +657,7 @@ blanco como única marca de selección y el rojo solo para «en directo»): no s
 - **Tipografía:** cuerpo a 15 y titulares grandes con el espaciado ajustado, sin medios puntos.
 - **Sin cuenta, «Populares ahora»** en la extensión y en Android (`catalog.popularSinCuenta`, por el GraphQL público, como la
   búsqueda). Va aparte de `loadHome`, así que no retrasa la bienvenida ni toca la ruta con cuenta. En la extensión, el primero
-  va como cartel. La tele no: no pasa `channels`.
+  va como cartel. La TV no: no pasa `channels`.
 - **Controles del reproductor:** con más fondo, botones de 40 px, y las flechas de canal a los lados del vídeo, como en Android
   (fuera de la fila: son hijas de `.stage`, centradas a cualquier proporción, y se ocultan con ella).
   **Cambia lo que decía D17:** «por detrás» se quita por debajo de 860 px de vídeo y «En directo» por debajo de 780. Los saltos de
@@ -695,7 +697,7 @@ su chat, y los demás debajo. Un clic en una celda la hace la grande, y el víde
   empalme sirve una sola calidad por lista, así que pasar a grande sería recrear el reproductor: justo el corte que este diseño evita.
 - **Sin selector de calidad, retroceder al VOD ni imagen en imagen:** para eso está «Ver solo», que además no corta el vídeo. ← → y
   Fin sí, dentro de la lista del directo.
-- **Paridad (D24):** solo la extensión. En un móvil no cabe (la pantalla apenas da para dos, sin chat) y la tele está retirada. Lo que
+- **Paridad (D24):** solo la extensión. En un móvil no cabe (la pantalla apenas da para dos, sin chat) y la TV está retirada. Lo que
   va en `packages/` (`useHlsPlayer`, `directo-huecos.ts`) no hace nada sin `grid` ni `?hueco=`.
 - **Descartado, un `<video>` único que se mueve con una capa propia por encima de las pantallas:** obligaba a tocar `ChannelView` para
   todo el mundo. También, dejar `ChannelView` montado debajo de la cuadrícula: gastaba lo mismo y no resolvía salir de ella.
@@ -704,7 +706,45 @@ su chat, y los demás debajo. Un clic en una celda la hace la grande, y el víde
 («En directo 12», «Vídeos 3», el elegido en blanco), y los vídeos ya no van debajo de los canales. Sin vídeos a medias queda el título de siempre. Empieza en «En directo», y lo elegido se mantiene al volver
 de un vídeo, pero no al recargar. En Android, el orden de los seguidos pasa a ser un icono, como en la columna del escritorio, para que todo quepa en una fila.
 - **Descartado:** una fila de dos botones encima del título, que era lo primero que se hizo: el usuario vio que repetía «En directo». Pestañas como las de un canal, que dejaban el orden en otra fila. Y los vídeos en una fila encima de los canales: un toque menos, pero bajaba los canales siempre.
-- **Paridad (D24):** extensión y Android, que tenían el mismo problema. La tele, no: está retirada y no tiene esa lista.
+- **Paridad (D24):** extensión y Android, que tenían el mismo problema. La TV, no: está retirada y no tiene esa lista.
+
+**D44. La TV vuelve a recibir lo nuevo que tenga sentido con un mando (6 nov).** Lo pidió el usuario: quien abrió el
+[issue #1](https://github.com/mateozariquiey/GoodTTV/issues/1) usa el AppImage, que seguía solo en español y sin buena parte de
+lo que tienen las otras dos. Cambia D24: lo nuevo ya no se queda fuera de la TV por defecto. Va también a ella lo que tenga
+sentido con un mando a distancia, adaptado a sus pantallas (D14), y lo que no, se dice con su motivo. Los arreglos y el
+rendimiento siguen yendo a las tres, como siempre.
+- **El idioma (D35), en toda la TV:** Inicio, Buscar, Ajustes, el reproductor, el chat, los avisos, los errores de la cuenta y
+  de Twitch (`tMensaje`) y el aviso si no arranca. La ventana no tiene menú, y su título es el nombre del canal. El ajuste es una
+  fila más de Ajustes, como las demás de la TV: cada OK pasa de «Sistema (English)» a English, Español y otra vez Sistema, sin
+  recargar y sin cortar el vídeo. Ajustes pasa a dos columnas para que quepa: la cuenta, el idioma y el mando a la izquierda;
+  el chat, la reproducción y «Acerca de», a la derecha. → desde la cuenta sigue llevando a los ajustes de la derecha.
+  - **Lo elegido va en `idioma.json`, en la carpeta de datos de la app,** y no en el `localStorage` de la página: su origen cambia
+    de puerto en cada arranque (`listen(0)`). Lo lee el proceso principal al abrir, y la página lo pide sin esperar
+    (`sendSync`, en el preload) antes de pintar nada, para que la primera imagen ya salga en su idioma. `activarIdioma` admite
+    otra fuente (`FuenteIdioma`): la extensión y Android siguen con la de la página.
+  - **«Sistema» es el primero de los idiomas preferidos del sistema** (`app.getPreferredSystemLanguages()`: en Linux,
+    `LANGUAGE`, `LC_ALL`, `LC_MESSAGES` y `LANG`), y si no hay ninguno, el de Chromium. Comprobado en el AppImage: inglés con
+    `LANG` en inglés, en alemán o `C`; español con `es_ES` o con `LANGUAGE=es:en`.
+  - **La entrada del AppImage en el menú del escritorio** va en inglés, con su versión en español (`Comment[es]`).
+- **Buscar, Populares y abrir un canal por su nombre, sin cuenta,** como en la extensión y Android: lo hace el proceso principal
+  como invitado (`guestCatalog`, en `@goodttv/servicios`, con `canales.ts` de `@goodttv/sin-anuncios`), por IPC. Antes, sin
+  cuenta, la TV solo abría un canal por su nombre exacto, sin su foto ni su id, y la primera pantalla estaba vacía.
+- **Fuera, porque no tienen sentido con un mando o en la TV:** escribir en el chat (D24), las pestañas, la cuadrícula (D42),
+  la imagen en imagen, el modo teatro y la pantalla completa (la TV ya ocupa toda la pantalla), solo audio con la pantalla
+  apagada (D32) y deslizar para volver (D28).
+- **Aparcado, con su motivo:** los VOD y retroceder el directo tendrían sentido en la TV, pero
+  piden un reproductor de VOD manejado con el mando, la lista de vídeos de cada canal y guardar por dónde va cada vídeo fuera del
+  `localStorage`, por lo mismo que el idioma. Es grande, y no se puede probar en una TV de verdad. Lo pequeño (si sigues el canal,
+  SEG-1, y el orden «Recomendado para ti», que también guarda en `localStorage`) queda para cuando se decida si compensa.
+- **Descartado:** el idioma en `Preferences`, porque cambiaría el contrato que comparte la extensión, que no lo usa, y pasarlo
+  por la línea de órdenes de la página (`additionalArguments`), que obligaría a recargar para cambiarlo.
+
+**D45. La versión para la televisión se llama «TV», nunca «tele» (10 nov).** Lo pidió el usuario, para que el nombre sea el mismo
+en los dos idiomas, empezando por los README que lee quien abrió el issue #1. Se cambió en todo el texto del repo (los README,
+la documentación, los comentarios y la entrada del AppImage), y la carpeta pasó de `apps/tele` a `apps/tv`.
+- **Sin cambiar:** los identificadores y los archivos del prototipo de `investigacion/android/prueba` (`tele.html`,
+  `createTeleApi`), que no se compila desde entonces, y los nombres de las carpetas de `.lab/` que citan las medidas antiguas.
+  Tampoco cambian la carpeta de datos de la app (`~/.config/goodttv`, por el `name` del `package.json`) ni el AppImage.
 
 ## 4. Revisión temprana
 
@@ -739,5 +779,5 @@ Al ampliar la e2e apareció otro fallo: al cerrar el selector de calidad, el foc
 
 Comprobado en el mini PC, la TV y el mando el 16 de octubre:
 [verificacion.md](verificacion.md#en-el-mini-pc-la-tv-y-el-mando). Hacia el 19 de octubre se retiró esa configuración
-(la tele usa ahora otro aparato), así que desde la 0.3.0 la app de la tele solo se comprueba con las pruebas
+(la TV usa ahora otro aparato), así que desde la 0.3.0 la app de la TV solo se comprueba con las pruebas
 automáticas.

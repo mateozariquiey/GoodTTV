@@ -460,7 +460,7 @@ export const useHlsPlayer = (
         })
         // Pausar es retroceder (DVR-1): al reanudar, lo que se ha quedado atrás no es margen que sobre. Se conserva como
         // lo retrocedido, con «Ir al directo» para volver, en vez de saltárselo. En el modo directo, no: va lo más cerca
-        // posible del directo, y pasados LIVE_MAX_BEHIND s hls.js ya salta solo. Tampoco sin «Ir al directo» (la tele):
+        // posible del directo, y pasados LIVE_MAX_BEHIND s hls.js ya salta solo. Tampoco sin «Ir al directo» (la TV):
         // se quedaría atrás para siempre. Ni una pausa de un instante (pulsar dos veces): no es retroceder.
         let pausedAt: number | null = null
         let pausedFor = 0 // s que duró la pausa más larga desde que lo miró el intervalo
@@ -695,7 +695,7 @@ export const useHlsPlayer = (
     },
     [patch],
   )
-  // Volumen de 0 a 1 (la tele no lo usa: el del sistema). Subirlo quita el silencio.
+  // Volumen de 0 a 1 (la TV no lo usa: el del sistema). Subirlo quita el silencio.
   const setVolume = useCallback(
     (volume: number) => {
       const video = videoRef.current

@@ -150,6 +150,8 @@ export const useGuestPopular = (
   enabled: boolean,
 ): { readonly channels: readonly Channel[]; readonly loading: boolean } => {
   const available = enabled && window.api.catalog.popularSinCuenta !== undefined
+  // Al cambiar de idioma en los ajustes, los de ese idioma (la raíz se vuelve a pintar con useIdioma).
+  const language = idiomaDelCatalogo()
   const [channels, setChannels] = useState<readonly Channel[]>([])
   const [loading, setLoading] = useState(available)
   useEffect(() => {
@@ -157,7 +159,7 @@ export const useGuestPopular = (
     let current = true
     setLoading(true)
     void window.api.catalog
-      .popularSinCuenta?.(idiomaDelCatalogo())
+      .popularSinCuenta?.(language)
       .then(
         (streams) => {
           if (current) setChannels(streams.map(fromStream))
@@ -170,7 +172,7 @@ export const useGuestPopular = (
     return () => {
       current = false
     }
-  }, [available])
+  }, [available, language])
   return { channels: available ? channels : [], loading: available && loading }
 }
 
@@ -238,7 +240,7 @@ export type HomeSketch = {
   readonly recents: readonly RecentChannel[]
 }
 
-// Inicio en la tele, la extensión y Android. Lo de ahora tarda unas décimas: los directos se piden ya al abrir, a la vez
+// Inicio en la TV, la extensión y Android. Lo de ahora tarda unas décimas: los directos se piden ya al abrir, a la vez
 // que se comprueba la cuenta, si lo guardado dice que la había (la sesión guarda su id con el token y Helix no espera a
 // validarlo, TwitchSession). Mientras tanto:
 // - lo guardado de la última vez con esa cuenta (window.api.home), si es de hace menos de 5 min;
@@ -249,7 +251,7 @@ export type HomeSketch = {
 // comprobar la cuenta (sin red), lo guardado sigue, sea de cuando sea, y las pantallas avisan de que es de la última vez,
 // con «Reintentar» (unreachable).
 export const useHome = (auth: AuthState | undefined) => {
-  // undefined mientras se lee: la tele lo pide por IPC; la extensión lo lee sin esperar (la plataforma).
+  // undefined mientras se lee: la TV lo pide por IPC; la extensión lo lee sin esperar (la plataforma).
   const { savedHome } = usePlatform()
   const [saved, setSaved] = useState<SavedHome | null | undefined>(savedHome)
   useEffect(() => {
@@ -324,7 +326,7 @@ export const useHome = (auth: AuthState | undefined) => {
     // Lo que se ve es lo guardado: aún no ha llegado lo de ahora.
     fromSaved: resource !== home.resource && resource.kind === "ready",
     known,
-    // Aún leyendo lo guardado (unos milisegundos en la tele): ni «cargando» ni la bienvenida.
+    // Aún leyendo lo guardado (unos milisegundos en la TV): ni «cargando» ni la bienvenida.
     reading: saved === undefined,
     refresh: home.refresh,
     resource,

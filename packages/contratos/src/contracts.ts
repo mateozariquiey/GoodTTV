@@ -27,11 +27,10 @@ export const CursorInputSchema = z.object({
   first: z.number().int().min(1).max(100).default(20),
 })
 
+export const LanguageSchema = z.string().regex(/^[a-z]{2}$/)
+
 export const LiveInputSchema = CursorInputSchema.extend({
-  language: z
-    .string()
-    .regex(/^[a-z]{2}$/)
-    .optional(),
+  language: LanguageSchema.optional(),
 })
 
 export const SearchInputSchema = CursorInputSchema.extend({
@@ -149,6 +148,14 @@ export const PreferencesSchema = z.strictObject({
 })
 export const PreferencesPatchSchema = PreferencesSchema.partial()
 
+// El idioma elegido en la TV (D35): «sistema» sigue al del sistema. La extensión y Android lo guardan en la página.
+export const IdiomaElegidoSchema = z.enum(["sistema", "es", "en"])
+export const IdiomaInicialSchema = z.strictObject({
+  elegido: IdiomaElegidoSchema,
+  sistema: z.string().max(40), // BCP 47, el primero de los idiomas del sistema
+})
+export type IdiomaInicial = z.infer<typeof IdiomaInicialSchema>
+
 export const InputActionSchema = z.enum([
   "up",
   "down",
@@ -217,7 +224,7 @@ export interface AppApi {
     readonly close: () => Promise<void>
     readonly onBatch: (listener: (batch: ChatBatch) => void) => () => void
     readonly open: (input: ChatOpenInput) => Promise<number>
-    // Solo donde se puede escribir (no en la tele, D24).
+    // Solo donde se puede escribir (no en la TV, D24).
     readonly send?: (input: ChatSendInput) => Promise<ChatSendResult>
     readonly emotes?: (input: ChatOpenInput) => Promise<ChatEmoteGroups>
   }
@@ -240,6 +247,11 @@ export interface AppApi {
       listener: (id: number, reason: PlayerInteractionEnd) => void,
     ) => () => void
     readonly setWatching: (active: boolean) => Promise<void>
+  }
+  // Solo la TV: lo elegido y el idioma del sistema, ya leídos al cargar la página (para pintar la primera imagen en
+  // su idioma), y cómo guardar otro.
+  readonly idioma?: IdiomaInicial & {
+    readonly elegir: (valor: IdiomaInicial["elegido"]) => Promise<void>
   }
   readonly preferences: {
     readonly get: () => Promise<Preferences>

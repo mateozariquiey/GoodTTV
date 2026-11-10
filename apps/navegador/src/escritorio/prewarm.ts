@@ -14,7 +14,7 @@ const channelUnder = (target: EventTarget | null): string | null => {
 
 // Precalentar el canal sobre el que se para el ratón, o en cuanto se empieza a pulsar, salvo el que ya se ve: al
 // abrirlo, el directo suele estar ya listo. Cada movimiento vuelve a empezar la espera, para no abrir un canal por
-// cada fila que se cruza. Con el ratón encima tampoco se precalientan los que se sabe que no emiten, como en la tele.
+// cada fila que se cruza. Con el ratón encima tampoco se precalientan los que se sabe que no emiten, como en la TV.
 export const usePointerPrewarm = (
   watching: string | undefined,
   offline: ReadonlySet<string>,

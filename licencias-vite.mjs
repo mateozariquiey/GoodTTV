@@ -1,6 +1,6 @@
 // Plugin de Vite que añade a la compilación `LICENSE` (la del proyecto, con la atribución de VacuumStream) y
 // `TERCEROS.txt`, con la licencia de cada paquete de npm que acaba dentro (código y fuentes). Las licencias MIT y OFL
-// piden que viajen con lo que se distribuye: la extensión (.xpi) y la app de la tele (AppImage).
+// piden que viajen con lo que se distribuye: la extensión (.xpi) y la app de la TV (AppImage).
 import { existsSync, readdirSync, readFileSync } from "node:fs"
 import { dirname, join, resolve, sep } from "node:path"
 import { fileURLToPath } from "node:url"

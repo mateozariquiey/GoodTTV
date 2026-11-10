@@ -1,6 +1,7 @@
 import { useState } from "react"
 import { type Channel, initials } from "./channel"
 import { formatUptime, formatViewers } from "./data"
+import { t } from "./idioma"
 
 // Small shared pieces. Every focusable control is a real <button> with data-nav.
 
@@ -23,7 +24,7 @@ export const Avatar = ({
   )
 }
 
-export const LiveBadge = () => <span className="live-badge">EN DIRECTO</span>
+export const LiveBadge = () => <span className="live-badge">{t("EN DIRECTO")}</span>
 
 export const Viewers = ({ channel }: { readonly channel: Channel }) =>
   channel.viewerCount === undefined ? null : (
@@ -88,7 +89,7 @@ export const RetryButton = ({ entry = false, navId, onRetry }: RetryButtonProps)
       }}
       type="button"
     >
-      {retrying ? "Comprobando…" : "Reintentar"}
+      {retrying ? t("Comprobando…") : t("Reintentar")}
     </button>
   )
 }
@@ -104,7 +105,11 @@ type ChannelRowProps = {
 // One channel in a guide-style list: who, how many, what and for how long.
 export const ChannelRow = ({ channel, entry = false, navId, onFocus, onOpen }: ChannelRowProps) => (
   <button
-    aria-label={`${channel.displayName}${channel.live === false ? ", desconectado" : ""}`}
+    aria-label={
+      channel.live === false
+        ? t("{displayName}, desconectado", { displayName: channel.displayName })
+        : channel.displayName
+    }
     className={`row${channel.live === false ? " row--offline" : ""}`}
     data-nav
     data-nav-entry={entry ? "" : undefined}
@@ -118,7 +123,7 @@ export const ChannelRow = ({ channel, entry = false, navId, onFocus, onOpen }: C
       <span className="row__line">
         <strong className="row__name">{channel.displayName}</strong>
         {channel.live === false ? (
-          <span className="row__offline">Desconectado</span>
+          <span className="row__offline">{t("Desconectado")}</span>
         ) : (
           <Viewers channel={channel} />
         )}

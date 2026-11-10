@@ -10,7 +10,7 @@ trabajo de bun y un único `node_modules` en la raíz:
 
 ```text
 apps/                     una carpeta por versión
-  tele/                   la app de Electron para la tele (casi todo lo que sigue en esta guía)
+  tv/                     la app de Electron para la TV (casi todo lo que sigue en esta guía)
   navegador/              la extensión de Chrome y Firefox (D13), con su interfaz de escritorio (D14)
 packages/                 código común, sin depender de una versión concreta
   contratos/              esquemas y tipos de window.api, del chat y de las teclas (Zod); sin Node
@@ -21,7 +21,7 @@ docs/                     esta documentación
 ```
 
 - **Cuándo algo pasa a `packages/`:** cuando lo necesita una segunda versión, no antes. Para la
-  versión de navegador (D13) salieron de `apps/tele` los contratos, los servicios y la interfaz.
+  versión de navegador (D13) salieron de `apps/tv` los contratos, los servicios y la interfaz.
   Cada versión aporta lo suyo:
   - **la interfaz:** `window.api` (`AppApi`), montar `App` e importar las fuentes y los estilos;
   - **los servicios:** dónde guardar la sesión (`TokenStore`), los recientes y las preferencias
@@ -30,14 +30,14 @@ docs/                     esta documentación
   `crypto.getRandomValues` y `Uint8Array`, que existen en Electron, en una extensión y en Android. Pide a Twitch por
   el `fetch` que se le da (`createDirecto({ fetch })`); si no, por el global.
   Sus rutas `/stream/` (`directo.ts`: lista con recarga bloqueante, `info`, `precalentar` y trozos
-  del VOD) responden con `Response` estándar, sin depender del transporte. En la tele las sirve el servidor
-  local (`apps/tele/src/main/stream/stream-service.ts`, un adaptador HTTP); en la extensión, la
-  propia página atiende sus `fetch` a `/stream/` (`directo-fetch.ts`, en el paquete). `apps/tele`
+  del VOD) responden con `Response` estándar, sin depender del transporte. En la TV las sirve el servidor
+  local (`apps/tv/src/main/stream/stream-service.ts`, un adaptador HTTP); en la extensión, la
+  propia página atiende sus `fetch` a `/stream/` (`directo-fetch.ts`, en el paquete). `apps/tv`
   lo declara como `devDependency` para que electron-vite lo meta en el bundle y electron-builder no
   lo empaquete aparte.
 - **Lo sin anuncios que sigue fuera de `@goodttv/sin-anuncios`.** Es lo que habría que separar
   para una versión con solo el embed oficial (la pública lleva el reproductor sin anuncios desde D18):
-  - en `apps/tele`: el gancho `dynamic` y la CSP de `https-server.ts`, la CSP de
+  - en `apps/tv`: el gancho `dynamic` y la CSP de `https-server.ts`, la CSP de
     `renderer/index.html` (`connect-src https://*.ttvnw.net`, `media-src`, `worker-src blob:`), y
     el servicio y el registro `GOODTTV_REGISTRO_EMPALME` en `main/index.ts`;
   - en `packages/interfaz/src`: `useHlsPlayer.ts` y, en `PlayerScreen.tsx`, la elección de
@@ -48,7 +48,7 @@ docs/                     esta documentación
 
 ### La extensión (`apps/navegador`)
 
-Pantallas propias para ratón y teclado (D14), con la misma esencia que la tele: fondo casi negro,
+Pantallas propias para ratón y teclado (D14), con la misma esencia que la TV: fondo casi negro,
 Atkinson Hyperlegible, el blanco como única marca de selección y el rojo solo para «en directo». De
 `@goodttv/interfaz` reutiliza la lógica (reproductor `useHlsPlayer`, chat `useChat` con su retraso,
 datos, cuenta y los mensajes con emotes), no las pantallas. El botón de la extensión abre
@@ -75,7 +75,7 @@ src/goodttv.tsx        monta las pantallas de escritorio; avisa de lo que cambia
 │   ├── SettingsView.tsx cuenta, retraso, chat y la lista de atajos
 │   ├── shortcuts.ts   atajos de teclado (Espacio, ← →, Fin, M, T, F, C, ↑ ↓, /, Esc)
 │   └── desktop.css    los estilos
-├── api.ts             window.api: lo que en la tele hacen el proceso principal y el IPC, aquí en la página
+├── api.ts             window.api: lo que en la TV hacen el proceso principal y el IPC, aquí en la página
 │   ├── @goodttv/servicios   createPageApi (page-api.ts): cuenta, Helix, chat por EventSub, almacén local e
 │   │                        Inicio de la última vez (page-home.ts, en localStorage)
 │   ├── storage.ts           la sesión y los datos en chrome.storage.local, sin cifrar
@@ -104,7 +104,7 @@ src/fondo.ts           abre GoodTTV o trae al frente la pestaña con esa vista; 
   `#/canal/<login>`. Todo lo demás vive en la página, porque en Chrome el fondo es un service worker
   que el navegador puede detener. Debe quedar en un solo archivo, sin importaciones.
 - **Escribir en el chat (CHAT-1, D24),** con la API oficial (`POST /helix/chat/messages`, permiso `user:write:chat`, que
-  la extensión y Android piden al vincular: `TWITCH_CHAT_SCOPES`; la tele sigue con los de lectura). Lo enviado sale
+  la extensión y Android piden al vincular: `TWITCH_CHAT_SCOPES`; la TV sigue con los de lectura). Lo enviado sale
   ya, sin la cola del retraso: los servicios lo devuelven con el color de la persona y sus emotes, y la copia que llega
   por EventSub (con insignias) ocupa su sitio. Si Twitch no lo envía, su motivo. Los emotes para escribir
   (`window.api.chat.emotes`) son los del canal y los globales de 7TV, BTTV y FFZ (`EmoteCatalog.listForChannel`) y los
@@ -123,11 +123,17 @@ src/fondo.ts           abre GoodTTV o trae al frente la pestaña con esa vista; 
   hls.js como `data:`, y lleva el vídeo al punto pedido en cuanto el búfer lo cubre, sin esperar a que hls.js tenga el
   trozo de 10 s entero (`useVodPlayer`). En Android (D25), el VOD lo reproduce Media3 con esa lista, por la red del teléfono y sin el motor
   (`Reproductor.kt`), y la página (`pantallas/Vod.tsx`) pinta encima la barra y los controles, como en un canal.
-- **Buscar canales y abrir uno por su nombre, sin cuenta** (la extensión y Android): con el buscador de
-  twitch.tv como invitado (`canales.ts`, en `@goodttv/sin-anuncios`, que `createPageApi` usa en `catalog.search` y
-  `catalog.channel` si se le da): su relevancia, que corrige erratas, con la foto, los seguidores y si está en directo.
-  Sin esa fuente (la tele), la búsqueda de Helix, con cuenta. Un canal abierto por la dirección se completa con
-  `catalog.channel`: su nombre, su foto y su id, que el chat necesita también sin directo.
+- **El idioma (D35, D44),** en las tres con `t()` y `idioma-en.ts`. La extensión y Android guardan lo elegido en el
+  `localStorage` de la página; la TV, en `idioma.json` de su carpeta de datos (`apps/tv/src/main/idioma.ts`), porque
+  el origen de su página cambia de puerto en cada arranque. La página de la TV lo recibe ya leído, con el idioma del
+  sistema (`window.api.idioma`, que el preload pide sin esperar), y se lo pasa a `activarIdioma` como su fuente.
+- **Buscar canales y abrir uno por su nombre, sin cuenta** (las tres): con el buscador de twitch.tv como invitado
+  (`canales.ts`, en `@goodttv/sin-anuncios`; `guestCatalog`, en `@goodttv/servicios`, lo convierte en `catalog.search`,
+  `catalog.channel` y `catalog.popularSinCuenta`): su relevancia, que corrige erratas, con la foto, los seguidores y si
+  está en directo. La extensión y Android lo usan en la página (`createPageApi`, si se le da la fuente); la TV, en el
+  proceso principal, por IPC (D44). Sin esa fuente, la búsqueda de Helix, con cuenta. Un canal abierto por la dirección
+  (o, en la TV, por su nombre) se completa con `catalog.channel`: su nombre, su foto y su id, que el chat necesita
+  también sin directo.
 - **Tus seguidos, por espectadores o «Recomendado para ti»** (la extensión y Android): Helix solo los da por espectadores; el
   orden recomendado es propio, con los minutos que suena cada canal en GoodTTV, en directo o en sus VOD, que pesan la
   mitad cada 14 días (`watch-time.ts`, en `@goodttv/interfaz`, en `localStorage`), y luego los abiertos hace poco.
@@ -162,11 +168,11 @@ src/fondo.ts           abre GoodTTV o trae al frente la pestaña con esa vista; 
   Si falla el reproductor propio, «Reintentar» o «Abrir en twitch.tv».
 - **La plataforma** (`packages/interfaz/src/platform.tsx`) solo lleva la configuración extra de
   hls.js: la extensión le pone el `FetchLoader`.
-- **Los tokens, en la página.** La regla de la tele (el renderer no ve un token) protege de lo que
+- **Los tokens, en la página.** La regla de la TV (el renderer no ve un token) protege de lo que
   carga la ventana. Aquí la página es la propia extensión: Manifest V3 no deja cargar código ajeno,
   y los tokens se quedan en los servicios; la interfaz solo recibe datos. Se guardan sin cifrar en
   `chrome.storage.local`, y Ajustes lo avisa.
-- **Inicio al abrir, sin esperas en cadena** (D26; `useHome`, en `packages/interfaz/src/data.ts`, común con la tele y
+- **Inicio al abrir, sin esperas en cadena** (D26; `useHome`, en `packages/interfaz/src/data.ts`, común con la TV y
   Android). Lo de ahora llega en unas décimas, porque lo que se pide a Twitch sale a la vez:
   - **la sesión guarda la cuenta junto al token** (`StoredToken.identity`: id, nombre de usuario y permisos, de
     `/validate`). Con ella, `TwitchSession.credentials` no espera a validar: la validación va a la vez, una sola por
@@ -176,7 +182,7 @@ src/fondo.ts           abre GoodTTV o trae al frente la pestaña con esa vista; 
   - **la foto y el nombre de la cuenta** se piden a la vez que se valida (`TwitchService.authSnapshot`, con la cuenta
     guardada);
   - **las fotos de los canales** se guardan una semana (`profile-pictures.ts`; en la página, en el `localStorage` de
-    Inicio; en la tele, en memoria) y solo se piden las que faltan;
+    Inicio; en la TV, en memoria) y solo se piden las que faltan;
   - **`useHome` pide los directos al abrir** si lo guardado dice que había cuenta, sin esperar a comprobarla; al llegar
     la cuenta, la misma carga sigue. Lo pedido antes de saberla, si falla, no es un error hasta que la cuenta lo diga
     (puede ser que la sesión haya caducado).
@@ -218,9 +224,9 @@ src/fondo.ts           abre GoodTTV o trae al frente la pestaña con esa vista; 
     fondo no ve las direcciones de las pestañas (sin el permiso «tabs»): pregunta a las páginas (`pestanas.ts`).
 - **El directo, en la página.** `installDirecto` (`directo-fetch.ts`, en `@goodttv/sin-anuncios`) sustituye el
   `fetch` de la página: lo que pide a sus propias rutas `/stream/` lo responde el directo en memoria, como el servidor
-  local de la tele, y el directo pide a Twitch con el `fetch` original. hls.js usa su `FetchLoader`, porque el
+  local de la TV, y el directo pide a Twitch con el `fetch` original. hls.js usa su `FetchLoader`, porque el
   `XhrLoader` por defecto no pasaría por ahí. Así el reproductor pide lo mismo en las dos versiones.
-- **Sin worker de hls.js, como en la tele:** la versión ESM de hls.js no lo trae, así que
+- **Sin worker de hls.js, como en la TV:** la versión ESM de hls.js no lo trae, así que
   demultiplexa en el hilo de la página. Por eso no afecta que Firefox no admita workers `blob:` en
   las páginas de extensión. No hace falta: con un directo a 1080p60 el hilo de la página está
   ocupado un 1-1,5 % del tiempo (D16).
@@ -237,8 +243,8 @@ src/fondo.ts           abre GoodTTV o trae al frente la pestaña con esa vista; 
   `?pausa=` (como `GOODTTV_PAUSA_SIMULADA`). Expone `window.estadoPrueba` para la prueba de humo
   ([desarrollo.md](desarrollo.md#prueba-de-humo)).
 
-El resto de esta guía describe la tele. Las rutas de `src/main`, `src/preload` y
-`src/renderer` son relativas a `apps/tele`; las de la interfaz (pantallas, navegación, reproductor y
+El resto de esta guía describe la TV. Las rutas de `src/main`, `src/preload` y
+`src/renderer` son relativas a `apps/tv`; las de la interfaz (pantallas, navegación, reproductor y
 chat), a `packages/interfaz/src`.
 
 ## Las tres piezas de Electron
@@ -249,7 +255,7 @@ Proceso principal (src/main) ── tiene todos los permisos
 ├── input-router.ts        TODAS las teclas del mando → acciones («up», «ok», «back»…; @goodttv/contratos)
 ├── player-interaction.ts  modo «Controles de Twitch»: flechas → Tab/Mayús+Tab, OK → Enter
 ├── @goodttv/servicios     cuenta (código + tokens) y Helix; chat por EventSub, emotes y tokenizador;
-│                          recientes y preferencias. La tele aporta dónde se guardan:
+│                          recientes y preferencias. La TV aporta dónde se guardan:
 ├── token-vault.ts         la sesión, cifrada con el llavero del sistema (o archivo 0600 sin él)
 ├── local-store.ts         recientes y preferencias (archivo JSON local)
 ├── saved-home.ts          Inicio de la última vez (window.api.home; archivo JSON local)
@@ -271,7 +277,7 @@ iframe de player.twitch.tv (otro origen; la app no lo toca por dentro)
 del proceso principal, y la interfaz recibe datos ya validados.
 
 **Inicio al abrir** (`useHome`, como en la extensión, D26): mientras llegan los directos, lo que se vio la última vez
-con esa cuenta si es de hace menos de 5 min; si no, «Cargando canales…». La tele no lo guarda en `localStorage`: el
+con esa cuenta si es de hace menos de 5 min; si no, «Cargando canales…». La TV no lo guarda en `localStorage`: el
 servidor local cambia de puerto en cada arranque, y con él el origen de la página, así que no duraría. Lo guarda el
 proceso principal en `saved-home.json` (archivo 0600), y la interfaz lo pide por IPC al abrir: tarda unos
 milisegundos, durante los que Inicio no enseña nada. Las fotos de los canales, en memoria del proceso principal: la
@@ -331,7 +337,7 @@ funciona como se describe a continuación.
   lista en cuanto abre; publica la primera que da directo. `info` contesta en cuanto hay algo
   publicado (`Empalme.changed`), sin sondear.
 - **Precalentar** (`prewarmStream`, `usePrewarm`): con el foco 400 ms en un canal en directo de
-  Inicio, en la tele, o con el ratón parado 150 ms encima en la extensión, el directo abre ya ese
+  Inicio, en la TV, o con el ratón parado 150 ms encima en la extensión, el directo abre ya ese
   empalme en un hueco aparte (`/stream/<canal>/precalentar`) que no para el que suena. Al abrir el
   canal pasa a activo; si nadie lo abre, se para a los 30 s como cualquier otro.
 - **La conexión de los fragmentos, por adelantado:** el DNS de los hosts de Twitch tarda ~0,3 s (TTL 0), así que el empalme pide
@@ -347,7 +353,7 @@ funciona como se describe a continuación.
   segundo) y, en Firefox y Zen, cada cambio de velocidad dejaba el sonido algo más atrás de la imagen, sin volver (D34).
   En Adaptativo, una parada de 1 a 12 s en pleno directo no se salta: lo que añade es el margen que le faltaba a ese canal (D36).
   No se salta con la lista parada (una pausa global): ese retraso no es margen que sobre. Tras una pausa de más de 1 s,
-  lo pausado se conserva como lo retrocedido, con «Ir al directo»; en *Directo* y en la tele, que no tiene ese botón, se
+  lo pausado se conserva como lo retrocedido, con «Ir al directo»; en *Directo* y en la TV, que no tiene ese botón, se
   salta.
 - **La lista abarca 100 s** (`WINDOW_SECONDS` en el empalme), más de lo que hls.js deja quedarse atrás antes de
   saltar (`liveMaxLatencyDuration`: el objetivo más 60 s, 84 s en *Sin paradas*). *Sin paradas* y *Adaptativo* (tras
@@ -377,7 +383,7 @@ funciona como se describe a continuación.
   lista lleva `contain: strict`, así que los mensajes que entran no recolocan el resto de la pantalla. En la extensión
   y en Android, además (D31):
   - la lista va dentro de un bloque (`chat__scroller`, `chat__marco`): Chrome no maqueta aparte a una hija de una
-    rejilla o de un flex, aunque lleve `contain: strict`. La de la tele aún lo es;
+    rejilla o de un flex, aunque lleve `contain: strict`. La de la TV aún lo es;
   - el chat va en su propio componente (`ChannelChat`, `CanalChat`): un lote no vuelve a pintar el canal;
   - los mensajes más antiguos se quitan por tandas (`CHAT_TRIM`, en `useChat`): la lista guarda entre 150 y 200;
   - en la extensión, la lista tiene fondo opaco: así Chrome compone su desplazamiento sin perder los subpíxeles del
@@ -421,7 +427,7 @@ guarda los últimos 150.
 
 | Quiero… | Archivo |
 | --- | --- |
-| Añadir o cambiar un texto de la extensión o de Android | La frase en `t("…")` y su inglés en `packages/interfaz/src/idioma-en.ts`. Si es un mensaje de `@goodttv/servicios`, igual, y se pinta con `tMensaje` (D35) |
+| Añadir o cambiar un texto de cualquier versión | La frase en `t("…")` y su inglés en `packages/interfaz/src/idioma-en.ts`. Si es un mensaje de `@goodttv/servicios`, igual, y se pinta con `tMensaje` (D35) |
 | Añadir una tecla del mando | `packages/contratos/src/keys.ts` (`actionForKey`) y su prueba |
 | Cambiar colores, tamaños o espaciado | `packages/interfaz/src/styles.css` (variables en `:root`) |
 | Añadir una sección a Inicio | `packages/interfaz/src/data.ts` (`loadHome`, `toSavedHome` con `SavedHomeSchema` en `@goodttv/contratos` para que se guarde y, si debe tener su forma mientras carga, `HomeSketch`) y `screens/HomeScreen.tsx` |

@@ -7,9 +7,13 @@ import {
   ChatOpenInputSchema,
   CursorInputSchema,
   DeviceChallengeSchema,
+  IdiomaElegidoSchema,
+  IdiomaInicialSchema,
   InputActionSchema,
   KeyProbeSchema,
+  LanguageSchema,
   LiveInputSchema,
+  LoginSchema,
   LoginsInputSchema,
   PageSchema,
   PlayerInteractionEndSchema,
@@ -50,6 +54,10 @@ const subscribe = <Args extends unknown[]>(
   }
 }
 
+// El idioma, antes de pintar nada: sin esperar a una respuesta (sendSync), para que la primera imagen ya salga en el suyo.
+// Si main no contesta algo válido, se sigue al idioma del navegador.
+const idiomaInicial = IdiomaInicialSchema.safeParse(ipcRenderer.sendSync(CHANNELS.idiomaInicial))
+
 const api: AppApi = {
   app: {
     status: () => invoke(AppStatusSchema, CHANNELS.appStatus),
@@ -70,6 +78,14 @@ const api: AppApi = {
       invoke(PageSchema(StreamCardSchema), CHANNELS.catalogLive, LiveInputSchema.parse(input)),
     search: (input) =>
       invoke(PageSchema(ChannelCardSchema), CHANNELS.catalogSearch, SearchInputSchema.parse(input)),
+    channel: (login) =>
+      invoke(ChannelCardSchema.nullable(), CHANNELS.catalogChannel, LoginSchema.parse(login)),
+    popularSinCuenta: (language) =>
+      invoke(
+        z.array(StreamCardSchema),
+        CHANNELS.catalogPopularGuest,
+        LanguageSchema.parse(language),
+      ),
     streamsByLogin: (logins) =>
       invoke(
         z.array(StreamCardSchema),
@@ -89,6 +105,15 @@ const api: AppApi = {
     save: (home) => invoke(z.undefined(), CHANNELS.homeSave, SavedHomeSchema.parse(home)),
     saved: () => invoke(SavedHomeSchema.nullable(), CHANNELS.homeSaved),
   },
+  ...(idiomaInicial.success
+    ? {
+        idioma: {
+          ...idiomaInicial.data,
+          elegir: (valor) =>
+            invoke(z.undefined(), CHANNELS.idiomaElegir, IdiomaElegidoSchema.parse(valor)),
+        },
+      }
+    : {}),
   input: {
     onAction: (listener) =>
       subscribe(

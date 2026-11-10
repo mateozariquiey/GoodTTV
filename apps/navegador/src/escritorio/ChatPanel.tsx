@@ -3,7 +3,7 @@ import { CHAT_STATUS_TEXT, type ChatView, Message, t, useChatAtBottom } from "@g
 import { type PointerEvent as ReactPointerEvent, useCallback, useRef, useState } from "react"
 import { Compose, type ComposeHandle, PROVIDER_LABEL } from "./ChatCompose"
 
-// El chat junto al vídeo, con los mensajes y emotes de la tele (@goodttv/interfaz). Baja solo con los mensajes nuevos
+// El chat junto al vídeo, con los mensajes y emotes de la TV (@goodttv/interfaz). Baja solo con los mensajes nuevos
 // si ya estabas abajo; si subiste a leer, se queda donde estás. Con la cuenta vinculada con permiso para escribir, una
 // caja al pie (CHAT-1, ChatCompose.tsx): lo enviado sale ya, sin esperar al retraso de la imagen. Un emote del chat
 // dice su nombre al pasar el ratón, y un clic lo añade al mensaje (o, sin poder escribir, copia su nombre). Mientras

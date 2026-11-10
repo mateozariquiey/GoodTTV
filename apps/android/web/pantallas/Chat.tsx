@@ -25,9 +25,9 @@ import {
 import { type EmoteDelChat, emoteDe, FichaEmote, ListaEmotes, Sugerencias } from "./Emotes"
 import { useAtrasCierra } from "./rutas"
 
-// El chat de solo lectura, con los mensajes y emotes (7TV, BTTV y FFZ) de la tele (@goodttv/interfaz). Baja solo con
+// El chat de solo lectura, con los mensajes y emotes (7TV, BTTV y FFZ) de la TV (@goodttv/interfaz). Baja solo con
 // los mensajes nuevos si ya estabas abajo; si subes a leer, se queda donde estás y ofrece volver a los últimos. Va a la
-// par de la imagen (useChat lo retrasa): mientras no ha salido nada, como en la tele, se dice por qué. Con la cuenta
+// par de la imagen (useChat lo retrasa): mientras no ha salido nada, como en la TV, se dice por qué. Con la cuenta
 // vinculada con permiso para escribir, una caja al pie (CHAT-1): lo enviado sale ya, sin esperar al retraso, y los
 // emotes se ponen con «:» y dos letras o con la lista (Emotes.tsx). Mantener pulsado un emote del chat enseña su ficha.
 // En un VOD (replay), el chat del vídeo, como se escribió en el directo (useReplayChat).
