@@ -1,5 +1,5 @@
 // Directo sin anuncios para el reproductor propio (src/renderer/src/player/useHlsPlayer.ts), servido por el servidor
-// HTTPS local de la app bajo /stream/. Las rutas y lo que hacen están en @goodttv/sin-anuncios (directo.ts); aquí solo
+// local de la app bajo /stream/. Las rutas y lo que hacen están en @goodttv/sin-anuncios (directo.ts); aquí solo
 // se pasan las peticiones HTTP y sus respuestas.
 import type { IncomingMessage, ServerResponse } from "node:http"
 import { createDirecto, type EmpalmeEvent, parseSimulatedPause } from "@goodttv/sin-anuncios"
@@ -26,7 +26,7 @@ export const createStreamService = (
     if (!pathname.startsWith("/stream/")) return false
     const closed = new AbortController()
     request.on("close", () => closed.abort())
-    const url = new URL(request.url ?? "/", "https://localhost")
+    const url = new URL(request.url ?? "/", "http://localhost")
     url.pathname = pathname // la que ya decodificó el servidor, como siempre
     directo
       .handle(url, { range: request.headers.range ?? null, signal: closed.signal })

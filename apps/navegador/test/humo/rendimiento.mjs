@@ -13,6 +13,7 @@
 import { readdir, readFile } from "node:fs/promises"
 import { resolve } from "node:path"
 import { parseArgs } from "node:util"
+import { topChannels } from "./canales.mjs"
 import { launchChrome } from "./chrome.mjs"
 import { launchFirefox } from "./firefox.mjs"
 
@@ -37,22 +38,6 @@ if (!options.canales) throw new Error("falta --canales canal1,canal2 o --canales
 const extension = resolve(options.extension ?? resolve(import.meta.dirname, "../../dist"))
 const out = (event) => console.log(JSON.stringify({ etiqueta: options.etiqueta, ...event }))
 const sleep = (ms) => new Promise((done) => setTimeout(done, ms))
-
-// Los directos con más espectadores, como invitado (la misma API que el reproductor web).
-const topChannels = async (count) => {
-  const response = await fetch("https://gql.twitch.tv/gql", {
-    body: JSON.stringify({
-      query: `query { streams(first: ${count * 2}) { edges { node { type broadcaster { login } } } } }`,
-    }),
-    headers: { "Client-ID": "kimne78kx3ncx6brgo4mv6wki5h1ko", "Content-Type": "text/plain" },
-    method: "POST",
-  })
-  const { data } = await response.json()
-  return data.streams.edges
-    .filter(({ node }) => node.type === "live")
-    .map(({ node }) => node.broadcaster.login)
-    .slice(0, count)
-}
 
 // CPU (en ticks de reloj) de un proceso y todos sus descendientes.
 const cpuTicks = async (root) => {

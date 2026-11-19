@@ -18,6 +18,8 @@ const cached = <Value>(
 ): Promise<Value> => {
   const entry = cache.get(id)
   if (entry !== undefined && Date.now() - entry.at < KEEP_MS) return entry.value
+  // Lo caducado se suelta: pasar el ratón por muchos vídeos no los deja guardados para siempre.
+  for (const [key, old] of cache) if (Date.now() - old.at >= KEEP_MS) cache.delete(key)
   const value = load()
   cache.set(id, { at: Date.now(), value })
   value.catch(() => {

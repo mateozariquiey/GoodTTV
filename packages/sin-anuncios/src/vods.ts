@@ -2,91 +2,71 @@
 // anuncios (como el relleno del empalme: usher no los inserta), las miniaturas de la barra y el chat del vídeo. API
 // privada del reproductor web, como invitado y sin Client-Integrity: por eso el chat se pide por posición (pedirlo por
 // cursor exige integridad, comprobado el 21 de octubre). Cada petición sale por el fetch que se dé.
-import { deviceId, type Fetch, getText, gqlRequest, pick, tokenOf } from "./twitch-source"
+import type {
+  LiveArchive,
+  Storyboard,
+  VideoCard,
+  VideoDetail,
+  VideoList,
+  VideoOwner,
+} from "@goodttv/contratos"
+import { globalFetch, NUMERIC_ID, textOf } from "./comun"
+import {
+  deviceId,
+  type Fetch,
+  getText,
+  gqlRequest,
+  pick,
+  vodMasterOf,
+  vodToken,
+} from "./twitch-source"
 
-const globalFetch: Fetch = (input, init) => fetch(input, init)
-
-export type VideoKind = "archive" | "highlight" | "upload"
-
-export type VideoCard = {
-  readonly id: string
-  readonly title: string
-  readonly seconds: number
-  readonly createdAt: string // ISO
-  readonly views: number
-  readonly kind: VideoKind
-  readonly category: string | null
-  readonly thumbnail: string | null // 320 × 180
-  readonly storyboard: string | null // las miniaturas de la barra (info.json)
-}
-
-export type VideoOwner = {
-  readonly id: string
-  readonly login: string
-  readonly displayName: string
-  readonly avatar: string | null
-}
-
-const text = (value: unknown): string | null =>
-  typeof value === "string" && value !== "" ? value : null
 const number = (value: unknown): number =>
   typeof value === "number" && Number.isFinite(value) ? value : 0
 
-const VIDEO_FIELDS = `id title lengthSeconds createdAt viewCount broadcastType
+const VIDEO_FIELDS = `id title lengthSeconds createdAt viewCount
   previewThumbnailURL(width: 320, height: 180) game { displayName } seekPreviewsURL`
 const OWNER_FIELDS = "id login displayName profileImageURL(width: 70)"
 
-const KINDS: Readonly<Record<string, VideoKind>> = {
-  ARCHIVE: "archive",
-  HIGHLIGHT: "highlight",
-  UPLOAD: "upload",
-}
-
 const toCard = (node: unknown): VideoCard | null => {
-  const id = text(pick(node, "id"))
-  if (id === null || !/^\d{1,20}$/.test(id)) return null
-  const thumbnail = text(pick(node, "previewThumbnailURL"))
+  const id = textOf(pick(node, "id"))
+  if (id === null || !NUMERIC_ID.test(id)) return null
+  const thumbnail = textOf(pick(node, "previewThumbnailURL"))
   return {
-    category: text(pick(node, "game", "displayName")),
-    createdAt: text(pick(node, "createdAt")) ?? new Date(0).toISOString(),
+    category: textOf(pick(node, "game", "displayName")),
+    createdAt: textOf(pick(node, "createdAt")) ?? new Date(0).toISOString(),
     id,
-    kind: KINDS[String(pick(node, "broadcastType"))] ?? "archive",
     seconds: number(pick(node, "lengthSeconds")),
-    storyboard: text(pick(node, "seekPreviewsURL")),
+    storyboard: textOf(pick(node, "seekPreviewsURL")),
     // Sin miniatura todavía, Twitch da la de «404_processing».
     thumbnail: thumbnail?.includes("404_processing") === true ? null : thumbnail,
-    title: text(pick(node, "title")) ?? "",
+    title: textOf(pick(node, "title")) ?? "",
     views: number(pick(node, "viewCount")),
   }
 }
 
 const toOwner = (node: unknown): VideoOwner | null => {
-  const id = text(pick(node, "id"))
-  const login = text(pick(node, "login"))
+  const id = textOf(pick(node, "id"))
+  const login = textOf(pick(node, "login"))
   if (id === null || login === null) return null
   return {
-    avatar: text(pick(node, "profileImageURL")),
-    displayName: text(pick(node, "displayName")) ?? login,
+    avatar: textOf(pick(node, "profileImageURL")),
+    displayName: textOf(pick(node, "displayName")) ?? login,
     id,
     login,
   }
 }
 
-// Los vídeos de un canal, del más reciente al más antiguo: las emisiones (archive) y, aparte, los destacados y los
-// subidos si se piden. null si el canal no existe.
+// Las emisiones guardadas de un canal (sin los destacados ni los subidos), de la más reciente a la más antigua. null si
+// el canal no existe.
 export const videosOf = async (
   login: string,
-  {
-    first = 30,
-    kind = "archive",
-    red = globalFetch,
-  }: { first?: number; kind?: VideoKind; red?: Fetch } = {},
-): Promise<{ readonly owner: VideoOwner; readonly videos: readonly VideoCard[] } | null> => {
-  const type = Object.entries(KINDS).find(([, value]) => value === kind)?.[0] ?? "ARCHIVE"
+  { first = 30, red = globalFetch }: { first?: number; red?: Fetch } = {},
+): Promise<VideoList | null> => {
   const data = await gqlRequest(
     {
       query: `query($login: String!, $first: Int!) { user(login: $login) { ${OWNER_FIELDS}
-        videos(first: $first, type: ${type}, sort: TIME) { edges { node { ${VIDEO_FIELDS} } } } } }`,
+        videos(first: $first, type: ARCHIVE, sort: TIME) { edges { node { ${VIDEO_FIELDS} } } } } }`,
       variables: { first: Math.min(100, Math.max(1, first)), login: login.toLowerCase() },
     },
     deviceId(),
@@ -106,7 +86,7 @@ export const videosOf = async (
 export const videoById = async (
   id: string,
   red: Fetch = globalFetch,
-): Promise<(VideoCard & { readonly owner: VideoOwner }) | null> => {
+): Promise<VideoDetail | null> => {
   const data = await gqlRequest(
     {
       query: `query($id: ID!) { video(id: $id) { ${VIDEO_FIELDS} owner { ${OWNER_FIELDS} } } }`,
@@ -121,48 +101,15 @@ export const videoById = async (
   return card === null || owner === null ? null : { ...card, owner }
 }
 
-const VOD_TOKEN_QUERY = `query($id: ID!) {
-  videoPlaybackAccessToken(id: $id, params: {platform: "web", playerBackend: "mediaplayer", playerType: "site"}) { value signature }
-}`
-
-const vodToken = async (id: string, red: Fetch) =>
-  tokenOf(
-    pick(
-      await gqlRequest({ query: VOD_TOKEN_QUERY, variables: { id } }, deviceId(), red),
-      "data",
-      "videoPlaybackAccessToken",
-    ),
-  )
-
 // La lista maestra del vídeo en usher, con su token de invitado: se le da a hls.js (o a Media3) tal cual. Los VOD solo
 // para suscriptores no se pueden ver así: usher contesta 403.
 export const vodMasterUrl = async (id: string, red: Fetch = globalFetch): Promise<string> => {
-  const token = await vodToken(id, red)
+  const token = await vodToken(id, deviceId(), red)
   if (token === null) throw new Error("sin token del vídeo")
-  const params = new URLSearchParams({
-    allow_source: "true",
-    p: String(Math.floor(Math.random() * 1e7)),
-    platform: "web",
-    player_backend: "mediaplayer",
-    playlist_include_framerate: "true",
-    sig: token.signature,
-    supported_codecs: "h264",
-    token: token.value,
-  })
-  return `https://usher.ttvnw.net/vod/${id}.m3u8?${params}`
+  return vodMasterOf(id, token)
 }
 
-// Las miniaturas de la barra: hojas de cols × rows imágenes, una cada «interval» s. La de más calidad.
-export type Storyboard = {
-  readonly cols: number
-  readonly rows: number
-  readonly width: number
-  readonly height: number
-  readonly interval: number
-  readonly count: number
-  readonly sheets: readonly string[]
-}
-
+// Las miniaturas de la barra (Storyboard, en @goodttv/contratos): la de más calidad.
 export const storyboardOf = async (
   url: string,
   red: Fetch = globalFetch,
@@ -241,9 +188,9 @@ export const commentsFrom = async (
   return (Array.isArray(edges) ? edges : [])
     .map((edge): VideoComment | null => {
       const node = pick(edge, "node")
-      const commentId = text(pick(node, "id"))
-      const userId = text(pick(node, "commenter", "id"))
-      const login = text(pick(node, "commenter", "login"))
+      const commentId = textOf(pick(node, "id"))
+      const userId = textOf(pick(node, "commenter", "id"))
+      const login = textOf(pick(node, "commenter", "login"))
       if (commentId === null || userId === null || login === null) return null
       const fragments = pick(node, "message", "fragments")
       const badges = pick(node, "message", "userBadges")
@@ -254,10 +201,10 @@ export const commentsFrom = async (
             version: String(pick(badge, "version") ?? ""),
           }))
           .filter((badge) => badge.setId !== ""),
-        color: text(pick(node, "message", "userColor")),
-        displayName: text(pick(node, "commenter", "displayName")) ?? login,
+        color: textOf(pick(node, "message", "userColor")),
+        displayName: textOf(pick(node, "commenter", "displayName")) ?? login,
         fragments: (Array.isArray(fragments) ? fragments : []).map((fragment) => ({
-          emoteId: text(pick(fragment, "emote", "emoteID")),
+          emoteId: textOf(pick(fragment, "emote", "emoteID")),
           text: String(pick(fragment, "text") ?? ""),
         })),
         id: commentId,
@@ -274,7 +221,7 @@ export const commentsFrom = async (
 // legible o la petición falla), se da por visible, como antes.
 const guestCanWatch = async (id: string, red: Fetch): Promise<boolean> => {
   try {
-    const token = await vodToken(id, red)
+    const token = await vodToken(id, deviceId(), red)
     if (token === null) return true
     const restricted = pick(JSON.parse(token.value), "chansub", "restricted_bitrates")
     return !Array.isArray(restricted) || restricted.length === 0
@@ -283,15 +230,9 @@ const guestCanWatch = async (id: string, red: Fetch): Promise<boolean> => {
   }
 }
 
-// La emisión en curso de un canal y su VOD (DVR-1, retroceder el directo): cuándo empezó y el vídeo que la graba, si el
-// canal guarda sus emisiones y se pueden ver sin suscripción (si no, retroceder abriría un VOD que no se puede ver).
-// null si no emite.
-export type LiveArchive = {
-  readonly startedAt: string // ISO, cuándo empezó la emisión
-  readonly archiveId: string | null
-  readonly recordedAt: string | null // ISO, cuándo empezó a grabarse el VOD
-}
-
+// La emisión en curso de un canal y su VOD (DVR-1, retroceder el directo; LiveArchive, en @goodttv/contratos): cuándo
+// empezó y el vídeo que la graba, si el canal guarda sus emisiones y se pueden ver sin suscripción (si no, retroceder
+// abriría un VOD que no se puede ver). null si no emite.
 export const liveArchive = async (
   login: string,
   red: Fetch = globalFetch,
@@ -305,14 +246,13 @@ export const liveArchive = async (
     red,
   )
   const stream = pick(data, "data", "user", "stream")
-  const startedAt = text(pick(stream, "createdAt"))
+  const startedAt = textOf(pick(stream, "createdAt"))
   if (startedAt === null) return null
-  const id = text(pick(stream, "archiveVideo", "id"))
-  const archiveId =
-    id !== null && /^\d{1,20}$/.test(id) && (await guestCanWatch(id, red)) ? id : null
+  const id = textOf(pick(stream, "archiveVideo", "id"))
+  const archiveId = id !== null && NUMERIC_ID.test(id) && (await guestCanWatch(id, red)) ? id : null
   return {
     archiveId,
-    recordedAt: text(pick(stream, "archiveVideo", "recordedAt")),
+    recordedAt: textOf(pick(stream, "archiveVideo", "recordedAt")),
     startedAt,
   }
 }

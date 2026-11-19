@@ -11,13 +11,32 @@ that removes the ads, the account and the chat.
 
 | App | For | Status |
 | --- | --- | --- |
-| [Browser](#browser) (`apps/navegador`) | Chrome, Chromium, Firefox and Zen, with mouse and keyboard | 0.5.1 |
-| [Android](#android) (`apps/android`) | Phones with Android 13 or later | 0.5.0, experimental |
-| [TV](#tv) (`apps/tv`) | A Linux mini PC connected to the TV, with a remote | 0.5.1, no longer tested on a real TV |
+| [Browser](#browser) (`apps/navegador`) | Chrome, Chromium, Firefox and Zen, with mouse and keyboard | 0.6.0 |
+| [Android](#android) (`apps/android`) | Phones with Android 13 or later | 0.6.0, experimental |
+| [TV](#tv) (`apps/tv`) | A Linux mini PC connected to the TV, with a remote | 0.6.0, no longer tested on a real TV and not getting new features for now |
 
 All three come in English and Spanish: they follow your system, and you can change it in the settings.
 
 ![Extension: a channel with its controls on top of the video, its card and chat; on the left, followed channels that are live](docs/media/escritorio-canal.jpg)
+
+## New in 0.6.0
+
+- **Categories:** a directory of the most watched categories, with their viewers and their live streams, in all three
+  apps: at the top in the extension, a button in the Home bar on Android, and a tab on the TV. In the extension, the
+  list of followed channels now shows each channel's category at any window width, with a shorter viewer count.
+- **Every tab plays its own sound** in the extension, like twitch.tv: one tab no longer silences the others. A tab you
+  open without looking at it waits until you do.
+- **Much less memory** in the extension and on the TV: the live player lets go of what you have already watched after
+  30 seconds. With one channel at 1080p60 that is about 160 MB less, and with four in the grid, about 630 MB less. The
+  extension also stops writing everything you watch to the browser's disk cache (around 3 GB an hour at 1080p60).
+- **"Retry" when a live stream gets stuck,** in the extension and on the TV. The picture used to freeze with no
+  message, and you had to leave the channel and come back.
+- **Android:** chat disconnects while the screen is off and comes back when you turn it on, and the app's page is half
+  the size. Measured on the phone against 0.5.0: channels open just as fast, with no stalls or dropped frames.
+- **The TV app no longer carries the official Twitch player as a fallback,** nor "Twitch controls". If its own player
+  fails, it says so and offers "Retry". The TV app is not getting new features for now.
+- **Smaller things:** with a player menu open, Esc only closes it, in a video too; "Popular" comes from the same place
+  with or without an account; and profile pictures are fetched at the size they are drawn.
 
 ## New in 0.5.1
 
@@ -69,7 +88,7 @@ lasts. There are three delay modes: Adaptive (the default), No stalls and Live. 
 picture, so they stay roughly in step.
 
 In the extension, across several channels and 12 starts, the first frame arrives in 0.86 s (median) and 0.06 % of
-frames are dropped, with no stalls ([details](docs/verificacion.md#rendimiento-del-reproductor-propio), in Spanish).
+frames are dropped, with no stalls ([details](docs/verificacion/hasta-0.2.0.md#rendimiento-del-reproductor-propio), in Spanish).
 
 ## Browser
 
@@ -92,8 +111,8 @@ Firefox.
 - **VODs** below each channel. They open in the best quality your connection allows, pick up 5 s before where you
   left off, and show their chat in step with the picture.
 - **"Siguiendo"** on a channel you follow. Following and unfollowing open twitch.tv: Twitch's API no longer allows it.
-- **Several tabs**, each with its own channel. Only the last one you looked at plays sound; the others wait, and coming
-  back takes about 0.1 s during the first few minutes.
+- **Categories:** the most watched on Twitch right now, with their viewer counts, and the streams of each one.
+- **Several tabs**, each with its own channel and its own sound, as on twitch.tv: they keep playing when you look away.
 - **Starts sooner** when the mouse rests on a channel: it gets it ready.
 - **"Abrir en GoodTTV"** (open in GoodTTV) in the context menu of twitch.tv links.
 
@@ -101,11 +120,11 @@ Firefox.
 
 **Install:** it is not in the stores. Download it from the
 [releases](https://github.com/mateozariquiey/GoodTTV/releases).
-- **Zen** (and Firefox Developer Edition or Nightly), with `goodttv-0.5.1.xpi`: in `about:config`, set
+- **Zen** (and Firefox Developer Edition or Nightly), with `goodttv-0.6.0.xpi`: in `about:config`, set
   `xpinstall.signatures.required` to `false`. Then, in `about:addons`, gear menu → "Install Add-on From File…".
 - **Firefox:** it only accepts unsigned add-ons temporarily: `about:debugging` → "This Firefox" → "Load Temporary
   Add-on…" and the `.xpi`. It is removed when Firefox closes.
-- **Chrome and Chromium,** on Windows too, with `goodttv-0.5.1-chrome.zip`:
+- **Chrome and Chromium,** on Windows too, with `goodttv-0.6.0-chrome.zip`:
   1. Unzip it into a folder you will keep.
   2. In `chrome://extensions`, turn on "Developer mode" (top right).
   3. Click "Load unpacked" and choose that folder.
@@ -120,8 +139,8 @@ To build it, `bun run build:navegador` (the extension ends up in `apps/navegador
 
 ## Android
 
-**Experimental.** The same ad removal, account and chat, with screens made for touch: Home, search, the channel with
-its chat and videos, VODs and rewinding live. Video plays with Android's own player (Media3) and keeps going with the
+**Experimental.** The same ad removal, account and chat, with screens made for touch: Home, search, the most watched categories, the
+channel with its chat and videos, VODs and rewinding live. Video plays with Android's own player (Media3) and keeps going with the
 screen off, audio only to save data, with its controls in the notification, on the lock screen and on headphones. As
 in Twitch's app, a channel you leave keeps playing in a corner, swiping down on the video goes back, and leaving the
 app turns it into picture-in-picture.
@@ -134,11 +153,11 @@ app turns it into picture-in-picture.
 It has been tested on one phone only (a Galaxy S25 Ultra with Android 17). Whether chat stays in step with the picture
 has been checked by eye, not measured.
 
-**Install** (Android 13 or later): download `GoodTTV-0.5.0.apk` from the
-[0.5.0 release](https://github.com/mateozariquiey/GoodTTV/releases/tag/v0.5.0) on the phone and open it. Android will ask you to allow
+**Install** (Android 13 or later): download `GoodTTV-0.6.0.apk` from the
+[0.6.0 release](https://github.com/mateozariquiey/GoodTTV/releases/tag/v0.6.0) on the phone and open it. Android will ask you to allow
 installing apps from the browser or the file manager, and Play Protect may warn that it does not know the developer.
 New versions install over the old one and keep your account, because they are signed with the same key. From a
-computer, `adb install -r GoodTTV-0.5.0.apk` does the same. The signing certificate's SHA-256 fingerprint is
+computer, `adb install -r GoodTTV-0.6.0.apk` does the same. The signing certificate's SHA-256 fingerprint is
 `38:CF:EA:F9:1C:2F:8C:C4:B8:35:27:11:BD:77:7F:56:0E:A8:D5:4F:87:37:C4:91:6C:B6:BA:C8:27:32:5A:D6` (`apksigner verify --print-certs` shows it).
 
 To build it you need the Android SDK and JDK 21: see [apps/android/README.md](apps/android/README.md) (in Spanish).
@@ -146,13 +165,13 @@ To build it you need the Android SDK and JDK 21: see [apps/android/README.md](ap
 ## TV
 
 Made to be used from the couch on a Linux mini PC with a small remote: arrows, OK, Back and Play/Pause. Watch the live
-channels you follow, search for channels (also without an account), and read chat with 7TV, BTTV, FFZ and Twitch emotes.
+channels you follow, search for channels (also without an account), browse the most watched categories, and read chat with 7TV, BTTV, FFZ and Twitch emotes.
 In English or Spanish. The VODs, rewinding and writing in chat of the other apps are not here.
 
 **Status:** since October 2026 it no longer runs on a real TV. It is still built and checked with the automated tests
 (unit and end-to-end, in Electron), but nobody uses it day to day. 0.2.2 was the last version tested on the mini PC with
 its remote: HDMI audio, hardware video decoding (VA-API), the remote and readability from 3 m
-([details](docs/verificacion.md#en-el-mini-pc-la-tv-y-el-mando), in Spanish).
+([details](docs/verificacion/0.2.1-0.2.3.md#en-el-mini-pc-la-tv-y-el-mando), in Spanish).
 
 ![TV home: followed channels that are live and a preview of the focused one](docs/media/inicio.jpg)
 
@@ -163,8 +182,8 @@ From 0.1.0, with Twitch's official player: [playback](docs/media/reproduccion.jp
 - **Guide-style home:** on the left, the channels you follow that are live, then the ones you watched recently and
   popular streams; on the right, a large preview of the focused one.
 - **Its own ad-free player,** full height, with chat on the right. The title and controls appear when you press a key
-  and hide by themselves. ↑/↓ switch channel without leaving playback, and Play/Pause always works. If it fails, you can
-  switch to Twitch's official player.
+  and hide by themselves. ↑/↓ switch channel without leaving playback, and Play/Pause always works. If it fails, it
+  says so and offers to try again.
 - **Search** with an on-screen keyboard driven by the remote; a physical keyboard works too.
 - **Back keeps your place:** leaving playback returns focus to the channel you came from.
 - **Account linking from your phone,** with a QR code or a Twitch code. It only asks for read access: your follows and
@@ -183,7 +202,7 @@ x86_64) and run it; it starts full screen and needs `libfuse2`. To build it:
 ```bash
 bun install --frozen-lockfile
 bun run build && bun run start   # in a window, for testing
-bun run package:appimage         # apps/tv/dist/GoodTTV-0.5.1-x86_64.AppImage
+bun run package:appimage         # apps/tv/dist/GoodTTV-0.6.0-x86_64.AppImage
 ```
 
 ## The code
@@ -215,10 +234,9 @@ The design documents are in Spanish: [architecture](docs/arquitectura.md), [deci
 
 GoodTTV started as a variant of [VacuumStream](https://github.com/eliottness/VacuumStream) 0.2.1 by Eliott Bouhana,
 MIT licensed. This repository keeps its full history. From VacuumStream, the TV app keeps:
-- the main process and its security model: isolation, verified IPC and a local HTTPS server with a pinned
-  certificate;
+- the main process and its security model: isolation and verified IPC;
 - code-based sign-in and the token store;
-- the Helix adapter and the Twitch SDK loader;
+- the Helix adapter;
 - the spatial focus algorithm and packaging with electron-builder.
 
 The rest is GoodTTV's own: the TV, desktop and phone interfaces, chat with third-party emotes, the ad-free player, the

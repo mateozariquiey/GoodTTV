@@ -1,46 +1,30 @@
+import { pageStorage, readStored, writeStored } from "@goodttv/interfaz"
+
 // Lo que no es pantalla de la cuadrícula (EXT-6): si está activada, qué canales lleva y qué directo atiende a cada uno.
 // Se activa en Ajustes; sin activarla, nada cambia.
 export const MAX_CELLS = 4
+// Lo que tarda una cuadrícula oculta en parar las celdas que no se oyen (GridView). El laboratorio lo acorta (?esperas=,
+// lab.ts).
+export const WAITS = { hiddenMs: 60_000 }
 
 const ENABLED_KEY = "cuadricula"
 // Los de la última cuadrícula y el que suena, por pestaña: cada pestaña tiene los suyos, y sobreviven a recargar.
 const LAST_KEY = "cuadricula-ultima"
 const ACTIVE_KEY = "cuadricula-activa"
 
-const storageOf = (session = false): Storage | undefined => {
-  try {
-    return session ? globalThis.sessionStorage : globalThis.localStorage
-  } catch {
-    return undefined
-  }
-}
-const read = (key: string, storage: Storage | undefined): string | null => {
-  try {
-    return storage?.getItem(key) ?? null
-  } catch {
-    return null
-  }
-}
-const write = (key: string, value: string, storage: Storage | undefined): void => {
-  try {
-    storage?.setItem(key, value)
-  } catch {
-    // Sin sitio: vale hasta recargar.
-  }
-}
+export const gridEnabled = (storage = pageStorage()): boolean =>
+  readStored(ENABLED_KEY, storage) === "1"
+export const setGridEnabled = (on: boolean, storage = pageStorage()): void =>
+  writeStored(ENABLED_KEY, on ? "1" : "0", storage)
 
-export const gridEnabled = (storage = storageOf()): boolean => read(ENABLED_KEY, storage) === "1"
-export const setGridEnabled = (on: boolean, storage = storageOf()): void =>
-  write(ENABLED_KEY, on ? "1" : "0", storage)
-
-export const lastGrid = (storage = storageOf(true)): readonly string[] =>
-  (read(LAST_KEY, storage) ?? "").split(",").filter((login) => login !== "")
-export const rememberGrid = (logins: readonly string[], storage = storageOf(true)): void =>
-  write(LAST_KEY, logins.join(","), storage)
-export const lastActive = (storage = storageOf(true)): string | undefined =>
-  read(ACTIVE_KEY, storage) ?? undefined
-export const rememberActive = (login: string, storage = storageOf(true)): void =>
-  write(ACTIVE_KEY, login, storage)
+export const lastGrid = (storage = pageStorage(true)): readonly string[] =>
+  (readStored(LAST_KEY, storage) ?? "").split(",").filter((login) => login !== "")
+export const rememberGrid = (logins: readonly string[], storage = pageStorage(true)): void =>
+  writeStored(LAST_KEY, logins.join(","), storage)
+export const lastActive = (storage = pageStorage(true)): string | undefined =>
+  readStored(ACTIVE_KEY, storage) ?? undefined
+export const rememberActive = (login: string, storage = pageStorage(true)): void =>
+  writeStored(ACTIVE_KEY, login, storage)
 
 // Los canales al entrar en la cuadrícula: la de antes si se viene de ella («Ver solo» y vuelta) o de fuera de un canal;
 // desde otro canal, ese.

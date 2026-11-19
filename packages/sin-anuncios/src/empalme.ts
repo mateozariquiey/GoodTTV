@@ -44,7 +44,6 @@ type Session = {
   readonly device: string
   readonly priority: number
   readonly type: string
-  ads: number
   backoff: number
   changedAt: number
   live: Map<number, LiveEntry>
@@ -70,7 +69,6 @@ export type Published = {
 
 type Fill = {
   readonly alive: () => boolean
-  readonly since: number
   anchor: { readonly pdtMs: number; readonly time: number }
   cursor: number
   lastVodAt: number
@@ -179,10 +177,7 @@ export class Empalme {
   private nextSeq: number | null = null // siguiente índice común por publicar
   private discontinuities = 0
   private readonly out: Published[] = []
-  private readonly urls = new Map<
-    number,
-    { readonly host: string; readonly path: string; readonly type: string }
-  >()
+  private readonly urls = new Map<number, { readonly path: string; readonly type: string }>()
   private readonly published = new Map<number, string>()
   // Reloj común: el PDT de cada sesión se desplaza con sus anuncios y deriva algo incluso sin ellos; se mide cada
   // sesión contra una de referencia sobre el mismo índice (encadenar medidas hace que se corrijan sin fin), que solo
@@ -213,7 +208,6 @@ export class Empalme {
   constructor(options: EmpalmeOptions) {
     this.channel = options.channel
     this.sessions = (options.sources ?? SOURCES).map((type, priority) => ({
-      ads: 0,
       backoff: 0,
       changedAt: Date.now(),
       device: deviceId(),
@@ -593,7 +587,6 @@ export class Empalme {
     const wasAd = session.state === "anuncio"
     session.state = last?.ad === true ? "anuncio" : "directo"
     if (session.state === "anuncio" && !wasAd) {
-      session.ads++
       this.log({ ev: "anuncio", type: session.type })
       if (this.clockRef === session.type) this.moveClockRef()
     } else if (wasAd && session.state === "directo")
@@ -669,13 +662,13 @@ export class Empalme {
 
   // Contraste por ruta (sin host ni consulta) y medida del reloj de la sesión contra la de referencia.
   private acceptsSegment(session: Session, segment: MediaSegment, index: number): boolean {
-    const { host, pathname } = new URL(segment.url)
+    const { pathname } = new URL(segment.url)
     const known = this.urls.get(index)
     if (known !== undefined && known.path !== pathname) {
       this.log({ ev: "url-distinta", index, otra: known.type, type: session.type })
       return false
     }
-    if (known === undefined) this.urls.set(index, { host, path: pathname, type: session.type })
+    if (known === undefined) this.urls.set(index, { path: pathname, type: session.type })
     const pdt = segment.pdt === null ? null : Date.parse(segment.pdt)
     if (pdt !== null) {
       this.clockRef ??= session.type
@@ -890,7 +883,6 @@ export class Empalme {
       aheadSince: null,
       probed: null,
       published: 0,
-      since: Date.now(),
       vodOffset: null,
     }
     this.filling = fill

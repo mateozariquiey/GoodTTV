@@ -17,7 +17,6 @@ export default defineConfig({
       input: {
         fondo: src("fondo.ts"),
         goodttv: src("goodttv.html"),
-        reproductor: src("reproductor.html"),
       },
       output: {
         entryFileNames: (chunk) =>

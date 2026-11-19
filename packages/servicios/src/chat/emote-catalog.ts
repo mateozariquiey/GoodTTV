@@ -212,6 +212,10 @@ export class EmoteCatalog {
     if (!/^[0-9]{1,20}$/.test(twitchUserId)) return Promise.resolve([])
     const cached = this.#channels.get(twitchUserId)
     if (cached !== undefined && this.#now() - cached.at < CHANNEL_TTL_MS) return cached.emotes
+    // Lo caducado de los canales que ya no se ven se suelta: una pestaña abierta días no los guarda todos.
+    for (const [id, entry] of this.#channels) {
+      if (this.#now() - entry.at >= CHANNEL_TTL_MS) this.#channels.delete(id)
+    }
     const emotes = this.#collect([
       this.#load(`https://7tv.io/v3/users/twitch/${twitchUserId}`, (value) =>
         fromSevenTv(SevenTvUserSchema.parse(value).emote_set?.emotes ?? []),

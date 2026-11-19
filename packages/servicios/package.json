@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "@goodttv/contratos": "workspace:*",
+    "@goodttv/sin-anuncios": "workspace:*",
     "ky": "2.1.0",
     "zod": "4.6.7"
   }

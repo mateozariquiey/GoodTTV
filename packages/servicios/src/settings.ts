@@ -7,7 +7,7 @@ import { type ClientId, ClientIdSchema } from "@goodttv/contratos"
 export const PROJECT_CLIENT_ID = "q5asa7tpmoateti374pbjyfepb5gnx"
 
 export type PublicSettings = {
-  readonly clientId: ClientId | ""
+  readonly clientId: ClientId
 }
 
 // Where each version reads its settings from (the TV app: src/main/settings-store.ts).
@@ -18,10 +18,10 @@ export interface SettingsSource {
 export const resolveClientId = (
   runtime: string | undefined,
   builtIn: string | undefined,
-): ClientId | "" => {
-  for (const candidate of [runtime, builtIn, PROJECT_CLIENT_ID]) {
+): ClientId => {
+  for (const candidate of [runtime, builtIn]) {
     const parsed = ClientIdSchema.safeParse(candidate)
     if (parsed.success) return parsed.data
   }
-  return ""
+  return ClientIdSchema.parse(PROJECT_CLIENT_ID)
 }

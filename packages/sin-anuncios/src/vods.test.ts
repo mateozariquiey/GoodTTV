@@ -35,7 +35,6 @@ describe("videosOf", () => {
             edges: [
               {
                 node: {
-                  broadcastType: "ARCHIVE",
                   createdAt: "2026-10-18T17:34:21Z",
                   game: { displayName: "League of Legends" },
                   id: "2904365699",
@@ -63,7 +62,6 @@ describe("videosOf", () => {
     expect(result?.videos.map((video) => video.id)).toEqual(["2904365699", "2"])
     expect(result?.videos[0]).toMatchObject({
       category: "League of Legends",
-      kind: "archive",
       seconds: 11919,
     })
     expect(result?.videos[1]?.thumbnail).toBeNull()

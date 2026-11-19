@@ -1,7 +1,6 @@
-import type { LatencyMode, PreferencesPatch, Storyboard, VideoDetail } from "@goodttv/contratos"
+import type { LatencyMode, PreferencesPatch } from "@goodttv/contratos"
 import {
   chosenLiveQuality,
-  chosenVolume,
   formatAgo,
   formatClock,
   formatViewers,
@@ -9,44 +8,46 @@ import {
   prewarmStream,
   t,
   useReplayChat,
+  useStoryboard,
+  useVodDetail,
   useWatchTime,
-  vodDetail,
 } from "@goodttv/interfaz"
 import {
   ArrowCounterClockwiseIcon,
   ArrowSquareOutIcon,
-  ArrowsInLineHorizontalIcon,
-  ArrowsOutLineHorizontalIcon,
-  ChatTextIcon,
-  CornersInIcon,
-  CornersOutIcon,
   PauseIcon,
   PlayIcon,
-  SpeakerHighIcon,
-  SpeakerSimpleXIcon,
 } from "@phosphor-icons/react"
-import { type CSSProperties, useCallback, useEffect, useRef, useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 import { Avatar } from "./Avatar"
 import { ChatPanel } from "./ChatPanel"
 import { useFullscreen } from "./fullscreen"
 import { PictureInPictureButton } from "./PictureInPictureButton"
-import { navigate } from "./routes"
+import {
+  ChatButton,
+  ControlsMenu,
+  FullscreenButton,
+  TheaterButton,
+  useControlsAwake,
+  useSurfaceClicks,
+  useVolume,
+  VolumeControl,
+} from "./PlayerControls"
+import { navigate, routeHash } from "./routes"
 import { SeekBar } from "./SeekBar"
 import { SKIP_S, SkipButton } from "./SkipButton"
 import { contextOf, sideArrowsFree } from "./shortcuts"
-import { SoundElsewhere, useSoleSound } from "./sonido"
 import { useVodPlayer } from "./useVodPlayer"
 import { ChannelVideos } from "./Videos"
+import { usePageSeen } from "./visibilidad"
 
 // Un VOD (VOD-1): como un canal en directo, con la barra para moverse por el vídeo (con sus miniaturas al pasar el
 // ratón), la velocidad, la calidad y el chat del vídeo a la par de la imagen. Reanuda donde se dejó y lo dice, con la
 // opción de empezar desde el principio. Atajos como en YouTube: Espacio o K, J y L o ← → (10 s), 0-9 (a ese décimo),
 // M, F, T y C.
 
-const IDLE_MS = 3000
 const RESUMED_MS = 8000
 const RATES = [0.5, 0.75, 1, 1.25, 1.5, 2] as const
-const DOUBLE_CLICK_MS = 220
 const WARM_PING_MS = 20_000 // retrocediendo un directo, su empalme se mantiene caliente para volver rápido
 
 type Props = {
@@ -62,12 +63,6 @@ type Props = {
   readonly theater: boolean
 }
 
-type Loaded =
-  | { readonly kind: "loading" }
-  | { readonly kind: "missing" }
-  | { readonly kind: "error" }
-  | { readonly kind: "ready"; readonly video: VideoDetail }
-
 export const VodView = ({
   at,
   chatVisible,
@@ -79,30 +74,14 @@ export const VodView = ({
   scale,
   theater,
 }: Props) => {
-  const [loaded, setLoaded] = useState<Loaded>({ kind: "loading" })
-  const [attempt, setAttempt] = useState(0)
-  // biome-ignore lint/correctness/useExhaustiveDependencies: «attempt» vuelve a pedirlo.
+  const { load: loaded, retry: retryDetail } = useVodDetail(id)
+  // La lista maestra, a la vez que los datos del vídeo (también al reintentar). Los dos suelen estar ya pedidos
+  // (vod-cache.ts): al pasar el ratón por su tarjeta o, retrocediendo un directo, al ver el canal. Android no la pide:
+  // la pide su reproductor.
+  const loading = loaded.kind === "loading"
   useEffect(() => {
-    if (window.api.vods === undefined) {
-      setLoaded({ kind: "error" })
-      return undefined
-    }
-    let active = true
-    setLoaded({ kind: "loading" })
-    // La lista maestra, a la vez que los datos del vídeo. Los dos suelen estar ya pedidos (vod-cache.ts): al pasar el
-    // ratón por su tarjeta o, retrocediendo un directo, al ver el canal.
-    prefetchVod(id)
-    vodDetail(id)
-      .then((video) => {
-        if (active) setLoaded(video === null ? { kind: "missing" } : { kind: "ready", video })
-      })
-      .catch(() => {
-        if (active) setLoaded({ kind: "error" })
-      })
-    return () => {
-      active = false
-    }
-  }, [attempt, id])
+    if (loading && window.api.vods !== undefined) prefetchVod(id)
+  }, [id, loading])
 
   const video = loaded.kind === "ready" ? loaded.video : null
   const [start, setStart] = useState<number | null>(null)
@@ -114,7 +93,15 @@ export const VodView = ({
   // Retrocediendo un directo: desde el segundo pedido, y sin guardarlo como vídeo a medias.
   // Al retroceder un directo, en la calidad elegida en él (si no es la automática).
   const liveQuality = live === undefined ? null : chosenLiveQuality()
-  const player = useVodPlayer(surface, video, start ?? at ?? null, live === undefined, liveQuality)
+  // Cada pestaña suena por su cuenta (D48). Abierta sin verse, espera a que se mire (visibilidad.ts).
+  const seen = usePageSeen()
+  const player = useVodPlayer(
+    surface,
+    seen ? video : null,
+    start ?? at ?? null,
+    live === undefined,
+    liveQuality,
+  )
   const goLive = useCallback(() => {
     if (live !== undefined) navigate({ login: live, view: "channel" })
   }, [live])
@@ -126,60 +113,10 @@ export const VodView = ({
     return () => clearInterval(timer)
   }, [latencyMode, live])
   const { state } = player
-  // Con varias pestañas suena una sola (EXT-5), también con un VOD: en silencio, sin sonido; parada, en pausa (un VOD
-  // no se escapa como un directo), y al volver sigue.
-  const sole = useSoleSound(`vod:${id}`, true)
-  const { claim, standby } = sole
   // Ver sus VOD también cuenta para ordenar tus seguidos por los que más ves.
-  useWatchTime(video?.owner.login, state.playing && standby === "no")
-  const { pause: pausePlayback, play: resumePlayback, setMuted } = player
-  const mutedNow = useRef(state.muted)
-  mutedNow.current = state.muted
-  const playingNow = useRef(state.playing)
-  playingNow.current = state.playing
-  const mutedBefore = useRef<boolean | null>(null)
-  const pausedBySound = useRef(false)
-  useEffect(() => {
-    if (standby === "no") {
-      if (mutedBefore.current !== null) setMuted(mutedBefore.current)
-      mutedBefore.current = null
-      if (pausedBySound.current) resumePlayback()
-      pausedBySound.current = false
-      return
-    }
-    mutedBefore.current ??= mutedNow.current
-    setMuted(true)
-    if (standby === "parado" && playingNow.current) {
-      pausedBySound.current = true
-      pausePlayback()
-    }
-  }, [pausePlayback, resumePlayback, setMuted, standby])
-  // Como en un directo (ChannelView): con el silencio o el volumen, lo que elija la persona.
-  const takeSound = useCallback(
-    (choosing = false) => {
-      if (standby === "no") return
-      if (choosing) mutedBefore.current = null
-      claim()
-    },
-    [claim, standby],
-  )
+  useWatchTime(video?.owner.login, state.playing)
 
-  const [storyboard, setStoryboard] = useState<Storyboard | null>(null)
-  useEffect(() => {
-    setStoryboard(null)
-    const url = video?.storyboard
-    if (url == null || window.api.vods === undefined) return undefined
-    let active = true
-    window.api.vods
-      .storyboard(url)
-      .then((board) => {
-        if (active) setStoryboard(board)
-      })
-      .catch(() => undefined)
-    return () => {
-      active = false
-    }
-  }, [video])
+  const storyboard = useStoryboard(video)
 
   const onWindowChat = useCallback(
     (on: boolean) => onPreferences({ chatVisible: on }),
@@ -192,18 +129,8 @@ export const VodView = ({
   )
   const chat = useReplayChat(video?.id, video?.owner.id, state.time, chatShown)
 
-  // Controles a la vista al mover el ratón, y siempre en pausa o con un menú abierto.
-  const [awake, setAwake] = useState(true)
-  const idleTimer = useRef<ReturnType<typeof setTimeout>>(undefined)
-  const wake = useCallback(() => {
-    setAwake(true)
-    clearTimeout(idleTimer.current)
-    idleTimer.current = setTimeout(() => setAwake(false), IDLE_MS)
-  }, [])
-  useEffect(() => {
-    wake()
-    return () => clearTimeout(idleTimer.current)
-  }, [wake])
+  // Controles a la vista al mover el ratón, y siempre en pausa o con un menú abierto (PlayerControls.tsx).
+  const { awake, sleep, wake } = useControlsAwake()
   const [menu, setMenu] = useState<"rate" | "quality" | null>(null)
   const showControls = awake || !state.playing || menu !== null
 
@@ -216,27 +143,11 @@ export const VodView = ({
     return () => clearTimeout(timer)
   }, [state.resumedFrom])
 
-  const [volume, setVolumeState] = useState(() => chosenVolume().volume)
   const { setVolume, toggleMuted, toggle, skip, seek } = player
-  const changeVolume = (next: number): void => {
-    takeSound(true)
-    const value = Math.min(1, Math.max(0, next))
-    setVolumeState(value)
-    setVolume(value)
-  }
+  const [volume, changeVolume] = useVolume(setVolume)
 
-  const clickTimer = useRef<ReturnType<typeof setTimeout>>(undefined)
-  const clickTookSound = useRef(false)
-  const onSurfaceClick = (): void => {
-    if (clickTookSound.current) return // ver onPointerDownCapture
-    clearTimeout(clickTimer.current)
-    clickTimer.current = setTimeout(toggle, DOUBLE_CLICK_MS)
-  }
-  const onSurfaceDoubleClick = (): void => {
-    clearTimeout(clickTimer.current)
-    toggleFullscreen()
-  }
-  useEffect(() => () => clearTimeout(clickTimer.current), [])
+  // Un clic pausa; dos, pantalla completa.
+  const surfaceClicks = useSurfaceClicks(toggle, toggleFullscreen)
 
   const duration = state.duration > 0 ? state.duration : (video?.seconds ?? 0)
   // Retrocediendo un directo, avanzar más allá de lo grabado lleva al directo.
@@ -253,7 +164,6 @@ export const VodView = ({
       const context = contextOf(event.target)
       if (context.typing) return
       const key = event.key.length === 1 ? event.key.toLowerCase() : event.key
-      if ((key === " " && !context.onControl) || key === "k" || key === "m") takeSound(key === "m")
       if ((key === " " && !context.onControl) || key === "k") toggle()
       else if (key === "j" || (key === "ArrowLeft" && sideArrowsFree(context))) skipBy(-SKIP_S)
       else if (key === "l" || (key === "ArrowRight" && sideArrowsFree(context))) skipBy(SKIP_S)
@@ -279,7 +189,6 @@ export const VodView = ({
     onTheater,
     seek,
     skipBy,
-    takeSound,
     theater,
     toggle,
     toggleChat,
@@ -301,11 +210,7 @@ export const VodView = ({
                 : t("No se pudo cargar el vídeo.")}
             </p>
             {loaded.kind === "error" ? (
-              <button
-                className="button button--primary"
-                onClick={() => setAttempt((value) => value + 1)}
-                type="button"
-              >
+              <button className="button button--primary" onClick={retryDetail} type="button">
                 {t("Reintentar")}
               </button>
             ) : null}
@@ -315,7 +220,6 @@ export const VodView = ({
     )
   }
 
-  const muted = state.muted || volume === 0
   const quality =
     state.quality === -1
       ? `Auto${state.playingLevel >= 0 ? ` (${state.qualities.find((each) => each.index === state.playingLevel)?.label ?? ""})` : ""}`
@@ -326,26 +230,15 @@ export const VodView = ({
       <div className="watch__main">
         <div
           className={`stage${showControls ? "" : " stage--idle"}`}
-          onPointerDownCapture={(event) => {
-            // Un clic en el vídeo de una ventana en silencio le da el sonido, sin pausarla.
-            clickTookSound.current =
-              standby !== "no" &&
-              event.target instanceof Node &&
-              surface.current?.contains(event.target) === true
-            // En el silencio o el volumen, lo que elija la persona; en lo demás, como estaba.
-            takeSound(
-              event.target instanceof Element && event.target.closest("[data-sonido]") !== null,
-            )
-          }}
-          onPointerLeave={() => setAwake(false)}
+          onPointerLeave={sleep}
           onPointerMove={wake}
         >
           {/* biome-ignore lint/a11y/noStaticElementInteractions: clic y doble clic en el vídeo son atajos del ratón; con el teclado, Espacio y F. */}
           {/* biome-ignore lint/a11y/useKeyWithClickEvents: ídem. */}
           <div
             className="stage__surface"
-            onClick={onSurfaceClick}
-            onDoubleClick={onSurfaceDoubleClick}
+            onClick={surfaceClicks.onClick}
+            onDoubleClick={surfaceClicks.onDoubleClick}
             ref={surface}
           />
           {state.phase === "loading" ? (
@@ -369,7 +262,6 @@ export const VodView = ({
               </span>
             </div>
           ) : null}
-          {standby === "silencio" ? <SoundElsewhere /> : null}
           {resumedShown && state.resumedFrom !== null ? (
             <div className="resumed" role="status">
               {t("Sigues donde lo dejaste ({clock}).", { clock: formatClock(state.resumedFrom) })}
@@ -416,27 +308,11 @@ export const VodView = ({
                 </button>
                 <SkipButton forward={false} onSkip={() => skipBy(-SKIP_S)} />
                 <SkipButton forward onSkip={() => skipBy(SKIP_S)} />
-                <button
-                  aria-label={muted ? t("Quitar el silencio") : t("Silenciar")}
-                  className="icon-button icon-button--light"
-                  data-sonido
-                  onClick={muted && volume === 0 ? () => changeVolume(0.5) : toggleMuted}
-                  title={muted ? t("Quitar el silencio (M)") : t("Silenciar (M)")}
-                  type="button"
-                >
-                  {muted ? <SpeakerSimpleXIcon /> : <SpeakerHighIcon />}
-                </button>
-                <input
-                  aria-label={t("Volumen")}
-                  className="volume"
-                  data-sonido
-                  max={1}
-                  min={0}
-                  onChange={(event) => changeVolume(Number(event.currentTarget.value))}
-                  step={0.01}
-                  style={{ "--level": `${(muted ? 0 : volume) * 100}%` } as CSSProperties}
-                  type="range"
-                  value={muted ? 0 : volume}
+                <VolumeControl
+                  muted={state.muted}
+                  onToggleMuted={toggleMuted}
+                  onVolume={changeVolume}
+                  volume={volume}
                 />
                 <span className="clock">
                   {formatClock(state.time)} / {formatClock(duration)}
@@ -453,7 +329,7 @@ export const VodView = ({
                 )}
               </div>
               <div className="controls__group">
-                <Menu
+                <ControlsMenu
                   label={state.rate === 1 ? "1×" : `${state.rate}×`}
                   onToggle={(open) => setMenu(open ? "rate" : null)}
                   open={menu === "rate"}
@@ -473,9 +349,9 @@ export const VodView = ({
                       {rate === 1 ? "Normal" : `${rate}×`}
                     </button>
                   ))}
-                </Menu>
+                </ControlsMenu>
                 {state.qualities.length > 0 ? (
-                  <Menu
+                  <ControlsMenu
                     label={quality}
                     onToggle={(open) => setMenu(open ? "quality" : null)}
                     open={menu === "quality"}
@@ -495,47 +371,15 @@ export const VodView = ({
                         {each.label}
                       </button>
                     ))}
-                  </Menu>
+                  </ControlsMenu>
                 ) : null}
-                <button
-                  aria-label={chatShown ? t("Ocultar el chat") : t("Mostrar el chat")}
-                  aria-pressed={chatShown}
-                  className="icon-button icon-button--light"
-                  onClick={toggleChat}
-                  title={chatShown ? t("Ocultar el chat (C)") : t("Mostrar el chat (C)")}
-                  type="button"
-                >
-                  <ChatTextIcon />
-                </button>
+                <ChatButton onToggle={toggleChat} shown={chatShown} />
                 <PictureInPictureButton
                   active={player.pictureInPicture}
                   onToggle={player.togglePictureInPicture}
                 />
-                {fullscreen ? null : (
-                  <button
-                    aria-label={t("Modo teatro")}
-                    aria-pressed={theater}
-                    className="icon-button icon-button--light icon-button--toggle"
-                    onClick={() => onTheater(!theater)}
-                    title={t("Modo teatro (T): el vídeo y el chat ocupan la ventana")}
-                    type="button"
-                  >
-                    {theater ? <ArrowsInLineHorizontalIcon /> : <ArrowsOutLineHorizontalIcon />}
-                  </button>
-                )}
-                <button
-                  aria-label={
-                    fullscreen ? t("Salir de la pantalla completa") : t("Pantalla completa")
-                  }
-                  className="icon-button icon-button--light"
-                  onClick={toggleFullscreen}
-                  title={
-                    fullscreen ? t("Salir de la pantalla completa (F)") : t("Pantalla completa (F)")
-                  }
-                  type="button"
-                >
-                  {fullscreen ? <CornersInIcon /> : <CornersOutIcon />}
-                </button>
+                <TheaterButton fullscreen={fullscreen} onTheater={onTheater} theater={theater} />
+                <FullscreenButton fullscreen={fullscreen} onToggle={toggleFullscreen} />
               </div>
             </div>
           </div>
@@ -544,18 +388,22 @@ export const VodView = ({
           <a
             aria-label={t("Ir al canal de {displayName}", { displayName: video.owner.displayName })}
             className="channel-info__avatar"
-            href={`#/canal/${video.owner.login}`}
+            href={routeHash({ login: video.owner.login, view: "channel" })}
             title={t("Ir al canal")}
           >
             <Avatar
               className="avatar avatar--large"
+              size={56}
               name={video.owner.displayName}
               url={video.owner.avatar ?? undefined}
             />
           </a>
           <div className="channel-info__text">
             <h1>
-              <a className="channel-info__link" href={`#/canal/${video.owner.login}`}>
+              <a
+                className="channel-info__link"
+                href={routeHash({ login: video.owner.login, view: "channel" })}
+              >
                 {video.owner.displayName}
               </a>
             </h1>
@@ -595,36 +443,3 @@ export const VodView = ({
     </div>
   )
 }
-
-// Un menú de los controles (velocidad, calidad), como el de calidad del directo.
-const Menu = ({
-  children,
-  label,
-  onToggle,
-  open,
-  title,
-}: {
-  readonly children: React.ReactNode
-  readonly label: string
-  readonly onToggle: (open: boolean) => void
-  readonly open: boolean
-  readonly title: string
-}) => (
-  <div className="quality">
-    <button
-      aria-expanded={open}
-      aria-haspopup="menu"
-      className="quality__button"
-      onClick={() => onToggle(!open)}
-      title={title}
-      type="button"
-    >
-      {label}
-    </button>
-    {open ? (
-      <div className="quality__menu" role="menu">
-        {children}
-      </div>
-    ) : null}
-  </div>
-)

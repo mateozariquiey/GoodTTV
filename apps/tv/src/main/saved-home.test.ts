@@ -18,7 +18,6 @@ const stream = (login: string): StreamCard => ({
   category: "Just Chatting",
   id: `s-${login}`,
   startedAt: "2026-10-16T14:00:00Z",
-  tags: [],
   thumbnailUrl: `https://static-cdn.jtvnw.net/previews-ttv/live_user_${login}-{width}x{height}.jpg`,
   title: `Directo de ${login}`,
   userId: "123",

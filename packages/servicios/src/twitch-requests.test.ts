@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest"
 import {
   createDeviceTokenBody,
-  createLiveSearchParams,
   isAllowedActivationUrl,
   isIdentityCacheCurrent,
   shouldRefreshResponse,
@@ -17,21 +16,6 @@ describe("Twitch request contracts", () => {
 
     // Then Twitch receives the documented scope set
     expect(body.get("scopes")).toBe("user:read:follows user:read:chat")
-  })
-
-  it("maps the language filter to Helix's parameter", () => {
-    expect(createLiveSearchParams({ first: 20, language: "es" })).toEqual({
-      first: 20,
-      language: "es",
-    })
-  })
-
-  it("keeps unfiltered live parameters unchanged", () => {
-    expect(createLiveSearchParams({ first: 20 })).toEqual({ first: 20 })
-    expect(createLiveSearchParams({ after: "cursor", first: 20 })).toEqual({
-      after: "cursor",
-      first: 20,
-    })
   })
 
   it("refreshes only an unauthorized response", () => {

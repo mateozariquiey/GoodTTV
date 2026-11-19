@@ -1,17 +1,18 @@
-import type { VideoCard, VideoList } from "@goodttv/contratos"
+import type { VideoCard } from "@goodttv/contratos"
 import {
   formatAgo,
   formatClock,
-  isSeen,
   prefetchVod,
   prefetchVodMaster,
   t,
-  unfinishedVods,
+  useChannelVods,
   useIdioma,
-  vodProgress,
+  useUnfinishedVods,
+  vodTileProgress,
 } from "@goodttv/interfaz"
 import { FilmStripIcon } from "@phosphor-icons/react"
-import { memo, useEffect, useMemo, useState } from "react"
+import { memo } from "react"
+import { routeHash } from "./routes"
 
 // Los vídeos de un canal (VOD-1 y COL-2): debajo de la ficha del canal, o en su sitio si no está en directo, y debajo
 // de un VOD, los demás del canal. Encima, en una fila, los suyos que tienes a medias. Cada tarjeta dice si ya lo viste o
@@ -27,15 +28,12 @@ export const VideoTile = ({
   readonly video: Pick<VideoCard, "createdAt" | "id" | "seconds" | "thumbnail" | "title"> &
     Partial<Pick<VideoCard, "views">>
 }) => {
-  const progress = vodProgress(video.id)
-  const seen = progress !== undefined && isSeen(progress)
-  const ratio =
-    progress === undefined || seen || current ? null : progress.at / Math.max(1, progress.seconds)
+  const { ratio, seen } = vodTileProgress(video.id, current)
   return (
     <a
       aria-current={current ? "page" : undefined}
       className="video-tile"
-      href={`#/vod/${video.id}`}
+      href={routeHash({ id: video.id, view: "vod" })}
       // El que se está viendo no se vuelve a abrir: su dirección no lleva el segundo ni el directo del que se vino al
       // retroceder, y se perdía «Ir al directo».
       onClick={current ? (event) => event.preventDefault() : undefined}
@@ -73,11 +71,6 @@ export const VideoTile = ({
   )
 }
 
-type Loaded =
-  | { readonly kind: "loading" }
-  | { readonly kind: "error" }
-  | { readonly kind: "ready"; readonly list: VideoList | null }
-
 // Memoizado: el canal y el VOD se vuelven a pintar a menudo (la hora, el chat, la posición del vídeo), y la lista no
 // cambia con eso.
 export const ChannelVideos = memo(function ChannelVideos({
@@ -92,29 +85,9 @@ export const ChannelVideos = memo(function ChannelVideos({
   readonly title?: string
 }) {
   useIdioma() // con memo no se vuelve a pintar solo al cambiar el idioma
-  const [loaded, setLoaded] = useState<Loaded>({ kind: "loading" })
-  useEffect(() => {
-    const vods = window.api.vods
-    if (vods === undefined) return undefined
-    let active = true
-    setLoaded({ kind: "loading" })
-    vods
-      .list(login)
-      .then((list) => {
-        if (active) setLoaded({ kind: "ready", list })
-      })
-      .catch(() => {
-        if (active) setLoaded({ kind: "error" })
-      })
-    return () => {
-      active = false
-    }
-  }, [login])
-  // Los suyos a medias, sin el que se está viendo. Se leen al abrir el canal o el vídeo.
-  const unfinished = useMemo(
-    () => unfinishedVods().filter((entry) => entry.login === login && entry.id !== current),
-    [current, login],
-  )
+  const loaded = useChannelVods(login)
+  // Los suyos a medias, sin el que se está viendo.
+  const unfinished = useUnfinishedVods(login, current)
   if (window.api.vods === undefined) return null
   const videos = loaded.kind === "ready" ? (loaded.list?.videos ?? []) : []
   return (

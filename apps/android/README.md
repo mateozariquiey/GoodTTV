@@ -8,7 +8,6 @@ transparente en su sitio y pinta encima los controles. Como en la app de Twitch,
 una esquina, al salir de la app pasa al PiP de Android, deslizar hacia abajo sobre el vídeo vuelve atrás, y un botón lo
 pone a pantalla completa en horizontal. Lo que suena se maneja desde la notificación, la pantalla de bloqueo y los
 auriculares. Si falla la red o Twitch, vuelve a conectar sola, con un límite, y sin red espera a que vuelva sin gastar batería.
-B (hls.js en la página, como la extensión) queda solo para medir.
 
 ```text
 web/                     las páginas (Vite, TypeScript); Gradle las compila y las mete en los assets del APK
@@ -22,7 +21,6 @@ web/                     las páginas (Vite, TypeScript); Gradle las compila y l
 │   ├── Busqueda.tsx     la búsqueda de invitado, por relevancia, como twitch.tv
 │   └── Emotes.tsx       los emotes al escribir (CHAT-1): sugerencias, la lista entera y la ficha de uno del chat
 ├── estilos.css          la identidad de la familia (como la extensión), a escala de dedo
-├── medir-b.tsx          B, solo para medir: index.html?reproductor=b, con hls.js en la página (como la extensión)
 ├── api.ts               window.api (createPageApi, como la extensión), con la sesión que guarda la app
 ├── motor.ts             motor.html: solo el empalme, para Media3 (sin reproductor ni interfaz)
 └── red-nativa.ts        lo que Twitch no deja pedir desde la página va a /red, que atiende la app; los emotes, directos
@@ -78,8 +76,8 @@ cd apps/android
 
 Cada compilación pasa antes `tsc` y `vite build` sobre `web/` (`compilarWebDebug` y `compilarWebRelease` en
 `app/build.gradle.kts`). Si no ha cambiado la página, ni un paquete común, ni el `package.json`, el `bun.lock` o el
-`tsconfig.base.json` de la raíz, Gradle se los salta. `bun run verify` no compila el APK ni necesita el SDK: solo
-revisa `web/` con Biome (el `biome.json` de aquí deja fuera las carpetas `build/`).
+`tsconfig.base.json` de la raíz, Gradle se los salta. `bun run verify` no compila el APK ni necesita el SDK: de
+`web/` revisa el estilo con Biome (el `biome.json` de aquí deja fuera las carpetas `build/`) y los tipos con `tsc`.
 
 La de depuración (`io.github.mateozariquiey.goodttv.debug`, «GoodTTV debug») y la release
 (`io.github.mateozariquiey.goodttv`, «GoodTTV») conviven en el mismo aparato.
@@ -106,8 +104,6 @@ si va firmada con la misma clave. La de depuración y la release son dos apps di
 adb -s <aparato> shell am start -n io.github.mateozariquiey.goodttv/.MainActivity --es ruta "'/index.html#/canal/<canal>'"
 # Un VOD (y, al retroceder un directo, con ?t=<segundo>&directo=<canal>)
 adb -s <aparato> shell am start -n io.github.mateozariquiey.goodttv/.MainActivity --es ruta "'/index.html#/vod/<id>'"
-# B, en la WebView, solo para medir (?registro expone lo que lee la medida)
-adb -s <aparato> shell am start -n io.github.mateozariquiey.goodttv/.MainActivity --es ruta "'/index.html?reproductor=b#/canal/<canal>'"
 # A a pantalla completa, para medir (--ez fondo true: sigue con la pantalla apagada; --ez registro true: eventos del
 # empalme)
 adb -s <aparato> shell am start -n io.github.mateozariquiey.goodttv/.ReproductorActivity --es canal <canal>

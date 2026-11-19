@@ -40,7 +40,7 @@ export class TwitchAuth {
   }
 
   public async begin(): Promise<DeviceChallenge> {
-    const clientId = await this.#requireClientId()
+    const { clientId } = await this.#settings.load()
     const body = new URLSearchParams({ client_id: clientId, scopes: this.#scopes })
     const response = parseDeviceCodeResponse(
       await ky
@@ -142,8 +142,9 @@ export class TwitchAuth {
       return { challenge: pending.challenge, kind: "authorizing" }
     }
     pending.lastPollAt = now
+    const { clientId } = await this.#settings.load()
     const response = await ky.post("https://id.twitch.tv/oauth2/token", {
-      body: createDeviceTokenBody(await this.#requireClientId(), pending.deviceCode, this.#scopes),
+      body: createDeviceTokenBody(clientId, pending.deviceCode, this.#scopes),
       throwHttpErrors: false,
       timeout: 15_000,
     })
@@ -222,13 +223,5 @@ export class TwitchAuth {
     } catch (error) {
       if (!(error instanceof Error)) throw error
     }
-  }
-
-  async #requireClientId(): Promise<string> {
-    const settings = await this.#settings.load()
-    if (settings.clientId === "") {
-      throw new ConfigurationError("Esta compilación no tiene Client ID de Twitch")
-    }
-    return settings.clientId
   }
 }

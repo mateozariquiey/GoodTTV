@@ -1,7 +1,7 @@
 import type { LatencyMode } from "@goodttv/contratos"
 import { useEffect, useRef } from "react"
 import type { Channel } from "../channel"
-import { prewarmStream } from "./useHlsPlayer"
+import { prewarmStream } from "./prewarm"
 
 export const OPENING_PREWARM_MS = 10_000 // al abrir, plazo para saber si el último canal visto emite
 

@@ -1,7 +1,16 @@
-import type { ChatEmote } from "@goodttv/contratos"
-import { CHAT_STATUS_TEXT, type ChatView, Message, t, useChatAtBottom } from "@goodttv/interfaz"
+import {
+  CHAT_STATUS_TEXT,
+  type ChatEmoteInfo,
+  type ChatView,
+  chatEmoteDetails,
+  chatEmoteOf,
+  Message,
+  t,
+  useChatAtBottom,
+} from "@goodttv/interfaz"
 import { type PointerEvent as ReactPointerEvent, useCallback, useRef, useState } from "react"
-import { Compose, type ComposeHandle, PROVIDER_LABEL } from "./ChatCompose"
+import { Compose, type ComposeHandle } from "./ChatCompose"
+import { routeHash } from "./routes"
 
 // El chat junto al vídeo, con los mensajes y emotes de la TV (@goodttv/interfaz). Baja solo con los mensajes nuevos
 // si ya estabas abajo; si subiste a leer, se queda donde estás. Con la cuenta vinculada con permiso para escribir, una
@@ -17,14 +26,11 @@ export type ChatWriting = "si" | "vincular" | "no"
 
 type Place = { readonly below: boolean; readonly x: number; readonly y: number }
 
-type Tip = Place & {
-  readonly copied: boolean
-  readonly element: Element
-  readonly name: string
-  readonly overlays: readonly string[]
-  readonly provider: ChatEmote["provider"] | undefined
-  readonly url: string
-}
+type Tip = Place &
+  ChatEmoteInfo & {
+    readonly copied: boolean
+    readonly element: Element
+  }
 
 // Dónde va la ficha de un emote en el chat: centrada encima (o debajo, sin sitio), sin salirse por los lados.
 const placeTip = (element: Element, panel: Element): Place => {
@@ -90,22 +96,10 @@ export const ChatPanel = ({
       return
     }
     if (element === tip?.element) return
-    const [base, ...overlays] = [...element.querySelectorAll<HTMLImageElement>("img")]
-    if (base === undefined || panel.current === null) return
+    const emote = chatEmoteOf(element)
+    if (emote === null || panel.current === null) return
     hold(true)
-    const provider = base.dataset["provider"]
-    setTip({
-      ...placeTip(element, panel.current),
-      copied: false,
-      element,
-      name: base.dataset["name"] ?? base.alt,
-      overlays: overlays.map((image) => image.dataset["name"] ?? "").filter((name) => name !== ""),
-      provider:
-        provider !== undefined && provider in PROVIDER_LABEL
-          ? (provider as ChatEmote["provider"])
-          : undefined,
-      url: base.src,
-    })
+    setTip({ ...emote, ...placeTip(element, panel.current), copied: false, element })
   }
   // Desplazarse a mano (la rueda, la barra) deja de retener: manda la posición, al desplazarse. Un clic en el emote no,
   // y al salir de él la lista vuelve a bajar.
@@ -169,16 +163,7 @@ export const ChatPanel = ({
         >
           <img alt="" className="emote-tip__image" src={tip.url} />
           <strong className="emote-tip__name">{tip.name}</strong>
-          <span className="emote-tip__meta">
-            {[
-              tip.provider === undefined ? null : PROVIDER_LABEL[tip.provider],
-              tip.overlays.length > 0
-                ? t("con {overlays}", { overlays: tip.overlays.join(", ") })
-                : null,
-            ]
-              .filter((each) => each !== null)
-              .join(" · ")}
-          </span>
+          <span className="emote-tip__meta">{chatEmoteDetails(tip)}</span>
           <span className="emote-tip__hint">
             {tip.copied
               ? t("Copiado")
@@ -201,7 +186,7 @@ export const ChatPanel = ({
         ) : writing === "vincular" ? (
           <p className="chat__note">
             {t("Solo lectura. Para escribir, vuelve a vincular la cuenta en")}{" "}
-            <a href="#/ajustes">{t("Ajustes")}</a>.
+            <a href={routeHash({ view: "settings" })}>{t("Ajustes")}</a>.
           </p>
         ) : replay ? (
           <p className="chat__note">

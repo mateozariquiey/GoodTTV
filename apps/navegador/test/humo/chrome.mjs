@@ -26,7 +26,9 @@ export const launchChrome = async ({
   chrome = join(homedir(), ".cache/chrome-for-testing/chrome-linux64/chrome"),
   wayland,
 }) => {
-  const profile = await mkdtemp(join(tmpdir(), "goodttv-humo-chrome-"))
+  // El perfil temporal, con su caché de red. HUMO_PERFILES: otra carpeta donde crearlo, para medir memoria: si /tmp
+  // vive en la RAM (tmpfs), la caché cuenta como memoria del servicio de red de Chrome (hasta ~800 MB de fragmentos).
+  const profile = await mkdtemp(join(process.env.HUMO_PERFILES ?? tmpdir(), "goodttv-humo-chrome-"))
   // Las pruebas buscan los textos en español, y en Linux Chrome no hace caso de --lang: lo saca de su perfil.
   // HUMO_IDIOMA=en: un sistema en otro idioma, para un recorrido.
   const idioma = process.env.HUMO_IDIOMA ?? "es"
@@ -135,9 +137,10 @@ export const launchChrome = async ({
         return Buffer.from(data, "base64")
       },
       // Otra pestaña con una página de la extensión, para leerla. inWindow: en su propia ventana, a la vista junto a la
-      // primera.
-      openTab: async (path, { inWindow = false } = {}) => {
+      // primera. background: sin pasar a ella, como con el clic central; show() la pone a la vista.
+      openTab: async (path, { background = false, inWindow = false } = {}) => {
         const { targetId } = await command("Target.createTarget", {
+          background,
           newWindow: inWindow,
           url: `${origin}/${path}`,
         })
@@ -145,6 +148,7 @@ export const launchChrome = async ({
         return {
           close: () => command("Target.closeTarget", { targetId }),
           evaluate: (expression) => evaluateIn(tab.sessionId, expression),
+          show: () => command("Target.activateTarget", { targetId }),
         }
       },
       // Una pulsación de verdad (llega a la página como un KeyboardEvent de confianza).

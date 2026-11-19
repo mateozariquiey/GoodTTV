@@ -1,29 +1,31 @@
 import type { LatencyMode } from "@goodttv/contratos"
 import {
   type Channel,
-  fromRecent,
-  fromStream,
-  sortFollowed,
+  channelToShow,
+  lineupOf,
   useAppStatus,
   useAuth,
   useFollowedOrder,
   useHome,
+  useHomeChannels,
   useIdioma,
   useOpeningPrewarm,
   usePreferences,
+  useRefreshOnReturnHome,
   useRefreshWhileVisible,
 } from "@goodttv/interfaz"
-import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { useCallback, useEffect, useMemo, useState } from "react"
 import { android } from "../api"
 import { Busqueda } from "./Busqueda"
 import { Canal } from "./Canal"
+import { Categoria, Categorias } from "./Categorias"
 import { Cuenta } from "./Cuenta"
 import { Inicio } from "./Inicio"
 import { rutaDelVod } from "./media3"
-import { aInicio, navigate, useRoute } from "./rutas"
+import { aInicio, navigate, routeHash, useRoute } from "./rutas"
 import { Vod } from "./Vod"
 
-// GoodTTV en el teléfono: Inicio, la búsqueda, el canal, los VOD y la cuenta, según la dirección (rutas.ts), sin barra
+// GoodTTV en el teléfono: Inicio, la búsqueda, las categorías, el canal, los VOD y la cuenta, según la dirección (rutas.ts), sin barra
 // de pestañas. Reutiliza de @goodttv/interfaz los datos y el chat; las pantallas son propias, para el dedo (las de la
 // TV van con mando y las de la extensión, con ratón). Inicio no se desmonta: las demás pantallas van encima, y al
 // volver está donde se dejó. El canal o el VOD que se deja sigue en una esquina (lo pinta la app, MainActivity.kt), y
@@ -51,35 +53,14 @@ export const App = () => {
   const home = useHome(account.auth)
   const { auth, refresh, resource, signedIn, sketch, unreachable } = home
   useRefreshWhileVisible(refresh, REFRESH_MS)
-  // Al volver a Inicio, al día: el canal que acabas de ver ya está en «Seguir viendo». Al abrir, ya carga useHome.
   const atHome = route.view === "home"
-  const wasHome = useRef(atHome)
-  useEffect(() => {
-    if (atHome && !wasHome.current) void refresh()
-    wasHome.current = atHome
-  }, [atHome, refresh])
+  useRefreshOnReturnHome(atHome, refresh)
 
   const data = resource.kind === "ready" ? resource.value : undefined
   // Tus seguidos, por espectadores o primero los que más ves (watch-time.ts), en Inicio y para las flechas del canal.
   const [order, setOrder] = useFollowedOrder()
-  const following = useMemo(
-    () =>
-      sortFollowed(
-        data?.following.map(fromStream) ?? [],
-        order,
-        data?.recents.map((recent) => recent.login),
-      ),
-    [data, order],
-  )
-  const popular = useMemo(() => data?.popular.map(fromStream) ?? [], [data])
-  // Con lo guardado de hace rato, los recientes sin decir si emiten, hasta lo de ahora (sketch).
-  const recents = useMemo(
-    () =>
-      data?.recents.map((recent) => fromRecent(recent, data.recentLive.get(recent.login))) ??
-      sketch?.recents.map((recent) => fromRecent(recent, undefined)) ??
-      [],
-    [data, sketch],
-  )
+  const lists = useHomeChannels(data, sketch, order)
+  const { following, popular, recents } = lists
 
   // Al abrir en Inicio, se precalienta el último canal visto si emite (REN-1, como en la extensión), en el motor de la
   // app: al tocarlo, Media3 arranca con el empalme ya abierto.
@@ -92,20 +73,13 @@ export const App = () => {
     setOpened(channel)
     navigate({ login: channel.login, view: "channel" })
   }, [])
-  const channel = useMemo((): Channel | undefined => {
-    if (route.view !== "channel") return undefined
-    if (opened?.login === route.login) return opened
-    const known = [...following, ...popular, ...recents].find((each) => each.login === route.login)
-    return known ?? { displayName: route.login, login: route.login }
-  }, [following, opened, popular, recents, route])
+  const channel = useMemo(
+    (): Channel | undefined =>
+      route.view === "channel" ? channelToShow(route.login, opened, lists) : undefined,
+    [lists, opened, route],
+  )
   // Las flechas del canal recorren la lista de la que salió, como ↑ ↓ en la TV y la extensión.
-  const lineup = useMemo(() => {
-    const login = channel?.login
-    for (const list of [following, popular, recents.filter((each) => each.live === true)]) {
-      if (list.some((each) => each.login === login)) return list
-    }
-    return []
-  }, [channel, following, popular, recents])
+  const lineup = useMemo(() => lineupOf(channel?.login, lists), [channel, lists])
   const step = useCallback((next: Channel) => {
     setOpened(next)
     navigate({ login: next.login, view: "channel" }, true)
@@ -113,6 +87,27 @@ export const App = () => {
 
   // Lo escrito en la búsqueda sigue al volver de un canal.
   const [query, setQuery] = useState("")
+
+  // El directorio (D49) sigue montado debajo de lo que se abre desde él, como Inicio: al volver de un canal, la lista de
+  // su categoría está donde se dejó, y al volver de una categoría, el directorio también. Se desmonta al salir de él
+  // (a Inicio, a la búsqueda o a la cuenta).
+  const hash = routeHash(route)
+  const [directorio, setDirectorio] = useState<{
+    readonly hash: string
+    readonly lista: boolean
+    readonly slug?: string
+  }>({ hash: "", lista: false })
+  if (directorio.hash !== hash) {
+    setDirectorio(
+      route.view === "categories"
+        ? { hash, lista: true }
+        : route.view === "category"
+          ? { hash, lista: directorio.lista, slug: route.slug }
+          : route.view === "channel" || route.view === "vod"
+            ? { ...directorio, hash }
+            : { hash, lista: false },
+    )
+  }
 
   // El minirreproductor (o el PiP): ampliar es volver al canal o al VOD; si se cierra estando en él (el PiP), a Inicio,
   // sin pasar por el historial (atrás podría montar otro canal y abrirlo, con la app ya en segundo plano).
@@ -156,6 +151,10 @@ export const App = () => {
           status={status}
         />
       ) : null}
+      {directorio.lista ? <Categorias hidden={route.view !== "categories"} /> : null}
+      {directorio.slug === undefined ? null : (
+        <Categoria hidden={route.view !== "category"} onOpen={open} slug={directorio.slug} />
+      )}
       {route.view === "vod" ? (
         <Vod at={route.at} id={route.id} live={route.live} preferences={preferences} />
       ) : null}

@@ -1,5 +1,11 @@
 import { describe, expect, it, vi } from "vitest"
-import { channelByLogin, popularStreams, searchChannels } from "./canales"
+import {
+  categoryStreams,
+  channelByLogin,
+  popularStreams,
+  searchChannels,
+  topCategories,
+} from "./canales"
 
 const fakeRed = (gql: unknown) => {
   const bodies: unknown[] = []
@@ -84,7 +90,7 @@ describe("popularStreams", () => {
       profileImageURL: "https://static-cdn.jtvnw.net/rubius-70x70.png",
     },
     createdAt: "2026-11-04T18:09:17Z",
-    game: { displayName: "Minecraft" },
+    game: { name: "Minecraft" },
     title: "Directo",
     viewersCount: 29605,
   }
@@ -127,5 +133,120 @@ describe("popularStreams", () => {
     await popularStreams({ language: "es-ES" }, red)
     expect(bodies[0]).toMatchObject({ variables: { first: 24 } })
     expect(JSON.stringify(bodies[0])).not.toContain("es-ES")
+  })
+})
+
+const gta = {
+  boxArtURL: "https://static-cdn.jtvnw.net/ttv-boxart/1867279146_IGDB-144x192.jpg",
+  broadcastersCount: 21185,
+  id: "1867279146",
+  name: "Grand Theft Auto VI",
+  slug: "grand-theft-auto-vi",
+  viewersCount: 2833465,
+}
+const chatting = {
+  boxArtURL: "https://static-cdn.jtvnw.net/ttv-boxart/509658-144x192.jpg",
+  broadcastersCount: 5842,
+  id: "509658",
+  name: "Just Chatting",
+  slug: "just-chatting",
+  viewersCount: 429632,
+}
+
+describe("topCategories", () => {
+  it("de más a menos espectadores, con su carátula y sus canales; sin las que no son válidas", async () => {
+    const { bodies, red } = fakeRed({
+      data: {
+        games: {
+          edges: [
+            { node: chatting },
+            { node: gta },
+            { node: { ...gta, slug: null } },
+            { node: { ...gta, id: "x" } },
+            {
+              node: {
+                ...chatting,
+                boxArtURL: null,
+                id: "7",
+                slug: "sin-nadie",
+                viewersCount: null,
+              },
+            },
+          ],
+        },
+      },
+    })
+    expect(await topCategories({ first: 500 }, red)).toEqual([
+      {
+        boxArt: gta.boxArtURL,
+        channels: 21185,
+        id: "1867279146",
+        name: "Grand Theft Auto VI",
+        slug: "grand-theft-auto-vi",
+        viewers: 2833465,
+      },
+      {
+        boxArt: chatting.boxArtURL,
+        channels: 5842,
+        id: "509658",
+        name: "Just Chatting",
+        slug: "just-chatting",
+        viewers: 429632,
+      },
+      {
+        boxArt: null,
+        channels: 5842,
+        id: "7",
+        name: "Just Chatting",
+        slug: "sin-nadie",
+        viewers: 0,
+      },
+    ])
+    expect(bodies).toMatchObject([{ variables: { first: 100 } }])
+  })
+
+  it("si Twitch no las da, ninguna", async () => {
+    expect(await topCategories({}, fakeRed({ data: { games: null } }).red)).toEqual([])
+  })
+})
+
+describe("categoryStreams", () => {
+  const stream = (login: string, viewersCount: number) => ({
+    broadcaster: { displayName: login, id: "90075649", login, profileImageURL: null },
+    createdAt: "2026-11-18T18:00:00Z",
+    game: { name: "Grand Theft Auto VI" },
+    title: "GTA VI",
+    viewersCount,
+  })
+
+  it("la categoría y sus directos, de más a menos espectadores", async () => {
+    const { bodies, red } = fakeRed({
+      data: {
+        game: {
+          ...gta,
+          streams: {
+            edges: [
+              { node: stream("illojuan", 162355) },
+              { node: stream("rubius", 262293) },
+              { node: { ...stream("sin_canal", 5), broadcaster: null } },
+            ],
+          },
+        },
+      },
+    })
+    const found = await categoryStreams("Grand-Theft-Auto-VI", {}, red)
+    expect(found?.category).toMatchObject({ name: "Grand Theft Auto VI", viewers: 2833465 })
+    expect(found?.streams.map((each) => [each.login, each.viewers])).toEqual([
+      ["rubius", 262293],
+      ["illojuan", 162355],
+    ])
+    expect(bodies).toMatchObject([{ variables: { first: 60, slug: "grand-theft-auto-vi" } }])
+  })
+
+  it("null si no existe, y un nombre que no puede serlo no llega a Twitch", async () => {
+    const missing = fakeRed({ data: { game: null } })
+    expect(await categoryStreams("no-existe", {}, missing.red)).toBeNull()
+    expect(await categoryStreams("../ajustes", {}, missing.red)).toBeNull()
+    expect(missing.red).toHaveBeenCalledTimes(1)
   })
 })

@@ -1,3 +1,4 @@
+import { pageStorage, readStored, writeStored } from "@goodttv/interfaz"
 import { type RefObject, useCallback, useEffect, useState } from "react"
 
 // Pantalla completa (F): la vista entera, el vídeo y, si se quiere, el chat al lado (desktop.css). El chat a pantalla
@@ -7,29 +8,12 @@ import { type RefObject, useCallback, useEffect, useState } from "react"
 // Se guarda en el localStorage de la página, como el volumen: la próxima vez, como se dejó.
 const KEY = "chat-pantalla-completa"
 
-const storageOf = (): Storage | undefined => {
-  try {
-    return globalThis.localStorage
-  } catch {
-    return undefined
-  }
-}
+export const fullscreenChat = (storage = pageStorage()): boolean =>
+  readStored(KEY, storage) === "si"
 
-export const fullscreenChat = (storage = storageOf()): boolean => {
-  try {
-    return storage?.getItem(KEY) === "si"
-  } catch {
-    return false
-  }
-}
-
-export const chooseFullscreenChat = (on: boolean, storage = storageOf()): void => {
-  try {
-    storage?.setItem(KEY, on ? "si" : "no")
-  } catch {
-    // Sin almacenamiento, vale para esta vez.
-  }
-}
+// Sin almacenamiento, vale para esta vez.
+export const chooseFullscreenChat = (on: boolean, storage = pageStorage()): void =>
+  writeStored(KEY, on ? "si" : "no", storage)
 
 // view: lo que va a pantalla completa. windowChat y onWindowChat: el chat de la ventana (la preferencia de siempre).
 // chatShown: si el chat se ve ahora, en la ventana o a pantalla completa.

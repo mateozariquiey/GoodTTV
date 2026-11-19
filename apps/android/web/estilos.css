@@ -532,6 +532,74 @@ img {
   pointer-events: none;
 }
 
+/* El directorio (D49): las categorías más vistas, cada una con su puesto, su carátula pequeña y sus cifras. */
+.categorias {
+  margin: 0;
+  padding: 0 0 16px;
+  list-style: none;
+}
+
+.categoria {
+  display: grid;
+  grid-template-columns: 26px 45px minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
+  min-height: 76px;
+  padding: 8px 16px 8px 8px;
+}
+
+a.categoria:active {
+  background: var(--surface);
+}
+
+.categoria__puesto {
+  color: var(--dim);
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.categoria__caratula {
+  grid-column: 2; /* también en el hueco de mientras carga, que no lleva puesto */
+  display: block;
+  width: 45px;
+  aspect-ratio: 3 / 4;
+  border-radius: 4px;
+  background: var(--surface-2);
+  object-fit: cover;
+}
+
+.categoria__texto {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.categoria__nombre {
+  overflow: hidden;
+  font-size: 16px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.categoria__cifras {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 12px;
+  color: var(--dim);
+  font-size: 13px;
+}
+
+/* Arriba de los directos de una categoría: su carátula y sus cifras (el nombre va en la barra). */
+.categoria--cabecera {
+  grid-template-columns: 45px minmax(0, 1fr);
+  padding-left: 16px;
+}
+
+.categoria--cabecera .categoria__caratula {
+  grid-column: 1;
+}
+
 /* Sin texto, la columna mediría lo que un espacio: ocupa lo que queda, como la de un título largo. */
 .hueco .directo__texto {
   flex: 1;
@@ -1818,20 +1886,4 @@ img {
 .interruptor[aria-checked="true"]::after {
   transform: translateX(20px);
   background: var(--bg);
-}
-
-/* B, para medir (medir-b.tsx): el vídeo de hls.js a todo el ancho. */
-.medir-b .stage__surface {
-  aspect-ratio: 16 / 9;
-  background: #000;
-}
-
-.player__media {
-  display: block;
-  width: 100%;
-  height: 100%;
-}
-
-.medir-b p {
-  margin: 12px;
 }

@@ -1,4 +1,5 @@
 import type { VideoDetail } from "@goodttv/contratos"
+import { pageStorage, readStored, writeStored } from "./page-storage"
 
 // Por dónde va cada VOD (VOD-1; la extensión y Android): para reanudar donde se dejó y marcar en las listas lo visto.
 // En el localStorage de la página, como Inicio de la última vez: se lee sin esperar, y las pestañas de la extensión lo
@@ -35,7 +36,7 @@ let lastRead: { readonly raw: string; readonly storage: Storage; readonly store:
 
 const read = (storage: Storage | undefined): Store => {
   try {
-    const raw = storage?.getItem(KEY) ?? "{}"
+    const raw = readStored(KEY, storage) ?? "{}"
     if (storage !== undefined && lastRead?.storage === storage && lastRead.raw === raw)
       return lastRead.store
     const parsed: unknown = JSON.parse(raw)
@@ -57,17 +58,23 @@ const valid = (entry: VodProgress | undefined): entry is VodProgress =>
 export const isSeen = (entry: VodProgress): boolean =>
   entry.at >= entry.seconds - END_SLACK_S || entry.at >= entry.seconds * SEEN_RATIO
 
-const storageOf = (): Storage | undefined => {
-  try {
-    return globalThis.localStorage
-  } catch {
-    return undefined
-  }
-}
-
-export const vodProgress = (id: string, storage = storageOf()): VodProgress | undefined => {
+export const vodProgress = (id: string, storage = pageStorage()): VodProgress | undefined => {
   const entry = read(storage)[id]
   return valid(entry) ? entry : undefined
+}
+
+// Lo que dice la tarjeta de un vídeo en las listas: si ya lo viste, y si no, por dónde ibas (ratio, de 0 a 1; null si no
+// lo has empezado). En el que se está viendo (current), ni lo uno ni lo otro: la tarjeta dice «Viéndolo».
+export const vodTileProgress = (
+  id: string,
+  current: boolean,
+  storage = pageStorage(),
+): { readonly ratio: number | null; readonly seen: boolean } => {
+  const progress = vodProgress(id, storage)
+  const seen = progress !== undefined && isSeen(progress)
+  const ratio =
+    progress === undefined || seen || current ? null : progress.at / Math.max(1, progress.seconds)
+  return { ratio, seen }
 }
 
 // Dónde empezar: unos segundos antes de donde se dejó; desde el principio si no se empezó o ya se vio.
@@ -79,7 +86,7 @@ export const resumeAt = (entry: VodProgress | undefined): number =>
 export const saveVodProgress = (
   video: VideoDetail,
   at: number,
-  storage = storageOf(),
+  storage = pageStorage(),
   now = Date.now(),
 ): void => {
   if (storage === undefined || !Number.isFinite(at)) return
@@ -102,22 +109,17 @@ export const saveVodProgress = (
     .filter(valid)
     .sort((a, b) => b.updatedAt - a.updatedAt)
     .slice(0, LIMIT)
-  try {
-    storage.setItem(KEY, JSON.stringify(Object.fromEntries(kept.map((entry) => [entry.id, entry]))))
-  } catch {
-    // Sin sitio: se pierde esta posición, no el vídeo.
-  }
+  // Sin sitio, se pierde esta posición, no el vídeo.
+  writeStored(
+    KEY,
+    JSON.stringify(Object.fromEntries(kept.map((entry) => [entry.id, entry]))),
+    storage,
+  )
 }
 
 // Los vídeos a medias, del último que se vio al primero (para «Seguir viendo»).
-export const unfinishedVods = (storage = storageOf()): readonly VodProgress[] =>
+export const unfinishedVods = (storage = pageStorage()): readonly VodProgress[] =>
   Object.values(read(storage))
     .filter(valid)
     .filter((entry) => entry.at >= MIN_PROGRESS_S && !isSeen(entry))
     .sort((a, b) => b.updatedAt - a.updatedAt)
-
-export const forgetVodProgress = (id: string, storage = storageOf()): void => {
-  const store = { ...read(storage) }
-  delete store[id]
-  storage?.setItem(KEY, JSON.stringify(store))
-}

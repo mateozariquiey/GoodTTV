@@ -1,12 +1,11 @@
 import type { Preferences, PreferencesPatch } from "@goodttv/contratos"
 import {
   type Channel,
+  chatDelayOf,
   chooseVolume,
   chosenVolume,
   fromSearch,
   type PlayerPhase,
-  prewarmStream,
-  TWITCH_VIEWER_LATENCY,
   t,
   toRecent,
   useHlsPlayer,
@@ -15,41 +14,26 @@ import {
 } from "@goodttv/interfaz"
 import {
   ArrowSquareOutIcon,
-  ArrowsInLineHorizontalIcon,
-  ArrowsOutLineHorizontalIcon,
-  ChatTextIcon,
-  CornersInIcon,
-  CornersOutIcon,
   PauseIcon,
   PlayIcon,
   PlusIcon,
   SpeakerHighIcon,
-  SpeakerSimpleXIcon,
   XIcon,
 } from "@phosphor-icons/react"
-import {
-  type CSSProperties,
-  type ReactNode,
-  type RefObject,
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react"
+import { type ReactNode, type RefObject, useCallback, useEffect, useRef, useState } from "react"
 import { ChannelChat } from "./ChannelView"
-import { huecoOf, MAX_CELLS, placeInHuecos, rememberGrid } from "./cuadricula"
+import { huecoOf, MAX_CELLS, placeInHuecos, rememberGrid, WAITS } from "./cuadricula"
 import { useFullscreen } from "./fullscreen"
+import { ChatButton, FullscreenButton, TheaterButton, VolumeControl } from "./PlayerControls"
 import { navigate } from "./routes"
 import { SKIP_S } from "./SkipButton"
 import { contextOf, shortcutFor } from "./shortcuts"
-import { SoundElsewhere, useSoleSound, WAITS } from "./sonido"
+import { usePageSeen, usePageVisible } from "./visibilidad"
 
 // Varios canales en una pestaña (EXT-6, D42): uno grande, el que suena y cuyo chat se ve, y los demás debajo. Un clic en
 // una celda la hace la grande. Las celdas no se vuelven a crear al cambiar de una a otra: solo cambia dónde las coloca
 // el CSS, así que su vídeo sigue sin un corte. Tampoco se corta al entrar o salir (useHlsPlayer).
 
-const WARM_PING_MS = 20_000 // como en el canal: el directo para el empalme a los 30 s sin uso
 const RECHECK_OFFLINE_MS = 60_000 // sin directo, se mira cada tanto si ha vuelto: no hay que tocar nada para que siga
 
 // Lo que la vista necesita de cada celda para el chat y el teclado.
@@ -77,7 +61,6 @@ const Cell = ({
   onRemove,
   onStatus,
   register,
-  soundHere,
   sound,
 }: {
   readonly active: boolean
@@ -90,7 +73,6 @@ const Cell = ({
   readonly onRemove: () => void
   readonly onStatus: (login: string, status: CellStatus | null) => void
   readonly register: (login: string, handle: CellHandle | null) => void
-  readonly soundHere: boolean // esta pestaña es la que suena (EXT-5)
   readonly sound: Volume
 }) => {
   const surface = useRef<HTMLDivElement>(null)
@@ -101,7 +83,7 @@ const Cell = ({
     silent: !active,
   })
   const { applySound, latency, play, retry, seekBy, state, toggle } = player
-  const { blocked, phase, playing } = state
+  const { blocked, phase, playing, stuck } = state
   useEffect(() => {
     applySound(active ? sound : { ...sound, muted: true })
   }, [active, applySound, sound])
@@ -123,7 +105,10 @@ const Cell = ({
   useEffect(() => {
     if (phase === "ready") setRechecking(false)
   }, [phase])
-  const shown = rechecking && phase !== "ready" ? "offline" : phase
+  // Un directo que se ha quedado parado (stuck) se avisa en su celda con «Reintentar», pero para la cuadrícula sigue
+  // en marcha (onStatus, arriba): no cambia sola de canal grande, porque puede volver.
+  const shown =
+    rechecking && phase !== "ready" ? "offline" : phase === "ready" && stuck ? "stalled" : phase
   useEffect(() => {
     if (shown !== "offline" || !enabled) return undefined
     const timer = setInterval(() => {
@@ -134,11 +119,7 @@ const Cell = ({
   }, [enabled, retry, shown])
 
   const name = channel.displayName
-  const label = !soundHere
-    ? t("Escuchar aquí")
-    : active
-      ? t("Pausar o seguir")
-      : `${t("Escuchar")} ${name}`
+  const label = active ? t("Pausar o seguir") : `${t("Escuchar")} ${name}`
   return (
     <div
       className={`grid-cell${active ? " grid-cell--active" : ""}`}
@@ -151,12 +132,12 @@ const Cell = ({
         aria-pressed={active}
         className="grid-cell__pick"
         onClick={(event) => {
-          if (soundHere && active) toggle()
+          if (active) toggle()
           else onPick()
           // Con el ratón, sin que le quede el foco: si no, la siguiente tecla le pinta un borde como el de la grande.
           if (event.detail > 0) event.currentTarget.blur()
         }}
-        title={active && soundHere ? undefined : label}
+        title={active ? undefined : label}
         type="button"
       />
       {shown === "loading" ? (
@@ -184,9 +165,8 @@ const Cell = ({
           </button>
         </div>
       ) : null}
-      {active && !soundHere ? <SoundElsewhere /> : null}
       <span className="grid-cell__label">
-        {active && soundHere && !sound.muted ? <SpeakerHighIcon aria-hidden="true" /> : null}
+        {active && !sound.muted ? <SpeakerHighIcon aria-hidden="true" /> : null}
         {name}
       </span>
       <span className="grid-cell__actions">
@@ -262,40 +242,21 @@ export const GridView = ({
   }, [])
   const activeStatus = active === undefined ? undefined : statuses[active]
 
-  // Con varias pestañas, suena una sola (sonido.ts). La que espera calla y, oculta un rato, para. Salvo si la persona ha
-  // pausado la que suena: al volver no debe arrancar sola. Para useSoleSound la cuadrícula es una sola cosa, sea cual sea la
-  // celda grande: si cambia sola porque otra ha terminado, no debe quitarle el sonido a otra ventana. Elegir una lo pide aparte.
-  const sole = useSoleSound(
-    "cuadricula",
-    !(activeStatus?.phase === "ready" && !activeStatus.playing),
-  )
-  const { claim, standby } = sole
-  const enabled = preferencesLoaded && standby !== "parado"
-  const soundHere = standby === "no"
+  // Cada pestaña suena por su cuenta (D48). Abierta sin verse, espera a que se mire (visibilidad.ts).
+  const visible = usePageVisible()
+  const seen = usePageSeen()
+  const enabled = preferencesLoaded && seen
 
-  // Oculta un rato, aunque esta pestaña sea la que suena, solo se gasta en lo que se oye: las otras celdas paran, como
-  // el segundo escalón de las pestañas.
+  // Oculta un rato, solo se gasta en lo que se oye: las otras celdas paran, y al volver tardan lo de abrir un canal.
   const [hiddenLong, setHiddenLong] = useState(false)
   useEffect(() => {
-    if (sole.visible) {
+    if (visible) {
       setHiddenLong(false)
       return undefined
     }
-    const timer = setTimeout(() => setHiddenLong(true), WAITS.silentMs)
+    const timer = setTimeout(() => setHiddenLong(true), WAITS.hiddenMs)
     return () => clearTimeout(timer)
-  }, [sole.visible])
-
-  // Parada, los empalmes siguen calientes un rato: volver tarda lo de un canal precalentado (como en el canal).
-  const { latencyMode } = preferences
-  useEffect(() => {
-    if (standby !== "parado" || !sole.warm || !preferencesLoaded) return undefined
-    const ping = (): void => {
-      for (const login of logins) prewarmStream(login, latencyMode, huecoOf(login))
-    }
-    ping()
-    const timer = setInterval(ping, WARM_PING_MS)
-    return () => clearInterval(timer)
-  }, [latencyMode, logins, preferencesLoaded, sole.warm, standby])
+  }, [visible])
 
   // Con todas las celdas a la vez, la pantalla encendida es de la vista: quitar una no debe soltarla.
   useEffect(() => {
@@ -320,7 +281,7 @@ export const GridView = ({
       if (channelOf(login).userId !== undefined || asked.current.has(login)) continue
       asked.current.add(login)
       window.api.catalog
-        .channel?.(login)
+        .channel(login)
         .then((card) => {
           if (card !== null) setCards((current) => ({ ...current, [login]: fromSearch(card) }))
         })
@@ -329,7 +290,7 @@ export const GridView = ({
   }, [channelOf, logins])
 
   // El que suena cuenta como visto: a recientes con sus datos, y sus minutos para ordenar los seguidos.
-  useWatchTime(active, activeStatus?.playing === true && soundHere)
+  useWatchTime(active, activeStatus?.playing === true)
   const activeCard = active === undefined ? undefined : channelOf(active)
   const recentId = activeCard?.userId
   // biome-ignore lint/correctness/useExhaustiveDependencies: se guarda al saber su id, con los datos de ese momento.
@@ -340,14 +301,10 @@ export const GridView = ({
   }, [active, recentId])
 
   const [sound, setSound] = useState<Volume>(() => chosenVolume())
-  const choose = useCallback(
-    (next: Volume) => {
-      setSound(next)
-      chooseVolume(next)
-      claim()
-    },
-    [claim],
-  )
+  const choose = useCallback((next: Volume) => {
+    setSound(next)
+    chooseVolume(next)
+  }, [])
   const toggleMuted = useCallback(() => {
     choose(
       sound.muted && sound.volume === 0
@@ -355,8 +312,6 @@ export const GridView = ({
         : { ...sound, muted: !sound.muted },
     )
   }, [choose, sound])
-  // En una pestaña que espera, sin sonido, pero lo elegido sigue ahí para cuando le toque.
-  const heard = useMemo(() => (soundHere ? sound : { ...sound, muted: true }), [sound, soundHere])
 
   const cells = useRef(new Map<string, CellHandle>())
   const register = useCallback((login: string, handle: CellHandle | null) => {
@@ -366,9 +321,7 @@ export const GridView = ({
   const chatDelay = useCallback((): number | null => {
     const cell = active === undefined ? undefined : cells.current.get(active)
     if (cell === undefined) return null
-    const seconds = cell.latency.current
-    if (seconds !== null) return Math.max(0, seconds - TWITCH_VIEWER_LATENCY)
-    return cell.phase === "loading" || cell.phase === "ready" ? null : 0
+    return chatDelayOf(cell.latency.current, cell.phase === "loading" || cell.phase === "ready")
   }, [active])
 
   // Si termina o falla el que suena, pasa a ser grande (y a sonar, con su chat) uno que siga: la grande no debe quedarse en
@@ -392,9 +345,8 @@ export const GridView = ({
       const cell = cells.current.get(login)
       if (cell?.phase === "ready") cell.play()
       onActive(login)
-      claim()
     },
-    [claim, onActive, statuses],
+    [onActive, statuses],
   )
   const remove = useCallback(
     (login: string) => {
@@ -437,10 +389,8 @@ export const GridView = ({
       }
       const shortcut = shortcutFor(event, context)
       const cell = active === undefined ? undefined : cells.current.get(active)
-      if (shortcut === "play-pause") {
-        if (soundHere) cell?.toggle()
-        else claim()
-      } else if (shortcut === "mute") toggleMuted()
+      if (shortcut === "play-pause") cell?.toggle()
+      else if (shortcut === "mute") toggleMuted()
       else if (shortcut === "fullscreen") toggleFullscreen()
       else if (shortcut === "theater" && !fullscreen) onTheater(!theater)
       else if (shortcut === "chat") toggleChat()
@@ -454,12 +404,10 @@ export const GridView = ({
     return () => removeEventListener("keydown", onKey)
   }, [
     active,
-    claim,
     fullscreen,
     logins,
     onTheater,
     pick,
-    soundHere,
     theater,
     toggleChat,
     toggleFullscreen,
@@ -467,7 +415,6 @@ export const GridView = ({
   ])
 
   const hasRoom = logins.length < MAX_CELLS
-  const muted = sound.muted || sound.volume === 0
   const pausedNow = activeStatus?.phase === "ready" && !activeStatus.playing
   const bar = (
     <div className="grid-bar">
@@ -482,61 +429,16 @@ export const GridView = ({
       >
         {pausedNow ? <PlayIcon /> : <PauseIcon />}
       </button>
-      <button
-        aria-label={muted ? t("Quitar el silencio") : t("Silenciar")}
-        className="icon-button icon-button--light"
-        onClick={toggleMuted}
-        title={muted ? t("Quitar el silencio (M)") : t("Silenciar (M)")}
-        type="button"
-      >
-        {muted ? <SpeakerSimpleXIcon /> : <SpeakerHighIcon />}
-      </button>
-      <input
-        aria-label={t("Volumen")}
-        className="volume"
-        max={1}
-        min={0}
-        onChange={(event) => {
-          const volume = Number(event.currentTarget.value)
-          choose({ muted: volume === 0, volume })
-        }}
-        step={0.01}
-        style={{ "--level": `${(muted ? 0 : sound.volume) * 100}%` } as CSSProperties}
-        type="range"
-        value={muted ? 0 : sound.volume}
+      <VolumeControl
+        muted={sound.muted}
+        onToggleMuted={toggleMuted}
+        onVolume={(volume) => choose({ muted: volume === 0, volume })}
+        volume={sound.volume}
       />
       <span className="grid-bar__end">
-        <button
-          aria-label={chatShown ? t("Ocultar el chat") : t("Mostrar el chat")}
-          aria-pressed={chatShown}
-          className="icon-button icon-button--light"
-          onClick={toggleChat}
-          title={chatShown ? t("Ocultar el chat (C)") : t("Mostrar el chat (C)")}
-          type="button"
-        >
-          <ChatTextIcon />
-        </button>
-        {fullscreen ? null : (
-          <button
-            aria-label={t("Modo teatro")}
-            aria-pressed={theater}
-            className="icon-button icon-button--light icon-button--toggle"
-            onClick={() => onTheater(!theater)}
-            title={t("Modo teatro (T): el vídeo y el chat ocupan la ventana")}
-            type="button"
-          >
-            {theater ? <ArrowsInLineHorizontalIcon /> : <ArrowsOutLineHorizontalIcon />}
-          </button>
-        )}
-        <button
-          aria-label={fullscreen ? t("Salir de la pantalla completa") : t("Pantalla completa")}
-          className="icon-button icon-button--light"
-          onClick={toggleFullscreen}
-          title={fullscreen ? t("Salir de la pantalla completa (F)") : t("Pantalla completa (F)")}
-          type="button"
-        >
-          {fullscreen ? <CornersInIcon /> : <CornersOutIcon />}
-        </button>
+        <ChatButton onToggle={toggleChat} shown={chatShown} />
+        <TheaterButton fullscreen={fullscreen} onTheater={onTheater} theater={theater} />
+        <FullscreenButton fullscreen={fullscreen} onToggle={toggleFullscreen} />
       </span>
     </div>
   )
@@ -558,8 +460,7 @@ export const GridView = ({
               onRemove={() => remove(login)}
               onStatus={onStatus}
               register={register}
-              sound={heard}
-              soundHere={soundHere}
+              sound={sound}
             />
           ))}
           {hasRoom ? (
@@ -574,7 +475,7 @@ export const GridView = ({
       <ChannelChat
         broadcasterId={signedIn && active !== undefined ? channelOf(active).userId : undefined}
         canChat={canChat}
-        connected={sole.visible}
+        connected={visible}
         delay={chatDelay}
         scale={preferences.chatScale}
         signedIn={signedIn}

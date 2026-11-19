@@ -1,17 +1,19 @@
 import {
   type Channel,
-  fromRecent,
-  fromStream,
-  sortFollowed,
+  channelToShow,
+  lineupOf,
   useAppStatus,
   useAuth,
   useFollowedOrder,
   useHome,
+  useHomeChannels,
   useOpeningPrewarm,
   usePreferences,
+  useRefreshOnReturnHome,
   useRefreshWhileVisible,
 } from "@goodttv/interfaz"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { CategoriesView, CategoryView } from "./CategoriesView"
 import { ChannelView } from "./ChannelView"
 import {
   addToGrid,
@@ -67,35 +69,14 @@ export const Desktop = () => {
     addEventListener("goodttv-cambio", onChange)
     return () => removeEventListener("goodttv-cambio", onChange)
   }, [reloadAccount, reloadPreferences])
-  // Al volver a Inicio, al día: el canal que acabas de ver ya está en «Seguir viendo». Al abrir, ya carga useHome.
   const atHome = route.view === "home"
-  const wasHome = useRef(atHome)
-  useEffect(() => {
-    if (atHome && !wasHome.current) void refresh()
-    wasHome.current = atHome
-  }, [atHome, refresh])
+  useRefreshOnReturnHome(atHome, refresh)
 
   const data = resource.kind === "ready" ? resource.value : undefined
   // Tus seguidos, por espectadores o primero los que más ves (watch-time.ts), en la columna, en Inicio y para ↑ ↓.
   const [order, setOrder] = useFollowedOrder()
-  const following = useMemo(
-    () =>
-      sortFollowed(
-        data?.following.map(fromStream) ?? [],
-        order,
-        data?.recents.map((recent) => recent.login),
-      ),
-    [data, order],
-  )
-  const popular = useMemo(() => data?.popular.map(fromStream) ?? [], [data])
-  // Con lo guardado de hace rato, los recientes sin decir si emiten, hasta lo de ahora (sketch).
-  const recents = useMemo(
-    () =>
-      data?.recents.map((recent) => fromRecent(recent, data.recentLive.get(recent.login))) ??
-      sketch?.recents.map((recent) => fromRecent(recent, undefined)) ??
-      [],
-    [data, sketch],
-  )
+  const lists = useHomeChannels(data, sketch, order)
+  const { following, popular, recents } = lists
 
   // El último canal abierto desde una lista o la búsqueda, con lo que se sabía de él; si se llega por la dirección,
   // lo que digan las listas.
@@ -118,20 +99,13 @@ export const Desktop = () => {
     },
     [gridActive, gridLogins],
   )
-  const channel = useMemo((): Channel | undefined => {
-    if (route.view !== "channel") return undefined
-    if (opened?.login === route.login) return opened
-    const known = [...following, ...popular, ...recents].find((each) => each.login === route.login)
-    return known ?? { displayName: route.login, login: route.login }
-  }, [following, opened, popular, recents, route])
+  const channel = useMemo(
+    (): Channel | undefined =>
+      route.view === "channel" ? channelToShow(route.login, opened, lists) : undefined,
+    [lists, opened, route],
+  )
   // ↑ ↓ en el reproductor recorren la lista de la que salió el canal.
-  const lineup = useMemo(() => {
-    const login = channel?.login
-    for (const list of [following, popular, recents.filter((each) => each.live === true)]) {
-      if (list.some((each) => each.login === login)) return list
-    }
-    return []
-  }, [channel, following, popular, recents])
+  const lineup = useMemo(() => lineupOf(channel?.login, lists), [channel, lists])
 
   const knownChannels = useMemo(
     () => [...following, ...popular, ...recents, ...(opened === undefined ? [] : [opened])],
@@ -179,6 +153,7 @@ export const Desktop = () => {
     >
       <TopBar
         account={auth?.kind === "authenticated" ? auth : undefined}
+        inCategories={route.view === "categories" || route.view === "category"}
         onOpen={open}
         searchRef={search}
       />
@@ -255,6 +230,10 @@ export const Desktop = () => {
             scale={preferences.chatScale}
             theater={theater}
           />
+        ) : route.view === "categories" ? (
+          <CategoriesView />
+        ) : route.view === "category" ? (
+          <CategoryView onOpen={open} slug={route.slug} />
         ) : route.view === "settings" ? (
           <SettingsView
             account={account}

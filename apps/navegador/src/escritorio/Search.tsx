@@ -1,10 +1,10 @@
 import {
   type Channel,
+  channelSearchDetail,
   formatViewers,
-  fromSearch,
-  idiomaActual,
-  searchChannels,
   t,
+  typedChannel,
+  useChannelSearch,
 } from "@goodttv/interfaz"
 import { MagnifyingGlassIcon } from "@phosphor-icons/react"
 import { type KeyboardEvent, type RefObject, useEffect, useId, useRef, useState } from "react"
@@ -15,17 +15,8 @@ import { Avatar } from "./Avatar"
 // primero, si aún no ha llegado la lista: en cuanto llega) y Esc cierra. Antes, Enter abría el canal con ese nombre
 // exacto, y un nombre mal escrito llevaba a un canal que no era (22 oct). Ese atajo queda solo si Twitch no encuentra
 // nada.
-const LOGIN = /^[a-zA-Z0-9_]{1,25}$/
 const MAX_RESULTS = 8
 const SEARCH_DELAY_MS = 150
-const compact = (): Intl.NumberFormat =>
-  new Intl.NumberFormat(idiomaActual(), { maximumFractionDigits: 1, notation: "compact" })
-
-type Results =
-  | { readonly kind: "idle" }
-  | { readonly kind: "loading"; readonly text: string }
-  | { readonly kind: "ready"; readonly text: string; readonly channels: readonly Channel[] }
-  | { readonly kind: "error"; readonly text: string }
 
 export const Search = ({
   inputRef,
@@ -36,44 +27,22 @@ export const Search = ({
 }) => {
   const [query, setQuery] = useState("")
   const [focused, setFocused] = useState(false)
-  const [results, setResults] = useState<Results>({ kind: "idle" })
   const [active, setActive] = useState(0)
   const id = useId()
   const text = query.trim()
+  // Los canales que encuentra Twitch para lo escrito (useChannelSearch, común con Android y la TV); con otra consulta,
+  // el elegido vuelve a ser el primero.
+  const { results } = useChannelSearch(text, { delayMs: SEARCH_DELAY_MS })
+  // biome-ignore lint/correctness/useExhaustiveDependencies: con otra consulta.
+  useEffect(() => setActive(0), [text])
   // Enter antes de que llegue la lista: se abre el primero en cuanto llega, si sigue siendo la misma búsqueda.
   const pendingEnter = useRef<string | null>(null)
-
-  // Cada consulta empieza sin los resultados de la anterior, y una respuesta que llega tarde (bien o mal) se descarta.
-  useEffect(() => {
-    setActive(0)
-    if (text === "") {
-      setResults({ kind: "idle" })
-      return undefined
-    }
-    setResults({ kind: "loading", text })
-    let current = true
-    const timer = setTimeout(() => {
-      searchChannels(text)
-        .then((cards) => {
-          if (current) setResults({ channels: cards.map(fromSearch), kind: "ready", text })
-        })
-        .catch(() => {
-          if (current) setResults({ kind: "error", text })
-        })
-    }, SEARCH_DELAY_MS)
-    return () => {
-      current = false
-      clearTimeout(timer)
-    }
-  }, [text])
 
   const found = results.kind === "ready" ? results.channels : []
   // Si Twitch no encuentra nada (o falla), abrir el canal con ese nombre tal cual.
   const exact: Channel | undefined =
     (results.kind === "ready" && found.length === 0) || results.kind === "error"
-      ? LOGIN.test(text)
-        ? { displayName: text, login: text.toLowerCase() }
-        : undefined
+      ? typedChannel(text)
       : undefined
   const options = exact === undefined ? found.slice(0, MAX_RESULTS) : [exact]
   const open = focused && text !== ""
@@ -168,16 +137,7 @@ export const Search = ({
                     <Avatar name={channel.displayName} url={channel.profileImageUrl} />
                     <span className="search__text">
                       <b className="search__name">{channel.displayName}</b>
-                      <span className="search__detail">
-                        {[
-                          channel.followers === undefined
-                            ? null
-                            : t("{n} seguidores", { n: compact().format(channel.followers) }),
-                          channel.category || null,
-                        ]
-                          .filter((each) => each !== null)
-                          .join(" · ")}
-                      </span>
+                      <span className="search__detail">{channelSearchDetail(channel)}</span>
                     </span>
                     {channel.live ? (
                       <span className="live-count">

@@ -1,6 +1,6 @@
 {
   "name": "goodttv",
-  "version": "0.5.1",
+  "version": "0.6.0",
   "description": "Twitch client for the TV, driven with a remote: streams, who you follow and chat with 7TV, BTTV and FFZ emotes",
   "author": {
     "name": "Mateo Zariquiey",
@@ -15,10 +15,8 @@
   "type": "module",
   "main": "./out/main/index.js",
   "scripts": {
-    "dev": "electron-vite dev",
     "build": "electron-vite build",
     "start": "electron .",
-    "preview": "electron-vite preview",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "pack": "bun run build && electron-builder --dir --publish never",

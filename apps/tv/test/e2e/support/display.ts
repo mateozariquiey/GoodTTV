@@ -11,7 +11,35 @@ import type { Readable } from "node:stream"
 // never share one. With E2E_DISPLAY, a display that is already in use is an error.
 const DISPLAY = process.env["E2E_DISPLAY"]
 
+// The critical path needs channels that are live right now. Without E2E_CHANNELS it takes the most watched ones
+// from Twitch's public GraphQL (as a guest), so the suite does not depend on a fixed list being on air.
+const pickLiveChannels = async (): Promise<void> => {
+  if (process.env["E2E_CHANNELS"] !== undefined) return
+  try {
+    const response = await fetch("https://gql.twitch.tv/gql", {
+      body: JSON.stringify({
+        query: "query { streams(first: 12) { edges { node { type broadcaster { login } } } } }",
+      }),
+      headers: { "Client-ID": "kimne78kx3ncx6brgo4mv6wki5h1ko", "Content-Type": "text/plain" },
+      method: "POST",
+    })
+    const body = (await response.json()) as {
+      data: {
+        streams: { edges: { node: { type: string; broadcaster: { login: string } | null } }[] }
+      }
+    }
+    const logins = body.data.streams.edges
+      .filter(({ node }) => node.type === "live" && node.broadcaster !== null)
+      .map(({ node }) => node.broadcaster?.login)
+      .slice(0, 6)
+    if (logins.length > 0) process.env["E2E_CHANNELS"] = logins.join(",")
+  } catch {
+    // Without network the critical path fails on its own; the other specs do not need channels.
+  }
+}
+
 export default async function startDisplay(): Promise<() => Promise<void>> {
+  await pickLiveChannels()
   if (process.env["E2E_HEADED"] !== undefined || process.env["E2E_WAYLAND"] !== undefined)
     return async () => {}
   const xvfb = process.env["E2E_XVFB"] ?? "Xvfb"

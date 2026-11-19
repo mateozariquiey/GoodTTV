@@ -50,8 +50,8 @@ import org.json.JSONObject
 //   - al volver a Inicio, el canal sigue en una esquina, encima de la página (el minirreproductor, CajaVideo.kt);
 //   - al salir de la app, en el PiP de Android;
 //   - el botón de pantalla completa gira a horizontal aunque el giro automático esté bloqueado, y Atrás vuelve a vertical.
-// Para medir (medir/webview.mjs): «ruta» abre otra dirección de la página, p. ej.
-//   adb shell am start -n …/io.github.mateozariquiey.goodttv.MainActivity --es ruta "'/index.html?reproductor=b#/canal/x'"
+// «ruta» abre otra dirección de la página, para llegar a una pantalla desde adb (README.md), p. ej.
+//   adb shell am start -n …/io.github.mateozariquiey.goodttv.MainActivity --es ruta "'/index.html#/canal/x'"
 class MainActivity : Activity() {
     private var paginaCaida = false // onRenderProcessGone: esta actividad ya no conserva dónde estaba
     private lateinit var web: WebView

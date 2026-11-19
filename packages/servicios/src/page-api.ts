@@ -1,5 +1,8 @@
 import {
   type AppApi,
+  type CategoryCard,
+  CategorySlugSchema,
+  type CategoryStreams,
   type ChannelCard,
   type ChatBadge,
   type ChatBatch,
@@ -7,7 +10,6 @@ import {
   ChatSendInputSchema,
   type ChatSendResult,
   type LiveArchive,
-  type Page,
   type ReplayMessage,
   type SearchInput,
   SearchInputSchema,
@@ -16,6 +18,12 @@ import {
   type VideoDetail,
   type VideoList,
 } from "@goodttv/contratos"
+import type {
+  CategoryResult,
+  ChannelResult,
+  PopularStream,
+  VideoComment,
+} from "@goodttv/sin-anuncios"
 import { EmoteCatalog } from "./chat/emote-catalog"
 import { EventSubChat } from "./chat/eventsub-chat"
 import { readableUserColor, tokenizeFragments } from "./chat/tokenize"
@@ -36,54 +44,46 @@ export type PageApiOptions = {
   readonly version: string
   // Que la pantalla no se apague mientras se ve un directo.
   readonly setWatching: (watching: boolean) => Promise<void>
-  // Los permisos que se piden al vincular (TWITCH_CHAT_SCOPES para escribir en el chat); por defecto, solo lectura.
-  readonly scopes?: string
-  // Los VOD (VOD-1), de @goodttv/sin-anuncios (vods.ts): la página los pide como invitada. Sin ellos, sin VOD.
-  readonly vods?: VodSource
+  // Los permisos que se piden al vincular (TWITCH_CHAT_SCOPES para escribir en el chat).
+  readonly scopes: string
+  // Los VOD (VOD-1), de @goodttv/sin-anuncios (vods.ts): la página los pide como invitada.
+  readonly vods: VodSource
   // Buscar canales y ver uno por su nombre como invitada (canales.ts, de @goodttv/sin-anuncios): con la relevancia de
-  // twitch.tv y sin cuenta. Sin ellos, la búsqueda de Helix, con cuenta.
-  readonly channels?: ChannelSource
+  // twitch.tv y sin cuenta.
+  readonly channels: ChannelSource
 }
 
-// Lo que da @goodttv/sin-anuncios de los canales (canales.ts), sin depender de él.
-export type ChannelResult = {
-  readonly id: string
-  readonly login: string
-  readonly displayName: string
-  readonly avatar: string | null
-  readonly followers: number
-  readonly title: string
-  readonly category: string | null
-  readonly viewers: number | null
-}
+// Los canales, de @goodttv/sin-anuncios (canales.ts).
 export type ChannelSource = {
   readonly byLogin: (login: string) => Promise<ChannelResult | null>
   readonly search: (query: string, first: number) => Promise<readonly ChannelResult[]>
-  readonly popular: (language: string) => Promise<readonly PopularResult[]>
+  readonly popular: (language: string) => Promise<readonly PopularStream[]>
+  readonly categories: () => Promise<readonly CategoryResult[]>
+  readonly category: (slug: string) => Promise<{
+    readonly category: CategoryResult
+    readonly streams: readonly PopularStream[]
+  } | null>
 }
 
-export type PopularResult = {
-  readonly id: string
-  readonly login: string
-  readonly displayName: string
-  readonly avatar: string | null
-  readonly title: string
-  readonly category: string
-  readonly viewers: number
-  readonly startedAt: string
-}
-
-const toPopularCard = (result: PopularResult): StreamCard => ({
+const toPopularCard = (result: PopularStream): StreamCard => ({
   category: result.category,
   id: result.id,
   ...(result.avatar === null ? {} : { profileImageUrl: result.avatar }),
   startedAt: result.startedAt,
-  tags: [],
   thumbnailUrl: `https://static-cdn.jtvnw.net/previews-ttv/live_user_${result.login}-640x360.jpg`,
   title: result.title,
   userId: result.id,
   userLogin: result.login,
   userName: result.displayName,
+  viewerCount: result.viewers,
+})
+
+const toCategoryCard = (result: CategoryResult): CategoryCard => ({
+  ...(result.boxArt === null ? {} : { boxArtUrl: result.boxArt }),
+  channelCount: result.channels,
+  id: result.id,
+  name: result.name,
+  slug: result.slug,
   viewerCount: result.viewers,
 })
 
@@ -103,21 +103,11 @@ const toChannelCard = (result: ChannelResult): ChannelCard | null =>
         ...(result.viewers === null ? {} : { viewerCount: result.viewers }),
       }
 
-// Lo que da @goodttv/sin-anuncios de los VOD, sin depender de él: el chat llega en bruto y aquí se le ponen los
-// emotes, las insignias (con cuenta) y el color, como al del directo.
-export type ReplayComment = {
-  readonly id: string
-  readonly offset: number
-  readonly userId: string
-  readonly login: string
-  readonly displayName: string
-  readonly color: string | null
-  readonly badges: readonly { readonly setId: string; readonly version: string }[]
-  readonly fragments: readonly { readonly text: string; readonly emoteId: string | null }[]
-}
+// Los VOD, de @goodttv/sin-anuncios (vods.ts): el chat llega en bruto (VideoComment) y aquí se le ponen los emotes, las
+// insignias (con cuenta) y el color, como al del directo.
 export type VodSource = {
   readonly archive: (login: string) => Promise<LiveArchive | null>
-  readonly comments: (videoId: string, offset: number) => Promise<readonly ReplayComment[]>
+  readonly comments: (videoId: string, offset: number) => Promise<readonly VideoComment[]>
   readonly get: (id: string) => Promise<VideoDetail | null>
   readonly list: (login: string) => Promise<VideoList | null>
   readonly playback: (id: string) => Promise<string>
@@ -125,22 +115,29 @@ export type VodSource = {
 }
 
 // Lo que se ve de Twitch sin cuenta, con la fuente de @goodttv/sin-anuncios (canales.ts): buscar con la relevancia de
-// twitch.tv, un canal por su nombre y los directos más vistos. La extensión y Android lo usan en la página; la TV, en
+// twitch.tv, un canal por su nombre, los directos más vistos y el directorio de categorías (D49). La extensión y Android lo usan en la página; la TV, en
 // su proceso principal (apps/tv/src/main/index.ts).
 export const guestCatalog = (channels: ChannelSource) => ({
+  categories: async (): Promise<readonly CategoryCard[]> =>
+    (await channels.categories()).map(toCategoryCard),
+  category: async (slug: string): Promise<CategoryStreams | null> => {
+    const found = await channels.category(CategorySlugSchema.parse(slug))
+    return found === null
+      ? null
+      : { category: toCategoryCard(found.category), streams: found.streams.map(toPopularCard) }
+  },
   channel: async (login: string): Promise<ChannelCard | null> => {
     const result = await channels.byLogin(login)
     return result === null ? null : toChannelCard(result)
   },
-  popularSinCuenta: async (language: string): Promise<readonly StreamCard[]> =>
+  popular: async (language: string): Promise<readonly StreamCard[]> =>
     (await channels.popular(language)).map(toPopularCard),
-  search: async (input: SearchInput): Promise<Page<ChannelCard>> => {
+  search: async (input: SearchInput): Promise<readonly ChannelCard[]> => {
     const { first, query } = SearchInputSchema.parse(input)
-    const items = (await channels.search(query, first)).flatMap((result) => {
+    return (await channels.search(query, first)).flatMap((result) => {
       const card = toChannelCard(result)
       return card === null ? [] : [card]
     })
-    return { cursor: undefined, items }
   },
 })
 
@@ -167,7 +164,7 @@ export const createPageApi = ({
   // Las fotos de los canales, en el mismo localStorage que Inicio (profile-pictures.ts).
   const twitch = new TwitchService(settings, tokens, {
     ...(homeStorage === undefined ? {} : { pictures: homeStorage }),
-    ...(scopes === undefined ? {} : { scopes }),
+    scopes,
   })
   const emotes = new EmoteCatalog()
   const batches = new Set<(batch: ChatBatch) => void>()
@@ -185,7 +182,7 @@ export const createPageApi = ({
     },
   })
   const local = new LocalStore(localData)
-  const guest = channels === undefined ? undefined : guestCatalog(channels)
+  const guest = guestCatalog(channels)
 
   return {
     app: {
@@ -202,13 +199,13 @@ export const createPageApi = ({
     },
     catalog: {
       followed: (input) => twitch.followed(input),
-      live: (input) => twitch.live(input),
-      search: (input) => (guest === undefined ? twitch.search(input) : guest.search(input)),
+      search: guest.search,
       streamsByLogin: (logins) => twitch.streamsByLogin(logins),
       follows: (broadcasterId) => twitch.follows(broadcasterId),
-      ...(guest === undefined
-        ? {}
-        : { channel: guest.channel, popularSinCuenta: guest.popularSinCuenta }),
+      categories: guest.categories,
+      category: guest.category,
+      channel: guest.channel,
+      popular: guest.popular,
     },
     chat: {
       close: async () => chat.close(),
@@ -274,10 +271,6 @@ export const createPageApi = ({
       setTextEntry: async () => undefined,
     },
     player: {
-      beginInteraction: () =>
-        Promise.reject(new Error("Sin el reproductor de Twitch en la página")),
-      endInteraction: async () => undefined,
-      onInteractionEnded: () => () => undefined,
       setWatching,
     },
     preferences: {
@@ -288,50 +281,45 @@ export const createPageApi = ({
       add: (channel) => local.addRecent(channel),
       list: () => local.recents(),
     },
-    ...(vods === undefined
-      ? {}
-      : {
-          vods: {
-            archive: async (login) =>
-              LOGIN.test(login.toLowerCase()) ? vods.archive(login) : null,
-            comments: async ({ channelId, offset, videoId }): Promise<readonly ReplayMessage[]> => {
-              if (!VIDEO_ID.test(videoId) || !VIDEO_ID.test(channelId)) return []
-              if (!Number.isFinite(offset) || offset < 0) return []
-              const [comments, lookup, badges] = await Promise.all([
-                vods.comments(videoId, offset),
-                emotes.forChannel(channelId).catch(() => new Map()),
-                // Las insignias se piden a Helix: con cuenta.
-                twitch.badges(channelId).catch(() => new Map<string, ChatBadge>()),
-              ])
-              return comments.map((comment) => ({
-                action: false,
-                badges: comment.badges.flatMap(
-                  (badge) => badges.get(`${badge.setId}/${badge.version}`) ?? [],
-                ),
-                color: readableUserColor(comment.color ?? "", comment.userId),
-                displayName: (comment.displayName || comment.login).slice(0, 60),
-                id: comment.id.slice(0, 64),
-                offset: comment.offset,
-                tokens: tokenizeFragments(
-                  comment.fragments.map((fragment) =>
-                    fragment.emoteId === null
-                      ? { text: fragment.text, type: "text" }
-                      : { emote: { id: fragment.emoteId }, text: fragment.text, type: "emote" },
-                  ),
-                  lookup,
-                ).slice(0, 600),
-                userId: comment.userId.slice(0, 64),
-              }))
-            },
-            get: async (id) => (VIDEO_ID.test(id) ? vods.get(id) : null),
-            list: async (login) => (LOGIN.test(login.toLowerCase()) ? vods.list(login) : null),
-            playback: async (id) => {
-              if (!VIDEO_ID.test(id)) throw new Error("vídeo no válido")
-              return vods.playback(id)
-            },
-            // Solo las miniaturas que da Twitch (seekPreviewsURL), en su CDN.
-            storyboard: async (url) => (STORYBOARD_URL.test(url) ? vods.storyboard(url) : null),
-          },
-        }),
+    vods: {
+      archive: async (login) => (LOGIN.test(login.toLowerCase()) ? vods.archive(login) : null),
+      comments: async ({ channelId, offset, videoId }): Promise<readonly ReplayMessage[]> => {
+        if (!VIDEO_ID.test(videoId) || !VIDEO_ID.test(channelId)) return []
+        if (!Number.isFinite(offset) || offset < 0) return []
+        const [comments, lookup, badges] = await Promise.all([
+          vods.comments(videoId, offset),
+          emotes.forChannel(channelId).catch(() => new Map()),
+          // Las insignias se piden a Helix: con cuenta.
+          twitch.badges(channelId).catch(() => new Map<string, ChatBadge>()),
+        ])
+        return comments.map((comment) => ({
+          action: false,
+          badges: comment.badges.flatMap(
+            (badge) => badges.get(`${badge.setId}/${badge.version}`) ?? [],
+          ),
+          color: readableUserColor(comment.color ?? "", comment.userId),
+          displayName: (comment.displayName || comment.login).slice(0, 60),
+          id: comment.id.slice(0, 64),
+          offset: comment.offset,
+          tokens: tokenizeFragments(
+            comment.fragments.map((fragment) =>
+              fragment.emoteId === null
+                ? { text: fragment.text, type: "text" }
+                : { emote: { id: fragment.emoteId }, text: fragment.text, type: "emote" },
+            ),
+            lookup,
+          ).slice(0, 600),
+          userId: comment.userId.slice(0, 64),
+        }))
+      },
+      get: async (id) => (VIDEO_ID.test(id) ? vods.get(id) : null),
+      list: async (login) => (LOGIN.test(login.toLowerCase()) ? vods.list(login) : null),
+      playback: async (id) => {
+        if (!VIDEO_ID.test(id)) throw new Error("vídeo no válido")
+        return vods.playback(id)
+      },
+      // Solo las miniaturas que da Twitch (seekPreviewsURL), en su CDN.
+      storyboard: async (url) => (STORYBOARD_URL.test(url) ? vods.storyboard(url) : null),
+    },
   }
 }

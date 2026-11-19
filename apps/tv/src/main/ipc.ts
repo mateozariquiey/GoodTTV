@@ -1,10 +1,10 @@
 import {
+  CategorySlugSchema,
   ChatOpenInputSchema,
-  CursorInputSchema,
   IdiomaElegidoSchema,
   type IdiomaInicial,
   LanguageSchema,
-  LiveInputSchema,
+  ListInputSchema,
   LoginSchema,
   LoginsInputSchema,
   PreferencesPatchSchema,
@@ -24,31 +24,23 @@ import { z } from "zod"
 import { CHANNELS } from "../shared/channels"
 import type { IdiomaStore } from "./idioma"
 import type { InputRouter } from "./input-router"
-import type { PlayerInteraction } from "./player-interaction"
 import type { SavedHomeStore } from "./saved-home"
 
 type IpcOptions = {
   readonly chat: Pick<EventSubChat, "close" | "open">
-  // Lo que se ve sin cuenta (buscar, un canal por su nombre y los más vistos), como en la extensión y Android.
+  // Lo que se ve sin cuenta (buscar, un canal por su nombre, los más vistos y el directorio de categorías, D49), como en
+  // la extensión y Android.
   readonly guest: ReturnType<typeof guestCatalog>
   readonly home: SavedHomeStore
   readonly idioma: IdiomaStore & { readonly sistema: string }
   readonly input: Pick<InputRouter, "setProbing" | "setTextEntry">
   readonly local: Pick<LocalStore, "addRecent" | "preferences" | "recents" | "updatePreferences">
   readonly mainWindow: BrowserWindow
-  readonly player: Pick<PlayerInteraction, "begin" | "end">
   readonly rendererOrigin: string
   readonly setWatching: (active: boolean) => void
   readonly twitch: Pick<
     TwitchService,
-    | "authSnapshot"
-    | "beginAuthorization"
-    | "followed"
-    | "live"
-    | "logout"
-    | "search"
-    | "status"
-    | "streamsByLogin"
+    "authSnapshot" | "beginAuthorization" | "followed" | "logout" | "status" | "streamsByLogin"
   >
 }
 
@@ -60,7 +52,7 @@ export class InvalidIpcSenderError extends Error {
 }
 
 export const registerIpc = (options: IpcOptions): void => {
-  // Only the app's own top-level document may call in; never a Twitch frame.
+  // Only the app's own top-level document may call in; never a subframe.
   const authorize = (event: IpcMainInvokeEvent | IpcMainEvent): void => {
     const senderFrame = event.senderFrame
     if (
@@ -98,16 +90,19 @@ export const registerIpc = (options: IpcOptions): void => {
     return options.twitch.logout()
   })
 
-  handle(CHANNELS.catalogFollowed, z.tuple([CursorInputSchema]), (input) =>
+  handle(CHANNELS.catalogFollowed, z.tuple([ListInputSchema]), (input) =>
     options.twitch.followed(input),
   )
-  handle(CHANNELS.catalogLive, z.tuple([LiveInputSchema]), (input) => options.twitch.live(input))
   handle(CHANNELS.catalogSearch, z.tuple([SearchInputSchema]), (input) =>
     options.guest.search(input),
   )
   handle(CHANNELS.catalogChannel, z.tuple([LoginSchema]), (login) => options.guest.channel(login))
-  handle(CHANNELS.catalogPopularGuest, z.tuple([LanguageSchema]), (language) =>
-    options.guest.popularSinCuenta(language),
+  handle(CHANNELS.catalogPopular, z.tuple([LanguageSchema]), (language) =>
+    options.guest.popular(language),
+  )
+  handle(CHANNELS.catalogCategories, z.tuple([]), () => options.guest.categories())
+  handle(CHANNELS.catalogCategory, z.tuple([CategorySlugSchema]), (slug) =>
+    options.guest.category(slug),
   )
   handle(CHANNELS.catalogStreamsByLogin, z.tuple([LoginsInputSchema]), (logins) =>
     options.twitch.streamsByLogin(logins),
@@ -146,10 +141,6 @@ export const registerIpc = (options: IpcOptions): void => {
     options.input.setProbing(active),
   )
 
-  handle(CHANNELS.playerBeginInteraction, none, () => options.player.begin())
-  handle(CHANNELS.playerEndInteraction, z.tuple([z.number().int().positive()]), (id) =>
-    options.player.end(id),
-  )
   handle(CHANNELS.playerSetWatching, z.tuple([z.boolean()]), (active) =>
     options.setWatching(active),
   )

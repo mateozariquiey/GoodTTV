@@ -7,6 +7,7 @@ import {
   saveVodProgress,
   unfinishedVods,
   vodProgress,
+  vodTileProgress,
 } from "./vod-progress"
 
 const memory = (): Storage => {
@@ -31,7 +32,6 @@ const video = (id: string, seconds = 3600): VideoDetail => ({
   category: null,
   createdAt: "2026-10-18T17:34:21Z",
   id,
-  kind: "archive",
   owner: { avatar: null, displayName: "Ibai", id: "1", login: "ibai" },
   seconds,
   storyboard: null,
@@ -71,5 +71,29 @@ describe("por dónde va cada VOD", () => {
     saveVodProgress(video("1"), 1800, storage)
     saveVodProgress(video("1"), 1795, storage)
     expect(vodProgress("1", storage)?.at).toBe(1795)
+  })
+})
+
+describe("la tarjeta de un vídeo", () => {
+  it("sin empezar, no dice nada", () => {
+    expect(vodTileProgress("1", false, memory())).toEqual({ ratio: null, seen: false })
+  })
+
+  it("a medias, por dónde ibas", () => {
+    const storage = memory()
+    saveVodProgress(video("2", 3600), 900, storage)
+    expect(vodTileProgress("2", false, storage)).toEqual({ ratio: 0.25, seen: false })
+  })
+
+  it("visto, sin barra", () => {
+    const storage = memory()
+    saveVodProgress(video("3", 3600), 3590, storage)
+    expect(vodTileProgress("3", false, storage)).toEqual({ ratio: null, seen: true })
+  })
+
+  it("el que se está viendo, sin barra: dice «Viéndolo»", () => {
+    const storage = memory()
+    saveVodProgress(video("4", 3600), 900, storage)
+    expect(vodTileProgress("4", true, storage).ratio).toBeNull()
   })
 })

@@ -13,6 +13,7 @@ import {
 import { useMemo, useState } from "react"
 import { Avatar } from "./Avatar"
 import { RetryButton } from "./RetryButton"
+import { routeHash } from "./routes"
 import { VideoTile } from "./Videos"
 
 type Open = (channel: Channel) => void
@@ -24,7 +25,7 @@ let lastShow: HomeShow = "live"
 const GUEST_PLACEHOLDERS = 12 // la forma de «Populares ahora» sin cuenta, mientras llega
 
 const linkProps = (channel: Channel, onOpen: Open) => ({
-  href: `#/canal/${channel.login}`,
+  href: routeHash({ login: channel.login, view: "channel" }),
   onClick: (event: { preventDefault: () => void }) => {
     event.preventDefault()
     onOpen(channel)
@@ -36,10 +37,12 @@ const Thumbnail = ({
   channel,
   large,
   onOpen,
+  withCategory,
 }: {
   readonly channel: Channel
   readonly large: boolean
   readonly onOpen: Open
+  readonly withCategory: boolean
 }) => (
   <a className="thumb" {...linkProps(channel, onOpen)}>
     <span className="thumb__image">
@@ -63,7 +66,9 @@ const Thumbnail = ({
       <span className="thumb__line thumb__title" title={channel.title}>
         {channel.title}
       </span>
-      <span className="thumb__line thumb__line--dim">{channel.category}</span>
+      {withCategory ? (
+        <span className="thumb__line thumb__line--dim">{channel.category}</span>
+      ) : null}
     </span>
   </a>
 )
@@ -87,15 +92,18 @@ const Placeholders = ({ count, poster }: { readonly count: number; readonly post
 )
 
 // poster: el primero, el doble de ancho y de alto, para la primera pantalla sin cuenta. En los seguidos no: quitaría tres
-// canales a la vista en la lista que más se usa.
-const Grid = ({
+// canales a la vista en la lista que más se usa. withCategory: false en los directos de una categoría, que es la misma
+// en todos (CategoriesView).
+export const StreamGrid = ({
   channels,
   onOpen,
   poster,
+  withCategory = true,
 }: {
   readonly channels: readonly Channel[]
   readonly onOpen: Open
   readonly poster: boolean
+  readonly withCategory?: boolean
 }) => (
   <div className={poster ? "grid grid--poster" : "grid"}>
     {channels.map((channel, index) => (
@@ -104,6 +112,7 @@ const Grid = ({
         key={channel.login}
         large={poster && index === 0}
         onOpen={onOpen}
+        withCategory={withCategory}
       />
     ))}
   </div>
@@ -264,7 +273,7 @@ export const HomeView = ({
             ) : following.length === 0 ? (
               <p className="page__note">{t("Ninguno de tus seguidos está en directo ahora.")}</p>
             ) : (
-              <Grid channels={following} onOpen={onOpen} poster={false} />
+              <StreamGrid channels={following} onOpen={onOpen} poster={false} />
             )
           ) : (
             <div className="welcome">
@@ -273,7 +282,7 @@ export const HomeView = ({
                 {t("Busca un canal por su nombre en la barra de arriba (atajo")} <kbd>/</kbd>
                 {t("), o vincula tu cuenta para ver aquí a quién sigues y leer el chat.")}
               </p>
-              <a className="button button--primary" href="#/ajustes">
+              <a className="button button--primary" href={routeHash({ view: "settings" })}>
                 {t("Vincular cuenta")}
               </a>
             </div>
@@ -292,7 +301,7 @@ export const HomeView = ({
           {popular.length + guest.channels.length > 0 ? (
             <>
               <h2 className="page__section">{t("Populares ahora")}</h2>
-              <Grid
+              <StreamGrid
                 channels={signedIn ? popular : guest.channels}
                 onOpen={onOpen}
                 poster={!signedIn}

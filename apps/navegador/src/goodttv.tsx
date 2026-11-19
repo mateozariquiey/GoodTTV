@@ -23,8 +23,13 @@ const homeStorage = fakeDelay === undefined ? pageStorage() : sessionStorage
 
 // El reproductor de @goodttv/interfaz, con el FetchLoader de hls.js para que sus peticiones a /stream/ pasen por la
 // página, e Inicio de la última vez, que se lee sin esperar (page-home.ts, de @goodttv/servicios).
+// Los fragmentos del directo no se guardan en la caché de red del navegador (D53): cada uno se pide una vez, y
+// guardarlos escribía en el disco todo lo que se ve (unos 3 GB por hora a 1080p60) y echaba de la caché lo de otras webs.
 const PLATFORM: Platform = {
-  hls: { loader: FetchLoader },
+  hls: {
+    fetchSetup: (context, init) => new Request(context.url, { ...init, cache: "no-store" }),
+    loader: FetchLoader,
+  },
   savedHome: () => readSavedHome(homeStorage),
 }
 

@@ -26,7 +26,7 @@ const espanolALaVista = (page: Page) =>
 
 const toSettings = async (remote: Remote) => {
   await remote.waitForFocus("home-link")
-  await remote.press("Up", "Right", "Right", "Return")
+  await remote.press("Up", "Right", "Right", "Right", "Return")
   await remote.waitForFocus("account-link")
 }
 
@@ -79,7 +79,7 @@ test.describe("con el sistema en inglés", () => {
     // Buscar, en inglés también.
     await remote.press("Up")
     await remote.waitForFocus("account-link")
-    await remote.press("Up", "Left", "Return")
+    await remote.press("Up", "Left", "Left", "Return")
     await remote.waitForFocus("key-a")
     await expect(page.locator(".search")).toContainText("Type at least two letters.")
     expect(await espanolALaVista(page)).toEqual([])

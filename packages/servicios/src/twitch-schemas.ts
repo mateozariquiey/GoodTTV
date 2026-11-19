@@ -1,45 +1,19 @@
-import type {
-  ChannelCard,
-  ChatBadge,
-  ChatEmote,
-  DeviceChallenge,
-  Page,
-  StreamCard,
-} from "@goodttv/contratos"
+import type { ChatBadge, ChatEmote, DeviceChallenge, StreamCard } from "@goodttv/contratos"
 import { z } from "zod"
 import { twitchEmote } from "./chat/tokenize"
 
 const PaginationSchema = z.object({ cursor: z.string().optional() })
 
-// Twitch sends `tags: null` for channels without tags, which `.default([])` does not cover.
-const HelixTagsSchema = z
-  .array(z.string())
-  .nullish()
-  .transform((tags) => tags ?? [])
-
 const HelixStreamSchema = z.object({
   game_name: z.string(),
   id: z.string(),
   started_at: z.string(),
-  tags: HelixTagsSchema,
   thumbnail_url: z.url(),
   title: z.string(),
   user_id: z.string(),
   user_login: z.string(),
   user_name: z.string(),
   viewer_count: z.number().int().nonnegative(),
-})
-
-const HelixChannelSchema = z.object({
-  broadcaster_language: z.string(),
-  broadcaster_login: z.string(),
-  display_name: z.string(),
-  game_name: z.string(),
-  id: z.string(),
-  is_live: z.boolean(),
-  tags: HelixTagsSchema,
-  thumbnail_url: z.url(),
-  title: z.string(),
 })
 
 const HelixUserSchema = z.object({
@@ -80,24 +54,13 @@ export type DeviceCodeResponse = z.infer<typeof DeviceCodeResponseSchema>
 export type TokenResponse = z.infer<typeof TokenResponseSchema>
 export type ValidationResponse = z.infer<typeof ValidationResponseSchema>
 
-const mapPage = <ApiItem, Item>(
-  data: readonly ApiItem[],
-  cursor: string | undefined,
-  mapItem: (item: ApiItem) => Item,
-): Page<Item> => {
-  const items = data.map(mapItem)
-  return { cursor, items }
-}
-
-export const parseStreamsResponse = (input: unknown): Page<StreamCard> => {
-  const response = z
-    .object({ data: z.array(HelixStreamSchema), pagination: PaginationSchema })
-    .parse(input)
-  return mapPage(response.data, response.pagination.cursor, (stream) => ({
+// Solo la primera página: el cursor de las siguientes no se usa.
+export const parseStreamsResponse = (input: unknown): StreamCard[] => {
+  const response = z.object({ data: z.array(HelixStreamSchema) }).parse(input)
+  return response.data.map((stream) => ({
     category: stream.game_name,
     id: stream.id,
     startedAt: stream.started_at,
-    tags: stream.tags,
     thumbnailUrl: stream.thumbnail_url.replace("{width}", "640").replace("{height}", "360"),
     title: stream.title,
     userId: stream.user_id,
@@ -136,30 +99,13 @@ export const parseUsersResponse = (input: unknown): ReadonlyMap<string, string> 
 }
 
 export const mergeStreamProfiles = (
-  page: Page<StreamCard>,
+  streams: readonly StreamCard[],
   profiles: ReadonlyMap<string, string>,
-): Page<StreamCard> => ({
-  cursor: page.cursor,
-  items: page.items.map((stream) => {
+): StreamCard[] =>
+  streams.map((stream) => {
     const profileImageUrl = profiles.get(stream.userId)
     return profileImageUrl === undefined ? stream : { ...stream, profileImageUrl }
-  }),
-})
-
-export const parseChannelsResponse = (input: unknown): Page<ChannelCard> => {
-  const response = z
-    .object({ data: z.array(HelixChannelSchema), pagination: PaginationSchema })
-    .parse(input)
-  return mapPage(response.data, response.pagination.cursor, (channel) => ({
-    category: channel.game_name,
-    displayName: channel.display_name,
-    id: channel.id,
-    isLive: channel.is_live,
-    login: channel.broadcaster_login,
-    thumbnailUrl: channel.thumbnail_url,
-    title: channel.title,
-  }))
-}
+  })
 
 export const parseDeviceCodeResponse = (input: unknown): DeviceCodeResponse =>
   DeviceCodeResponseSchema.parse(input)

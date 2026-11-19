@@ -38,49 +38,19 @@ describe("Twitch response parsing", () => {
     const page = parseStreamsResponse(response)
 
     // Then renderer data is camel-cased and receives a concrete 16:9 image URL
-    expect(page).toEqual({
-      cursor: "next-page",
-      items: [
-        {
-          category: "Just Chatting",
-          id: "123",
-          startedAt: "2026-09-05T12:00:00Z",
-          tags: ["English"],
-          thumbnailUrl: "https://static-cdn.jtvnw.net/previews-ttv/live_user_name-640x360.jpg",
-          title: "A live stream",
-          userId: "456",
-          userLogin: "streamer",
-          userName: "Streamer",
-          viewerCount: 4200,
-        },
-      ],
-    })
-  })
-
-  it("accepts streams whose tags Twitch reports as null", () => {
-    // Given a live page where Twitch sends null tags, as observed on a second category page
-    const stream = {
-      game_name: "Just Chatting",
-      id: "123",
-      started_at: "2026-09-05T12:00:00Z",
-      tags: null,
-      thumbnail_url:
-        "https://static-cdn.jtvnw.net/previews-ttv/live_user_name-{width}x{height}.jpg",
-      title: "A live stream",
-      user_id: "456",
-      user_login: "streamer",
-      user_name: "Streamer",
-      viewer_count: 4200,
-    }
-
-    // When the payload crosses the parser boundary, with and without the field present
-    const nullTags = parseStreamsResponse({ data: [stream], pagination: {} })
-    const { tags: _omitted, ...withoutTags } = stream
-    const missingTags = parseStreamsResponse({ data: [withoutTags], pagination: {} })
-
-    // Then the page parses and the renderer receives an empty tag list either way
-    expect(nullTags.items[0]?.tags).toEqual([])
-    expect(missingTags.items[0]?.tags).toEqual([])
+    expect(page).toEqual([
+      {
+        category: "Just Chatting",
+        id: "123",
+        startedAt: "2026-09-05T12:00:00Z",
+        thumbnailUrl: "https://static-cdn.jtvnw.net/previews-ttv/live_user_name-640x360.jpg",
+        title: "A live stream",
+        userId: "456",
+        userLogin: "streamer",
+        userName: "Streamer",
+        viewerCount: 4200,
+      },
+    ])
   })
 
   it("rejects malformed Helix response data", () => {
@@ -126,7 +96,7 @@ describe("Twitch response parsing", () => {
     const enriched = mergeStreamProfiles(streams, profiles)
 
     // Then the home card receives the broadcaster's actual profile image
-    expect(enriched.items[0]?.profileImageUrl).toBe(
+    expect(enriched[0]?.profileImageUrl).toBe(
       "https://static-cdn.jtvnw.net/jtv_user_pictures/streamer.png",
     )
   })

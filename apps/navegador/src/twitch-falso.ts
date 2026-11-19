@@ -20,7 +20,6 @@ const ACCOUNT = { id: "9000", login: "prueba", name: "Prueba" }
 const AVATAR =
   "https://static-cdn.jtvnw.net/user-default-pictures-uv/cdd517fe-def4-11e9-948e-784f43822e80-profile_image-300x300.png"
 const FOLLOWED = 12
-const POPULAR = 24
 
 type Peticion = { readonly ruta: string; readonly inicio: number; fin?: number; estado?: number }
 type Datos = {
@@ -147,30 +146,57 @@ const answer = (
     })
   }
   if (path === "/helix/streams") {
-    // Los recientes (user_login): en directo si son de los seguidos; si no, la lista de populares.
+    // Los recientes (user_login): en directo si son de los seguidos (o de los populares de los datos). «Populares» no
+    // pasa por aquí: sale del GraphQL público, también con cuenta (popularAnswer, abajo).
     const logins = url.searchParams.getAll("user_login")
     if (datos !== undefined) {
       const todos = [...datos.seguidos, ...datos.populares]
       return Response.json({
-        data:
-          logins.length > 0
-            ? todos.filter((each) => logins.includes(each.user_login))
-            : datos.populares,
+        data: todos.filter((each) => logins.includes(each.user_login)),
         pagination: {},
       })
     }
-    const data =
-      logins.length > 0
-        ? logins.flatMap((login) => {
-            const n = Number(/^seguido(\d+)$/.exec(login)?.[1] ?? 0)
-            return n >= 1 && n <= FOLLOWED ? [stream(1000 + n, login, carga, "Seguido")] : []
-          })
-        : Array.from({ length: POPULAR }, (_, i) =>
-            stream(2001 + i, `popular${i + 1}`, carga, "Popular"),
-          )
+    const data = logins.flatMap((login) => {
+      const n = Number(/^seguido(\d+)$/.exec(login)?.[1] ?? 0)
+      return n >= 1 && n <= FOLLOWED ? [stream(1000 + n, login, carga, "Seguido")] : []
+    })
     return Response.json({ data, pagination: {} })
   }
   return Response.json({ data: [], pagination: {} })
+}
+
+const POPULAR = 24
+
+// «Populares» sale del GraphQL público, también con cuenta: su consulta se contesta aquí con los populares de los datos
+// o, sin ellos, con unos inventados que llevan la carga, para que el laboratorio no dependa de quién emite ahora.
+const isPopularQuery = (body: string): boolean =>
+  body.includes("streams(first: $first, options: { languages: $languages })")
+
+type FakeStream = ReturnType<typeof stream>
+const popularAnswer = (carga: string, datos: Datos | undefined): Response => {
+  const streams: readonly FakeStream[] =
+    (datos?.populares as readonly FakeStream[] | undefined) ??
+    Array.from({ length: POPULAR }, (_, i) => stream(2001 + i, `popular${i + 1}`, carga, "Popular"))
+  return Response.json({
+    data: {
+      streams: {
+        edges: streams.map((each) => ({
+          node: {
+            broadcaster: {
+              displayName: each.user_name,
+              id: each.user_id,
+              login: each.user_login,
+              profileImageURL: datos?.fotos[each.user_id] ?? AVATAR,
+            },
+            createdAt: each.started_at,
+            game: { name: each.game_name },
+            title: each.title,
+            viewersCount: each.viewer_count,
+          },
+        })),
+      },
+    },
+  })
 }
 
 export const installFakeTwitch = (ms: number): void => {
@@ -183,17 +209,22 @@ export const installFakeTwitch = (ms: number): void => {
   globalThis.fetch = async (input, init) => {
     const request = new Request(input, init)
     const url = new URL(request.url)
-    if (url.hostname !== "id.twitch.tv" && url.hostname !== "api.twitch.tv") {
+    const popular = url.hostname === "gql.twitch.tv" && isPopularQuery(await request.clone().text())
+    if (url.hostname !== "id.twitch.tv" && url.hostname !== "api.twitch.tv" && !popular) {
       return original(input, init)
     }
     const entry: Peticion = {
       inicio: Math.round(performance.now()),
-      ruta: `${url.hostname === "id.twitch.tv" ? "id" : "helix"} ${url.pathname.replace(/^\/(helix|oauth2)\//, "")}${url.searchParams.has("id") ? "?id" : url.searchParams.has("user_login") ? "?user_login" : ""}`,
+      ruta: popular
+        ? "gql populares"
+        : `${url.hostname === "id.twitch.tv" ? "id" : "helix"} ${url.pathname.replace(/^\/(helix|oauth2)\//, "")}${url.searchParams.has("id") ? "?id" : url.searchParams.has("user_login") ? "?user_login" : ""}`,
     }
     peticiones.push(entry)
     await new Promise((done) => setTimeout(done, ms))
     const token = (request.headers.get("Authorization") ?? "").replace(/^(OAuth|Bearer) /, "")
-    const response = answer(url, request.method, token, carga, () => ++next + Date.now(), datos)
+    const response = popular
+      ? popularAnswer(carga, datos)
+      : answer(url, request.method, token, carga, () => ++next + Date.now(), datos)
     entry.fin = Math.round(performance.now())
     entry.estado = response.status
     return response

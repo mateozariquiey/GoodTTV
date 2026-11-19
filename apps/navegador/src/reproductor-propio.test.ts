@@ -109,7 +109,7 @@ const open = async () => {
   if (player === undefined || video === null) throw new Error("sin reproductor")
   // jsdom no reproduce: el estado del <video>, a mano (10 s vistos, búfer hasta el 20).
   Object.defineProperties(video, {
-    buffered: { value: { end: () => 20, length: 1 } },
+    buffered: { value: { end: () => 20, length: 1, start: () => 0 } },
     currentTime: { value: 10, writable: true },
     paused: { get: () => paused },
     readyState: { value: 4 },

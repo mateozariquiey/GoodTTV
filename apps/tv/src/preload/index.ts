@@ -2,21 +2,21 @@ import {
   type AppApi,
   AppStatusSchema,
   AuthSnapshotSchema,
+  CategoryCardSchema,
+  CategorySlugSchema,
+  CategoryStreamsSchema,
   ChannelCardSchema,
   ChatBatchSchema,
   ChatOpenInputSchema,
-  CursorInputSchema,
   DeviceChallengeSchema,
   IdiomaElegidoSchema,
   IdiomaInicialSchema,
   InputActionSchema,
   KeyProbeSchema,
   LanguageSchema,
-  LiveInputSchema,
+  ListInputSchema,
   LoginSchema,
   LoginsInputSchema,
-  PageSchema,
-  PlayerInteractionEndSchema,
   PreferencesPatchSchema,
   PreferencesSchema,
   RecentChannelSchema,
@@ -69,23 +69,20 @@ const api: AppApi = {
   },
   catalog: {
     followed: (input) =>
-      invoke(
-        PageSchema(StreamCardSchema),
-        CHANNELS.catalogFollowed,
-        CursorInputSchema.parse(input),
-      ),
-    live: (input) =>
-      invoke(PageSchema(StreamCardSchema), CHANNELS.catalogLive, LiveInputSchema.parse(input)),
+      invoke(z.array(StreamCardSchema), CHANNELS.catalogFollowed, ListInputSchema.parse(input)),
     search: (input) =>
-      invoke(PageSchema(ChannelCardSchema), CHANNELS.catalogSearch, SearchInputSchema.parse(input)),
+      invoke(z.array(ChannelCardSchema), CHANNELS.catalogSearch, SearchInputSchema.parse(input)),
     channel: (login) =>
       invoke(ChannelCardSchema.nullable(), CHANNELS.catalogChannel, LoginSchema.parse(login)),
-    popularSinCuenta: (language) =>
+    categories: () => invoke(z.array(CategoryCardSchema), CHANNELS.catalogCategories),
+    category: (slug) =>
       invoke(
-        z.array(StreamCardSchema),
-        CHANNELS.catalogPopularGuest,
-        LanguageSchema.parse(language),
+        CategoryStreamsSchema.nullable(),
+        CHANNELS.catalogCategory,
+        CategorySlugSchema.parse(slug),
       ),
+    popular: (language) =>
+      invoke(z.array(StreamCardSchema), CHANNELS.catalogPopular, LanguageSchema.parse(language)),
     streamsByLogin: (logins) =>
       invoke(
         z.array(StreamCardSchema),
@@ -129,19 +126,6 @@ const api: AppApi = {
       invoke(z.undefined(), CHANNELS.inputSetTextEntry, z.boolean().parse(active)),
   },
   player: {
-    beginInteraction: () => invoke(z.number().int().positive(), CHANNELS.playerBeginInteraction),
-    endInteraction: (id) =>
-      invoke(z.undefined(), CHANNELS.playerEndInteraction, z.number().int().positive().parse(id)),
-    onInteractionEnded: (listener) =>
-      subscribe(
-        CHANNELS.playerInteractionEnded,
-        (id, reason) =>
-          [
-            z.number().int().positive().parse(id),
-            PlayerInteractionEndSchema.parse(reason),
-          ] as const,
-        listener,
-      ),
     setWatching: (active) =>
       invoke(z.undefined(), CHANNELS.playerSetWatching, z.boolean().parse(active)),
   },

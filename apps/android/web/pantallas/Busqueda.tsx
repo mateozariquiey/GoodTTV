@@ -1,13 +1,13 @@
 import {
   type Channel,
+  channelSearchDetail,
   formatViewers,
-  fromSearch,
-  idiomaActual,
-  searchChannels,
   t,
+  typedChannel,
+  useChannelSearch,
 } from "@goodttv/interfaz"
 import { ArrowRightIcon, XIcon } from "@phosphor-icons/react"
-import { useEffect, useRef, useState } from "react"
+import { useEffect, useRef } from "react"
 import { Avatar, Barra } from "./comun"
 
 // La búsqueda, a pantalla completa con el teclado, como la de la extensión (Search.tsx): al escribir, los canales en el
@@ -15,17 +15,8 @@ import { Avatar, Barra } from "./comun"
 // directo, y se elige uno. «Ir» en el teclado abre el primero (si aún no ha llegado la lista, en cuanto llega). Antes, la
 // primera opción abría el canal con ese nombre exacto, y un nombre mal escrito llevaba a un canal que no era (22 oct):
 // ese atajo queda solo si Twitch no encuentra nada. Lo escrito sigue al volver de un canal (lo guarda App).
-const LOGIN = /^[a-zA-Z0-9_]{1,25}$/
 const MAX_RESULTS = 12
 const SEARCH_DELAY_MS = 150
-const compact = (): Intl.NumberFormat =>
-  new Intl.NumberFormat(idiomaActual(), { maximumFractionDigits: 1, notation: "compact" })
-
-type Results =
-  | { readonly kind: "idle" }
-  | { readonly kind: "loading"; readonly text: string }
-  | { readonly kind: "ready"; readonly text: string; readonly channels: readonly Channel[] }
-  | { readonly kind: "error"; readonly text: string }
 
 export const Busqueda = ({
   onOpen,
@@ -36,9 +27,10 @@ export const Busqueda = ({
   readonly onQuery: (query: string) => void
   readonly query: string
 }) => {
-  const [results, setResults] = useState<Results>({ kind: "idle" })
   const input = useRef<HTMLInputElement>(null)
   const text = query.trim()
+  // Cada consulta, sin los resultados de la anterior (useChannelSearch, común con la extensión y la TV).
+  const { results } = useChannelSearch(text, { delayMs: SEARCH_DELAY_MS })
   // «Ir» antes de que llegue la lista: se abre el primero en cuanto llega, si sigue siendo la misma búsqueda.
   const pendingGo = useRef<string | null>(null)
 
@@ -47,35 +39,11 @@ export const Busqueda = ({
     if (query === "") input.current?.focus()
   }, [])
 
-  // Cada consulta empieza sin los resultados de la anterior, y una respuesta que llega tarde (bien o mal) se descarta.
-  useEffect(() => {
-    if (text === "") {
-      setResults({ kind: "idle" })
-      return undefined
-    }
-    setResults({ kind: "loading", text })
-    let current = true
-    const timer = setTimeout(() => {
-      searchChannels(text)
-        .then((cards) => {
-          if (current) setResults({ channels: cards.map(fromSearch), kind: "ready", text })
-        })
-        .catch(() => {
-          if (current) setResults({ kind: "error", text })
-        })
-    }, SEARCH_DELAY_MS)
-    return () => {
-      current = false
-      clearTimeout(timer)
-    }
-  }, [text])
-
   const found = results.kind === "ready" ? results.channels.slice(0, MAX_RESULTS) : []
   // Si Twitch no encuentra nada (o falla), abrir el canal con ese nombre tal cual.
   const exact: Channel | undefined =
-    ((results.kind === "ready" && found.length === 0) || results.kind === "error") &&
-    LOGIN.test(text)
-      ? { displayName: text, login: text.toLowerCase() }
+    (results.kind === "ready" && found.length === 0) || results.kind === "error"
+      ? typedChannel(text)
       : undefined
   const options = exact === undefined ? found : [exact]
   const open = (channel: Channel | undefined): void => {
@@ -151,16 +119,7 @@ export const Busqueda = ({
                   <Avatar name={channel.displayName} url={channel.profileImageUrl} />
                   <span className="resultado__texto">
                     <b>{channel.displayName}</b>
-                    <span className="resultado__detalle">
-                      {[
-                        channel.followers === undefined
-                          ? null
-                          : t("{n} seguidores", { n: compact().format(channel.followers) }),
-                        channel.category || null,
-                      ]
-                        .filter((each) => each !== null)
-                        .join(" · ")}
-                    </span>
+                    <span className="resultado__detalle">{channelSearchDetail(channel)}</span>
                   </span>
                   {channel.live ? (
                     <span className="en-directo">

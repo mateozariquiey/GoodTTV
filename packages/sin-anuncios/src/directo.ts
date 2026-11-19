@@ -1,5 +1,5 @@
 // Directo sin anuncios para un reproductor hls.js, sin depender del transporte. Atiende las rutas /stream/ con
-// Response estándar: en la TV las sirve el servidor HTTPS local (apps/tv/src/main/stream/stream-service.ts) y en
+// Response estándar: en la TV las sirve el servidor local (apps/tv/src/main/stream/stream-service.ts) y en
 // la extensión, la propia página atiende con ellas sus fetch (directo-fetch.ts).
 //   /stream/<login>/live.m3u8?modo=…[&q=WxH@fps][&visita=…]  lista HLS (recarga bloqueante con _HLS_msn)
 //   /stream/<login>/info?…                 duración de los fragmentos, calidades y si el canal emite
@@ -7,13 +7,13 @@
 //   /stream/vod?u=…[&desde=…&map=…]        trozos del VOD (no traen CORS), recortados si hace falta
 // Un canal a la vez (más uno precalentado): pedir otro, u otra calidad, para el anterior. Sin peticiones en 30 s, se
 // para.
+import { LOGIN } from "./comun"
 import { createConexiones } from "./conexiones"
 import { Empalme, type EmpalmeEvent, type EmpalmeOptions } from "./empalme"
 import { type Bytes, firstVideoPts, fmp4FirstVideoTime, trimFmp4, trimTs } from "./media-time"
 import { AUDIO_ONLY, type Want } from "./playlist"
 import { type Fetch, getBytes, HttpError, videoTrackOf } from "./twitch-source"
 
-const LOGIN = /^[a-z0-9_]{1,25}$/
 // Modos de retraso (LatencyMode en los contratos de cada app) y lo que cambia en el empalme.
 const MODES = {
   adaptativo: { fillSlack: 2, startBackSeconds: null, vod: true },

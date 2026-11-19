@@ -149,17 +149,16 @@ export type HomeData = {
 export const useGuestPopular = (
   enabled: boolean,
 ): { readonly channels: readonly Channel[]; readonly loading: boolean } => {
-  const available = enabled && window.api.catalog.popularSinCuenta !== undefined
   // Al cambiar de idioma en los ajustes, los de ese idioma (la raíz se vuelve a pintar con useIdioma).
   const language = idiomaDelCatalogo()
   const [channels, setChannels] = useState<readonly Channel[]>([])
-  const [loading, setLoading] = useState(available)
+  const [loading, setLoading] = useState(enabled)
   useEffect(() => {
-    if (!available) return undefined
+    if (!enabled) return undefined
     let current = true
     setLoading(true)
     void window.api.catalog
-      .popularSinCuenta?.(language)
+      .popular(language)
       .then(
         (streams) => {
           if (current) setChannels(streams.map(fromStream))
@@ -172,8 +171,8 @@ export const useGuestPopular = (
     return () => {
       current = false
     }
-  }, [available, language])
-  return { channels: available ? channels : [], loading: available && loading }
+  }, [enabled, language])
+  return { channels: enabled ? channels : [], loading: enabled && loading }
 }
 
 export const loadHome = async (signedIn: boolean): Promise<HomeData> => {
@@ -181,12 +180,12 @@ export const loadHome = async (signedIn: boolean): Promise<HomeData> => {
   if (!signedIn) return { following: [], popular: [], recentLive: new Map(), recents }
   const [following, popular, recentStreams] = await Promise.all([
     window.api.catalog.followed({ first: 100 }),
-    window.api.catalog.live({ first: 24, language: idiomaDelCatalogo() }),
+    window.api.catalog.popular(idiomaDelCatalogo()),
     window.api.catalog.streamsByLogin(recents.map((recent) => recent.login)),
   ])
   return {
-    following: following.items,
-    popular: popular.items,
+    following,
+    popular,
     recentLive: new Map(recentStreams.map((stream) => [stream.userLogin, stream])),
     recents,
   }
@@ -340,8 +339,8 @@ export const useHome = (auth: AuthState | undefined) => {
 
 export type Home = ReturnType<typeof useHome>
 
-export const searchChannels = async (query: string): Promise<readonly ChannelCard[]> =>
-  (await window.api.catalog.search({ first: 20, query })).items
+export const searchChannels = (query: string): Promise<readonly ChannelCard[]> =>
+  window.api.catalog.search({ first: 20, query })
 
 // loaded: ya se han leído las guardadas. Hasta entonces, las de por defecto: un reproductor que se abre antes (un canal
 // abierto por su dirección) debe esperar, o empezaría en Adaptativo y volvería a abrir el canal en el modo guardado.

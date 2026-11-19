@@ -55,7 +55,7 @@ test("searches by name with the on-screen keyboard only", async ({ page, remote 
 
 test("shows what each remote button sends and closes with Back", async ({ page, remote }) => {
   await remote.waitForFocus("home-link")
-  await remote.press("Up", "Right", "Right", "Return")
+  await remote.press("Up", "Right", "Right", "Right", "Return")
   // Settings opens on linking the account; the preferences are in the right column.
   await remote.waitForFocus("account-link")
   // → lands on the setting at the same height (text size); ↑ reaches "show chat".
@@ -84,7 +84,7 @@ test("shows what each remote button sends and closes with Back", async ({ page, 
 
 test("toggles a preference with OK and keeps it", async ({ page, remote }) => {
   await remote.waitForFocus("home-link")
-  await remote.press("Up", "Right", "Right", "Return")
+  await remote.press("Up", "Right", "Right", "Right", "Return")
   // Settings opens on linking the account; the preferences are in the right column.
   await remote.waitForFocus("account-link")
   // → lands on the setting at the same height (text size); ↑ reaches "show chat".

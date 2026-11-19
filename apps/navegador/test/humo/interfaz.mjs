@@ -3,15 +3,17 @@
 // Esc; en Chrome, F a pantalla completa, con su propio chat), chat (C), silencio (M), volver a Inicio con el canal en «Seguir viendo», pedir y cancelar el código de la
 // cuenta, un modo de retraso que se conserva al recargar, Inicio sin poder comprobar la cuenta y cerrar sesión así
 // (?sinred, EXT-4), un VOD de las emisiones del canal (VOD-1) con el volumen elegido en el directo, que sigue al
-// volver a él, y dos pestañas a la vez, con sonido solo en la última (EXT-5) y la nueva con ese volumen. Al cerrarse la
-// que suena, vuelve a sonar la otra; con dos ventanas a la vista, un clic en la que calla le da el sonido sin pausarla.
+// volver a él, y varias a la vez, cada una con su sonido (D48): dos pestañas, una abierta sin verse, que espera a que
+// se mire, y dos ventanas, donde pausar una no toca la otra.
 // En Chrome, teclas, texto y clics son de verdad (CDP); en Firefox se simulan en la página (BiDi no los admite en las
 // páginas de una extensión).
 // Uso, desde la raíz y con la extensión compilada (bun run build:navegador):
-//   node apps/navegador/test/humo/interfaz.mjs --canales a,b [--navegador chrome|firefox|ambos]
+//   node apps/navegador/test/humo/interfaz.mjs [--canales a,b] [--navegador chrome|firefox|ambos]
+// Sin --canales, prueba con los directos con más espectadores de ahora.
 // Escribe un paso por línea y un veredicto por navegador; sale con 1 si alguno falla.
 import { resolve } from "node:path"
 import { parseArgs } from "node:util"
+import { topChannels } from "./canales.mjs"
 import { launchChrome } from "./chrome.mjs"
 import { launchFirefox } from "./firefox.mjs"
 
@@ -21,7 +23,7 @@ const { values: options } = parseArgs({
     navegador: { default: "ambos", type: "string" },
   },
 })
-if (!options.canales) throw new Error("falta --canales canal1,canal2")
+const candidates = options.canales ? options.canales.split(",") : await topChannels(6)
 const extension = resolve(import.meta.dirname, "../../dist")
 const out = (event) => console.log(JSON.stringify({ t: +(Date.now() / 1000).toFixed(1), ...event }))
 const sleep = (ms) => new Promise((done) => setTimeout(done, ms))
@@ -31,7 +33,6 @@ const stream = (login) => ({
   category: "Just Chatting",
   id: `s-${login}`,
   startedAt: new Date().toISOString(),
-  tags: [],
   thumbnailUrl: `https://static-cdn.jtvnw.net/previews-ttv/live_user_${login}-{width}x{height}.jpg`,
   title: `Directo de ${login}`,
   userId: "123",
@@ -106,7 +107,7 @@ const run = async (name, launch) => {
     )
 
     let channel
-    for (const candidate of options.canales.split(",")) {
+    for (const candidate of candidates) {
       await browser.type(candidate)
       await waitFor(`document.querySelector(".search__option--active") !== null`)
       await press("Enter")
@@ -188,8 +189,8 @@ const run = async (name, launch) => {
     step(
       "con el canal en «Seguir viendo»",
       await waitFor(
-        // Con su nombre de verdad (xQc), que la búsqueda ya trae: sin distinguir mayúsculas.
-        `[...document.querySelectorAll(".recent")].some((e) => e.textContent.toLowerCase().includes(${JSON.stringify(channel)}))`,
+        // Por su enlace y no por su nombre, que puede no llevar el login (los que se escriben en japonés o coreano).
+        `[...document.querySelectorAll(".recent")].some((e) => e.getAttribute("href") === ${JSON.stringify(`#/canal/${channel}`)})`,
       ),
     )
 
@@ -355,7 +356,7 @@ const run = async (name, launch) => {
       ),
     )
 
-    // Varias GoodTTV a la vez (EXT-5): cada pestaña con su canal, y suena una sola, la última que se abrió a la vista.
+    // Varias GoodTTV a la vez (D48): cada pestaña con su canal y con su sonido, como las de twitch.tv.
     await browser.open(`goodttv.html#/canal/${channel}`)
     step(
       "la primera pestaña vuelve a su canal, con sonido",
@@ -364,7 +365,6 @@ const run = async (name, launch) => {
     step("y con el volumen que tenía", await browser.evaluate(atVolume(0.3)), {
       volumen: await browser.evaluate(`(${VIDEO})?.volumen`),
     })
-    const other = await browser.openTab(`goodttv.html#/canal/${channel}`)
     const waitIn = async (page, expression, ms = 40_000) => {
       const until = Date.now() + ms
       while (Date.now() < until) {
@@ -373,32 +373,55 @@ const run = async (name, launch) => {
       }
       return false
     }
+    // Suena y avanza: dos lecturas del vídeo separadas 3 s.
+    const sounding = async (page) => {
+      const before = await page.evaluate(VIDEO)
+      await sleep(3000)
+      const after = await page.evaluate(VIDEO)
+      return (
+        before !== null &&
+        after !== null &&
+        after.tiempo - before.tiempo > 2 &&
+        !after.pausado &&
+        !after.silencio
+      )
+    }
+    const other = await browser.openTab(`goodttv.html#/canal/${channel}`)
     step("otra pestaña abre el canal y reproduce", await waitIn(other, `(${VIDEO})?.tiempo > 3`))
     step("con sonido", await waitIn(other, `(${VIDEO})?.silencio === false`))
     step("y con el volumen elegido en la primera", await waitIn(other, atVolume(0.3)), {
       volumen: await other.evaluate(`(${VIDEO})?.volumen`),
     })
-    step(
-      "y la primera sigue, sin sonido",
-      await waitFor(`(${VIDEO})?.silencio === true && (${VIDEO})?.pausado === false`),
-    )
+    step("y la primera sigue sonando, sin verse", await sounding(browser))
     await other.close()
-    step(
-      "al cerrarse la que sonaba, la primera vuelve a sonar",
-      await waitFor(`(${VIDEO})?.silencio === false`, 5_000),
-    )
 
-    // Dos ventanas a la vista: un clic en el vídeo de la que está en silencio le da el sonido, sin pausarla.
+    // Abierta sin verse (el clic central): no empieza hasta que se mira, y la que se veía sigue sonando.
+    const behind = await browser.openTab(`goodttv.html#/canal/${channel}`, { background: true })
+    await sleep(4000)
+    const hidden = await behind.evaluate(`document.visibilityState === "hidden"`)
+    if (hidden) {
+      step("una pestaña abierta sin verse no empieza", (await behind.evaluate(VIDEO)) === null)
+      step("y la que se ve sigue sonando", await sounding(browser))
+      await behind.show()
+      step("al mirarla, empieza con sonido", await waitIn(behind, `(${VIDEO})?.tiempo > 1`))
+      step("y la primera sigue sonando", await sounding(browser))
+    } else {
+      // Sin ventana, algún navegador da por vista toda pestaña: entonces empieza ya, como cualquiera.
+      step(
+        "abierta sin verse, pero el navegador la da por vista: empieza",
+        await waitIn(behind, `(${VIDEO})?.tiempo > 1`),
+      )
+    }
+    await behind.close()
+
+    // Dos ventanas a la vista: suenan las dos, y pausar una no toca la otra.
     const side = await browser.openTab(`goodttv.html#/canal/${channel}`, { inWindow: true })
     step("otra ventana abre el canal", await waitIn(side, `(${VIDEO})?.tiempo > 1`))
-    step("la primera se calla", await waitFor(`(${VIDEO})?.silencio === true`))
+    step("suena, y la primera también", (await sounding(side)) && (await sounding(browser)))
     step(
-      "y avisa de que suena en otra ventana",
-      await waitFor(`document.querySelector(".sound-elsewhere") !== null`, 5_000),
-    )
-    step(
-      "la que suena no lleva aviso",
-      await waitIn(side, `document.querySelector(".sound-elsewhere") === null`, 5_000),
+      "sin avisos de que suena en otra",
+      (await browser.evaluate(`document.querySelector(".sound-elsewhere") === null`)) &&
+        (await side.evaluate(`document.querySelector(".sound-elsewhere") === null`)),
     )
     // En Firefox los clics se simulan, sin pointerdown, así que este, de verdad, solo en Chrome.
     if (browser.cdp !== undefined) {
@@ -410,17 +433,10 @@ const run = async (name, launch) => {
       await browser.cdp("Input.dispatchMouseEvent", { ...mouse, type: "mousePressed" })
       await browser.cdp("Input.dispatchMouseEvent", { ...mouse, type: "mouseReleased" })
       step(
-        "un clic en su vídeo le da el sonido",
-        await waitFor(`(${VIDEO})?.silencio === false`, 5_000),
+        "un clic en el vídeo de una la pausa",
+        await waitFor(`(${VIDEO})?.pausado === true`, 5_000),
       )
-      step("y a la otra se lo quita", await waitIn(side, `(${VIDEO})?.silencio === true`, 5_000))
-      step(
-        "y el aviso pasa a la otra",
-        (await waitFor(`document.querySelector(".sound-elsewhere") === null`, 5_000)) &&
-          (await waitIn(side, `document.querySelector(".sound-elsewhere") !== null`, 5_000)),
-      )
-      await sleep(600) // más que la espera del doble clic: si fuera a pausarse, ya lo estaría
-      step("sin pausarla", await browser.evaluate(`(${VIDEO})?.pausado === false`))
+      step("y la otra sigue sonando", await sounding(side))
     }
     await side.close()
     return { navegador: name, ok: true, pasos: steps.length }

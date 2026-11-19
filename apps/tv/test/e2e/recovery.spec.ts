@@ -1,7 +1,7 @@
 import { access, writeFile } from "node:fs/promises"
 import { join } from "node:path"
 import type { ElectronApplication } from "@playwright/test"
-import { expect, test } from "./support/app"
+import { expect, test, videoSample } from "./support/app"
 
 // Errors must leave the viewer with a focused way out, reachable with the remote.
 
@@ -11,7 +11,6 @@ const stream = (login: string) => ({
   category: "Just Chatting",
   id: `s-${login}`,
   startedAt: new Date().toISOString(),
-  tags: [],
   thumbnailUrl: `https://static-cdn.jtvnw.net/previews-ttv/live_user_${login}-{width}x{height}.jpg`,
   title: `Directo de ${login}`,
   userId: "123",
@@ -42,13 +41,13 @@ const withNetwork = (app: ElectronApplication) =>
       for (const channel of [
         "auth:snapshot",
         "catalog:followed",
-        "catalog:live",
+        "catalog:popular",
         "catalog:streams-by-login",
       ])
         ipcMain.removeHandler(channel)
       ipcMain.handle("auth:snapshot", () => account)
-      ipcMain.handle("catalog:followed", () => ({ cursor: undefined, items: following }))
-      ipcMain.handle("catalog:live", () => ({ cursor: undefined, items: [] }))
+      ipcMain.handle("catalog:followed", () => following)
+      ipcMain.handle("catalog:popular", () => [])
       ipcMain.handle("catalog:streams-by-login", () => [])
     },
     { account: ACCOUNT, following: [stream("nuevo1")] },
@@ -109,7 +108,7 @@ test("without network and nothing saved, only Retry, with focus", async ({ app, 
   await expect(page.locator(".guide__intro")).toHaveCount(0)
   await expect(page.getByText("Cargando canales")).toHaveCount(0)
   // Settings says the same and offers Retry too.
-  await remote.press("Up", "Right", "Right", "Return")
+  await remote.press("Up", "Right", "Right", "Right", "Return")
   await remote.waitForFocus("account-retry")
   await expect(page.locator(".account")).toContainText("La sesión no se ha cerrado")
 
@@ -130,7 +129,7 @@ test("without network, Settings can still sign out, never by default", async ({
   await withoutNetwork(app)
   await page.reload()
   await remote.waitForFocus("home-following-guardado1")
-  await remote.press("Up", "Up", "Right", "Right", "Return")
+  await remote.press("Up", "Up", "Right", "Right", "Right", "Return")
   // Settings enters on Retry; signing out is one step to the right.
   await remote.waitForFocus("account-retry")
   await remote.press("Right")
@@ -152,42 +151,54 @@ test("without network, Settings can still sign out, never by default", async ({
     .toBe(false)
 })
 
-test("a failed load offers Twitch's player, then Retry, with focus, and Retry recovers", async ({
+test("a failed load says so and offers Retry, with focus, and Retry recovers", async ({
   app,
   page,
   remote,
 }) => {
   await remote.waitForFocus("home-link")
-  // Simulate a connection problem for both players: the ad-free stream that main serves under
-  // /stream/ (own player, D11) and Twitch's player script.
+  // Simulate a connection problem: the ad-free stream that main serves under /stream/ (D11).
   await app.evaluate(({ session }) =>
     session.defaultSession.webRequest.onBeforeRequest((details, callback) => {
       const url = new URL(details.url)
-      callback({
-        cancel:
-          (url.hostname === "localhost" && url.pathname.startsWith("/stream/")) ||
-          details.url.startsWith("https://player.twitch.tv/js/"),
-      })
+      callback({ cancel: url.hostname === "127.0.0.1" && url.pathname.startsWith("/stream/") })
     }),
   )
   await remote.press("Down")
   await remote.waitForFocus("home-recents-xqc")
   await remote.press("Return")
-  // The own player fails first and offers Twitch's, which fails too and offers Retry.
+  // No fallback player: a clear error with Retry, never a black screen.
   await expect(page.locator(".player__notice")).toContainText(
     "No se pudo preparar el directo sin anuncios",
   )
   await remote.waitForFocus("player-retry")
+  // Retrying while the network still fails says the same again, still with focus.
   await remote.press("Return")
-  await expect(page.locator(".player__notice")).toContainText("No se pudo cargar el reproductor")
+  await expect(page.locator(".player__notice")).toContainText(
+    "No se pudo preparar el directo sin anuncios",
+  )
   await remote.waitForFocus("player-retry")
 
   await app.evaluate(({ session }) => session.defaultSession.webRequest.onBeforeRequest(null))
   await remote.press("Return")
-  await expect(page.locator(".player__video iframe")).toHaveCount(1, { timeout: 20_000 })
+  // Recovered: the video moves, or the channel says it is offline.
+  await expect
+    .poll(
+      async () => {
+        const notice = await page.evaluate(
+          () => document.querySelector(".player__notice")?.textContent ?? "",
+        )
+        if (notice.includes("no está en directo")) return "offline"
+        const sample = await videoSample(page)
+        return sample !== undefined && !sample.paused && sample.time > 0 ? "playing" : notice
+      },
+      { timeout: 30_000 },
+    )
+    .toMatch(/^(playing|offline)$/)
 
-  // Back still works from the recovered player and keeps the list position.
+  // Back still works from the recovered player and keeps the list position (a hidden band takes the first Back).
   await remote.press("Escape")
+  if ((await page.locator(".player").count()) > 0) await remote.press("Escape")
   await remote.waitForFocus("home-recents-xqc")
 })
 

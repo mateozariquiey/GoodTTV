@@ -1,4 +1,4 @@
-import { t } from "@goodttv/interfaz"
+import { pageStorage, readStored, t, writeStored } from "@goodttv/interfaz"
 import {
   ArrowClockwiseIcon,
   ArrowCounterClockwiseIcon,
@@ -34,21 +34,11 @@ export const useHorizontal = (): boolean =>
 // El chat en horizontal va aparte del de vertical: empieza oculto (D23), como en Twitch o YouTube, y lo elegido se
 // recuerda, en cualquier canal o VOD y al volver a abrir la app (D33, como el chat a pantalla completa de la extensión).
 const CHAT_HORIZONTAL = "chat-horizontal"
-const chatHorizontalGuardado = (): boolean => {
-  try {
-    return localStorage.getItem(CHAT_HORIZONTAL) === "si"
-  } catch {
-    return false
-  }
-}
+const chatHorizontalGuardado = (): boolean => readStored(CHAT_HORIZONTAL, pageStorage()) === "si"
 export const useChatHorizontal = () => {
   const [visible, setVisible] = useState(chatHorizontalGuardado)
   const cambiar = useCallback((nuevo: boolean) => {
-    try {
-      localStorage.setItem(CHAT_HORIZONTAL, nuevo ? "si" : "no")
-    } catch {
-      // Sin almacenamiento, vale para esta vez.
-    }
+    writeStored(CHAT_HORIZONTAL, nuevo ? "si" : "no", pageStorage()) // sin almacenamiento, vale para esta vez
     setVisible(nuevo)
   }, [])
   return [visible, cambiar] as const

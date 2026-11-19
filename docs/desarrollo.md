@@ -26,10 +26,10 @@ bun run start      # abre la app en una ventana
 bun run start -- --fullscreen   # como en la TV
 ```
 
-Hay que usar la app compilada (`build` + `start`). El servidor de desarrollo de electron-vite
-sirve la interfaz por `http://`, y el embed de Twitch exige HTTPS. Producción usa un servidor
-`https://localhost` con certificado fijado, heredado de VacuumStream, salvo que cada instalación crea el suyo en su
-carpeta de datos (`localhost-certificate.json`, [`local-certificate.ts`](../apps/tv/src/main/local-certificate.ts)).
+Siempre la app compilada (`build` + `start`): no hay servidor de desarrollo. El proceso principal sirve la interfaz
+y el directo sin anuncios (`/stream/`) en el mismo origen, `http://127.0.0.1:<puerto>`, con un servidor que solo
+escucha en 127.0.0.1 ([`local-server.ts`](../apps/tv/src/main/local-server.ts)). Hasta la 0.5.1 era HTTPS, con un
+certificado propio en `localhost-certificate.json`, porque lo exigía el reproductor oficial de Twitch, que ya no está.
 
 ## Comprobaciones
 
@@ -53,14 +53,14 @@ E2E_CHANNELS=canal1,canal2 bun run test:e2e -- critical-path.spec.ts
 | Archivo | Qué comprueba | Necesita |
 | --- | --- | --- |
 | `navigation.spec.ts` | Foco inicial, pestañas, teclado en pantalla, probar el mando, preferencias | Nada |
-| `critical-path.spec.ts` | Abrir canal → reproduce → pausa/reanuda → volver con la misma fila → otro canal; nada tapa el reproductor de Twitch (el propio admite la franja encima, modo cine) | Red y canales en directo |
-| `recovery.spec.ts` | Fallo del reproductor propio → «Usar el reproductor de Twitch» enfocado → fallo de este → «Reintentar» enfocado → se recupera; Atrás mientras carga. Sin poder comprobar la cuenta (IPC simulado): lo guardado y «Reintentar» al alcance del mando, nunca la bienvenida; con red, Inicio de la cuenta; sin ella, cerrar sesión desde Ajustes | Red |
+| `critical-path.spec.ts` | Abrir canal → reproduce → pausa/reanuda (también con el selector de calidad abierto) → volver con la misma fila → otro canal, con la franja del modo cine | Red y canales en directo |
+| `recovery.spec.ts` | Fallo del reproductor propio → el error con «Reintentar» enfocado → con la red de vuelta, el vídeo se mueve; Atrás mientras carga. Sin poder comprobar la cuenta (IPC simulado): lo guardado y «Reintentar» al alcance del mando, nunca la bienvenida; con red, Inicio de la cuenta; sin ella, cerrar sesión desde Ajustes | Red |
 
 Variables: `E2E_XVFB`, `E2E_XDOTOOL` y `E2E_LD_LIBRARY_PATH` si los binarios no están en el
 `PATH`; `E2E_DISPLAY` para fijar la pantalla de Xvfb, que si está ocupada hace fallar el arranque.
 Sin ella, Xvfb elige la primera pantalla libre, así que dos ejecuciones a la vez no comparten
 pantalla ni teclas. El recorrido crítico prueba los canales de `E2E_CHANNELS` en orden hasta
-encontrar dos en directo.
+encontrar dos en directo. Sin esa variable, toma los directos con más espectadores de ese momento.
 
 **Sin Xvfb ni xdotool:** `E2E_WAYLAND=<socket>` usa un compositor Wayland sin pantalla ya en
 marcha (Weston con `kiosk-shell`, que da a la ventana toda la salida) y envía las teclas desde el
@@ -149,13 +149,14 @@ cuenta:
   red y «Cerrar sesión» sin ella;
 - un VOD de las emisiones del canal: lo reproduce, L salta 10 s y se guarda por dónde va. El volumen que se elige en el
   directo sigue en el VOD y al volver al directo;
-- dos pestañas a la vez, con sonido solo en la última que se abrió (EXT-5), y la nueva con el volumen elegido en la
-  otra. Al cerrarse la que suena, vuelve a sonar la primera; con dos ventanas, un clic en el vídeo de la muda le da el
-  sonido sin pausarla (el clic, de verdad, solo en Chrome).
+- varias a la vez, cada una con su sonido (D48): dos pestañas, y la nueva con el volumen elegido en la otra; una
+  abierta sin verse, que espera a que se mire; y dos ventanas, donde un clic en el vídeo de una la pausa sin tocar la
+  otra (el clic, de verdad, solo en Chrome).
 
 ```bash
 bun run build:navegador
-bun run test:interfaz -- --canales canal1,canal2   # prueba los canales en orden hasta uno en directo
+bun run test:interfaz                              # con los directos con más espectadores de ahora
+bun run test:interfaz -- --canales canal1,canal2   # o con estos, en orden hasta uno en directo
 ```
 
 En Chrome, teclas, texto y clics son de verdad (CDP). En Firefox, WebDriver BiDi no admite
@@ -218,9 +219,11 @@ node apps/navegador/test/humo/rendimiento.mjs --canales canal1 --detalle   # una
     (`?chatsintetico=N`).
   - `--chatreal`: el chat real del canal, leído por IRC anónimo, con sus emotes (`?chatreal`).
   - `--extension otra/dist`: otra compilación, por ejemplo la de otra rama, para compararlas.
+- **Al comparar dos versiones una tras otra, alterna también cuál va primero.** La que corre segunda con los mismos
+  canales sale con unas 3 décimas más de búfer y de latencia y con menos esperas, sea la que sea (19 nov, D54).
 - **Sin ventana, el vídeo se decodifica por software,** y los fotogramas perdidos no cuentan.
 - **Los fotogramas perdidos solo valen en un compositor que repinte a 60 Hz de verdad.** El Weston 14 de `mini-agentes`
-  no lo hace y da un ~34 % fijo con cualquier vídeo ([LAB-1](verificacion.md#los-fotogramas-perdidos-en-el-weston-del-mini-pc-lab-1)).
+  no lo hace y da un ~34 % fijo con cualquier vídeo ([LAB-1](verificacion/0.5.0.md#los-fotogramas-perdidos-en-el-weston-del-mini-pc-lab-1)).
   Para medirlos en `mini-agentes`, usa la sesión GNOME, una versión tras otra y alternando (A, B, A, B), con
   `--wayland wayland-0`. Da de 0,1 a 1,3 % en total, y a 1,05× ~6,7 % (con `--detalle`, por tramos). Una visita suelta llega a un 5 %,
   así que compara al menos 15 visitas por versión, y solo cuenta una diferencia de más de ~1,5 puntos. Comprueba que nada tapa la ventana, porque tapada da 0 %. Si dudas de un
@@ -235,18 +238,24 @@ node apps/navegador/test/humo/rendimiento.mjs --canales canal1 --detalle   # una
 
 ### Prueba de humo
 
-Abre la página de prueba del reproductor en Chrome for Testing y en Firefox, sin ventana, sin
-sonido y con perfiles temporales. Comprueba que el vídeo avanza sin errores fatales y escribe una
-línea JSON por muestra y un veredicto por navegador.
+Abre un canal en directo en la página de la extensión (`goodttv.html?registro#/canal/<login>`), en
+Chrome for Testing y en Firefox, sin ventana, sin sonido y con perfiles temporales. Comprueba que el
+vídeo avanza durante un minuto sin errores fatales de hls.js ni avisos encima y escribe una línea JSON por muestra y
+un veredicto por navegador, con los eventos del empalme, los fragmentos del directo y del VOD y el
+host de los del directo. A diferencia de `test:interfaz`, que recorre la interfaz y solo mira que el
+vídeo avance unos segundos, esta mira el reproductor durante más tiempo, con el modo, las pausas
+simuladas y la pestaña oculta.
 
 ```bash
 bun run build:navegador
-bun run test:humo -- --canales canal1,canal2              # 60 s en los dos navegadores
+bun run test:humo                                         # 60 s en los dos navegadores
+bun run test:humo -- --canales canal1,canal2              # con esos canales
 bun run test:humo -- --canales canal1 --pausa 0,20,1      # arranque desde el VOD
 bun run test:humo -- --canales canal1 --oculta 360 --como silenciado   # pestaña oculta 6 min
 ```
 
 - **Opciones:**
+  - `--canales a,b`: el primero que reproduzca; sin ella, los directos con más espectadores;
   - `--navegador chrome|firefox|ambos`;
   - `--segundos`;
   - `--modo` (como en Ajustes);
@@ -255,14 +264,14 @@ bun run test:humo -- --canales canal1 --oculta 360 --como silenciado   # pestañ
 - **Navegadores:**
   - **Chrome for Testing** se espera en `~/.cache/chrome-for-testing/chrome-linux64/chrome`; si
     está en otro sitio, indícalo con `HUMO_CHROME`. Se controla por CDP, sin Playwright
-    (motivo en [verificacion.md](verificacion.md#extensión-de-navegador)).
+    (motivo en [verificacion.md](verificacion/hasta-0.2.0.md#extensión-de-navegador)).
   - **Firefox** es el del sistema; otra ruta, con `HUMO_FIREFOX`. Se controla por WebDriver BiDi
     con `--remote-allow-system-access`, que hace falta para leer las páginas de una extensión. Las
-    pruebas también corren en Zen, en el sobremesa y en `mini-agentes`: `HUMO_FIREFOX=$(command -v zen-browser)` y
+    pruebas también corren en Zen, que está en `mini-agentes`: `HUMO_FIREFOX=$(command -v zen-browser)` y
     `--navegador firefox`.
     En `mini-agentes`, el del sistema es el snap, que no ve el perfil temporal en `/tmp` y no llega a
-    abrir («sin WebSocket en 30 s»): usa el descomprimido,
-    `HUMO_FIREFOX=~/.cache/firefox-release/firefox/firefox`.
+    abrir («sin WebSocket en 30 s»): si existe el descomprimido en `~/.cache/firefox-release/firefox/firefox`, las
+    pruebas lo usan solas.
 
 ## Client ID de Twitch
 

@@ -42,9 +42,9 @@ import kotlin.concurrent.thread
 import kotlin.math.abs
 import kotlin.math.roundToInt
 
-// Latencia en la que se coloca al llegar la primera lista, respecto a la hora de los fragmentos (PDT), como la mide
-// hls.js en medir/webview.mjs. Hasta el primer fotograma pasa ~1 s más: se acaba viendo a ~3 s, como hls.js, con ~2 s
-// de búfer (informe §6).
+// Latencia en la que se coloca al llegar la primera lista, respecto a la hora de los fragmentos (PDT), como la medía
+// hls.js en la comparación con la WebView (D21). Hasta el primer fotograma pasa ~1 s más: se acaba viendo a ~3 s, como
+// hls.js, con ~2 s de búfer (informe §6).
 private const val OBJETIVO_MS = 2000L
 // Búfer para empezar a reproducir (bufferForPlaybackMs); en directo, Media3 usa como mucho la mitad del objetivo.
 private const val BUFER_MS = 1000

@@ -1,8 +1,9 @@
 import "@fontsource-variable/atkinson-hyperlegible-next"
-import { App, activarIdioma, type IdiomaElegido } from "@goodttv/interfaz"
+import { activarIdioma, type IdiomaElegido } from "@goodttv/interfaz"
 import React from "react"
 import ReactDOM from "react-dom/client"
-import "@goodttv/interfaz/styles.css"
+import { App } from "./App"
+import "./styles.css"
 
 // El idioma (D35), antes de pintar nada: lo elegido y el del sistema llegan ya leídos de main (window.api.idioma). Sin
 // ellos, el localStorage y el idioma de Chromium.

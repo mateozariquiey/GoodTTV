@@ -1,4 +1,4 @@
-import { initials, t } from "@goodttv/interfaz"
+import { avatarAt, initials, t } from "@goodttv/interfaz"
 import { ArrowLeftIcon } from "@phosphor-icons/react"
 import { type ReactNode, useState } from "react"
 import { atras } from "./rutas"
@@ -9,10 +9,12 @@ import { atras } from "./rutas"
 export const Avatar = ({
   className = "avatar",
   name,
+  size = 40,
   url,
 }: {
   readonly className?: string
   readonly name: string
+  readonly size?: number // lo que ocupa (px de CSS), para pedir la foto a su medida: el de la clase
   readonly url: string | undefined
 }) =>
   url === undefined ? (
@@ -20,7 +22,7 @@ export const Avatar = ({
       {initials(name)}
     </span>
   ) : (
-    <img alt="" className={className} src={url} />
+    <img alt="" className={className} src={avatarAt(url, size)} />
   )
 
 // La barra de arriba de una pantalla que no es Inicio: la flecha, que hace lo mismo que Atrás, y lo que lleve.

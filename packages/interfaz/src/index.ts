@@ -1,9 +1,9 @@
 /// <reference path="./global.d.ts" />
-// La interfaz de GoodTTV (docs/arquitectura.md). Cada versión define window.api (AppApi, @goodttv/contratos) antes
-// de montar App, e importa las fuentes y "@goodttv/interfaz/styles.css". La versión de escritorio de la extensión no
-// usa App: monta sus propias pantallas con las piezas de abajo (reproductor, chat, datos).
-export { App } from "./App"
+// Lo común de la interfaz de GoodTTV (docs/arquitectura.md): datos, reproductor, chat, idioma y direcciones. Cada
+// versión define window.api (AppApi, @goodttv/contratos) y monta sus propias pantallas con estas piezas: las de la TV,
+// con su navegación por mando, están en apps/tv/src/renderer/src.
 export {
+  avatarAt,
   type Channel,
   fromRecent,
   fromSearch,
@@ -12,6 +12,13 @@ export {
   previewAt,
   toRecent,
 } from "./channel"
+export { useChannelDetails, useFollowing, useRecentChannel } from "./channel-details"
+export {
+  type ChannelSearch,
+  channelSearchDetail,
+  typedChannel,
+  useChannelSearch,
+} from "./channel-search"
 export {
   type AuthState,
   formatUptime,
@@ -19,9 +26,7 @@ export {
   type Home,
   type HomeData,
   type HomeSketch,
-  loadHome,
   type Resource,
-  SAVED_HOME_FRESH_MS,
   searchChannels,
   useAppStatus,
   useAuth,
@@ -32,10 +37,16 @@ export {
   useResource,
 } from "./data"
 export {
+  channelToShow,
+  type HomeChannels,
+  lineupOf,
+  useHomeChannels,
+  useRefreshOnReturnHome,
+} from "./home-channels"
+export {
   activarIdioma,
   type Clave,
   elegirIdioma,
-  type FuenteIdioma,
   type Idioma,
   type IdiomaElegido,
   idiomaActual,
@@ -44,36 +55,54 @@ export {
   tMensaje,
   useIdioma,
 } from "./idioma"
-export { type Platform, PlatformContext, TV_PLATFORM } from "./platform"
-export { CHAT_STATUS_TEXT, Message } from "./player/ChatPanel"
+export { LATENCY_MODES, LATENCY_ORDER } from "./latency-modes"
+export {
+  archiveMoment,
+  type LiveBar,
+  type LiveRewind,
+  liveBar,
+  useLiveArchive,
+} from "./live-archive"
+export { pageStorage, readStored, removeStored, writeStored } from "./page-storage"
+export { usePageVisible } from "./page-visible"
+export { type Platform, PlatformContext } from "./platform"
+export { chatDelayOf, TWITCH_VIEWER_LATENCY, useBehind } from "./player/behind"
+export { CHAT_STATUS_TEXT, ChatPanel, Message } from "./player/ChatPanel"
 export {
   emoteThumb,
   insertAt,
   NO_EMOTES,
   replaceWord,
-  SUGGESTIONS_MAX,
   suggestEmotes,
-  type Word,
   wordAt,
 } from "./player/emote-complete"
-export { OPENING_PREWARM_MS, useOpeningPrewarm } from "./player/opening-prewarm"
+export {
+  type ChatEmoteInfo,
+  chatEmoteDetails,
+  chatEmoteOf,
+  EMOTE_PROVIDER,
+  type EmoteSection,
+  emoteSections,
+  useLazyEmoteImages,
+} from "./player/emote-list"
+export { chosenLiveQuality } from "./player/live-quality"
+export { useOpeningPrewarm } from "./player/opening-prewarm"
+export { prewarmStream, usePrewarm } from "./player/prewarm"
 export { type ChatView, useChat } from "./player/useChat"
 export { useChatAtBottom } from "./player/useChatAtBottom"
 export { useChatCompose } from "./player/useChatCompose"
 export { useChatEmotes } from "./player/useChatEmotes"
-export {
-  chosenLiveQuality,
-  type PlayerGrid,
-  prewarmStream,
-  TWITCH_VIEWER_LATENCY,
-  useBehind,
-  useHlsPlayer,
-  usePrewarm,
-} from "./player/useHlsPlayer"
+export { type PlayerPhase, type PlayerState, useHlsPlayer } from "./player/useHlsPlayer"
 export { useReplayChat } from "./player/useReplayChat"
-export type { PlayerPhase, PlayerState } from "./player/useTwitchPlayer"
 export { chooseVolume, chosenVolume, type Volume } from "./player/volume"
-export { LATENCY_MODES, LATENCY_ORDER } from "./screens/AccountScreen"
+export {
+  type CommonRoute,
+  commonRouteHash,
+  LOGIN_PATTERN,
+  parseCommonRoute,
+  routeParts,
+  useHash,
+} from "./routes"
 export {
   prefetchedVodMaster,
   prefetchVod,
@@ -84,15 +113,22 @@ export {
   vodDetail,
   vodPlayback,
 } from "./vod-cache"
+export {
+  useChannelVods,
+  useStoryboard,
+  useUnfinishedVods,
+  useVodDetail,
+  type VodListLoad,
+  type VodLoad,
+} from "./vod-data"
 export { formatAgo, formatClock } from "./vod-format"
 export {
-  forgetVodProgress,
   isSeen,
   resumeAt,
   saveVodProgress,
   unfinishedVods,
-  type VodProgress,
   vodProgress,
+  vodTileProgress,
 } from "./vod-progress"
 export {
   addWatchMinute,

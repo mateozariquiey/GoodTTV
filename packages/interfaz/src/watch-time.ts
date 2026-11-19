@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react"
+import { pageStorage, readStored, writeStored } from "./page-storage"
 
 // Los canales que más ves, para ordenar tus seguidos como el «Recomendado para ti» de Twitch, que su API no da (Helix
 // solo los ordena por espectadores): los minutos que suena cada canal en GoodTTV, en directo o en sus VOD, con más peso
@@ -16,17 +17,9 @@ export type FollowedOrder = "recomendado" | "espectadores"
 type Entry = { readonly at: number; readonly minutes: number }
 type Store = Readonly<Record<string, Entry>>
 
-const storageOf = (): Storage | undefined => {
-  try {
-    return globalThis.localStorage
-  } catch {
-    return undefined
-  }
-}
-
 const read = (storage: Storage | undefined): Store => {
   try {
-    const parsed: unknown = JSON.parse(storage?.getItem(KEY) ?? "{}")
+    const parsed: unknown = JSON.parse(readStored(KEY, storage) ?? "{}")
     return typeof parsed === "object" && parsed !== null ? (parsed as Store) : {}
   } catch {
     return {}
@@ -39,14 +32,14 @@ const weight = (entry: Entry | undefined, now: number): number =>
     ? 0
     : entry.minutes * 0.5 ** (Math.max(0, now - entry.at) / HALF_LIFE_MS)
 
-export const addWatchMinute = (login: string, storage = storageOf(), now = Date.now()): void => {
+export const addWatchMinute = (login: string, storage = pageStorage(), now = Date.now()): void => {
   if (storage === undefined) return
   const store: Record<string, Entry> = { ...read(storage) }
   store[login] = { at: now, minutes: weight(store[login], now) + 1 }
   const kept = Object.entries(store)
     .sort(([, a], [, b]) => weight(b, now) - weight(a, now))
     .slice(0, LIMIT)
-  storage.setItem(KEY, JSON.stringify(Object.fromEntries(kept)))
+  writeStored(KEY, JSON.stringify(Object.fromEntries(kept)), storage)
 }
 
 // Tus seguidos en el orden elegido. Recomendado: primero los que más ves; luego los que has abierto hace poco (recents,
@@ -57,7 +50,7 @@ export const sortFollowed = <
   channels: readonly Item[],
   order: FollowedOrder,
   recents: readonly string[] = [],
-  storage = storageOf(),
+  storage = pageStorage(),
   now = Date.now(),
 ): Item[] => {
   const byViewers = [...channels].sort((a, b) => (b.viewerCount ?? 0) - (a.viewerCount ?? 0))
@@ -80,8 +73,8 @@ export const useWatchTime = (login: string | undefined, active: boolean): void =
   }, [active, login])
 }
 
-const readOrder = (storage = storageOf()): FollowedOrder =>
-  storage?.getItem(ORDER_KEY) === "recomendado" ? "recomendado" : "espectadores"
+const readOrder = (storage = pageStorage()): FollowedOrder =>
+  readStored(ORDER_KEY, storage) === "recomendado" ? "recomendado" : "espectadores"
 
 // El orden elegido, el mismo en todas las pestañas: cambiarlo en una lo cambia en las demás (evento «storage»).
 export const useFollowedOrder = (): readonly [FollowedOrder, (order: FollowedOrder) => void] => {
@@ -94,7 +87,7 @@ export const useFollowedOrder = (): readonly [FollowedOrder, (order: FollowedOrd
     return () => removeEventListener("storage", onStorage)
   }, [])
   const choose = useCallback((next: FollowedOrder) => {
-    storageOf()?.setItem(ORDER_KEY, next)
+    writeStored(ORDER_KEY, next, pageStorage())
     setOrder(next)
   }, [])
   return [order, choose]

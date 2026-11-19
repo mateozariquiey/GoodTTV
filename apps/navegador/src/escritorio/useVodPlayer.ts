@@ -2,12 +2,15 @@ import type { VideoDetail } from "@goodttv/contratos"
 import {
   chooseVolume,
   chosenVolume,
+  pageStorage,
   prefetchedVodMaster,
+  readStored,
   resumeAt,
   saveVodProgress,
   type VodMaster,
   vodPlayback,
   vodProgress,
+  writeStored,
 } from "@goodttv/interfaz"
 import Hls, { FetchLoader } from "hls.js"
 import { type RefObject, useCallback, useEffect, useRef, useState } from "react"
@@ -29,7 +32,7 @@ const PLACE_MS = 15_000
 const BANDWIDTH_KEY = "vod-ancho-de-banda"
 const FIRST_ESTIMATE_BPS = 20_000_000
 const startEstimate = (): number => {
-  const saved = Number(globalThis.localStorage?.getItem(BANDWIDTH_KEY))
+  const saved = Number(readStored(BANDWIDTH_KEY, pageStorage()))
   return Number.isFinite(saved) && saved > 1_000_000 ? saved : FIRST_ESTIMATE_BPS
 }
 
@@ -337,7 +340,7 @@ export const useVodPlayer = (
       removeEventListener("pagehide", save)
       const measured = player?.bandwidthEstimate
       if (measured !== undefined && Number.isFinite(measured) && measured > 0) {
-        globalThis.localStorage?.setItem(BANDWIDTH_KEY, String(Math.round(measured)))
+        writeStored(BANDWIDTH_KEY, String(Math.round(measured)), pageStorage())
       }
       player?.destroy()
       hls.current = null
@@ -348,14 +351,11 @@ export const useVodPlayer = (
     }
   }, [attempt, container, liveQuality, patch, startOverride, track, video])
 
-  const play = useCallback(() => {
-    element.current?.play().catch(() => undefined)
-  }, [])
-  const pause = useCallback(() => element.current?.pause(), [])
   const toggle = useCallback(() => {
-    if (element.current?.paused === true) play()
-    else pause()
-  }, [pause, play])
+    const media = element.current
+    if (media?.paused === true) media.play().catch(() => undefined)
+    else media?.pause()
+  }, [])
   const seek = useCallback(
     (to: number) => {
       const media = element.current
@@ -390,10 +390,6 @@ export const useVodPlayer = (
     media.muted = !media.muted
     chooseVolume(media)
   }, [])
-  const setMuted = useCallback((muted: boolean) => {
-    const media = element.current
-    if (media !== null) media.muted = muted
-  }, [])
   const setVolume = useCallback((volume: number) => {
     const media = element.current
     if (media === null) return
@@ -412,12 +408,9 @@ export const useVodPlayer = (
   }, [])
 
   return {
-    pause,
-    play,
     retry,
     seek,
     setQuality,
-    setMuted,
     setRate,
     setVolume,
     skip,

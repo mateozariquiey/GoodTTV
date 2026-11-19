@@ -26,7 +26,6 @@
   --white: #f2f2f4;
   --on-white-muted: #3a3a42;
   --live: #e5484d;
-  --live-badge: #c4161c; /* fondo rojo con texto blanco encima: más oscuro para leerse bien */
   --warning: #f0b45b;
   --radius: 8px;
   --topbar: 52px;
@@ -337,6 +336,24 @@ kbd {
   border-radius: 50%;
 }
 
+/* «Categorías», arriba: el directorio, aparte de Inicio (D49). En blanco cuando se está en él. */
+.topbar__link {
+  padding: 6px 10px;
+  border-radius: var(--radius);
+  color: var(--muted);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.topbar__link:hover {
+  background: var(--hover);
+  color: var(--text);
+}
+
+.topbar__link[aria-current="page"] {
+  color: var(--white);
+}
+
 /* Búsqueda. */
 .search {
   position: relative;
@@ -544,11 +561,13 @@ kbd {
 }
 
 .sidebar__category {
+  flex: 1;
   min-width: 0;
   font-size: 13px;
   color: var(--muted);
 }
 
+/* La categoría se queda con lo que deja la cifra, que va entera y a la derecha (D47). */
 .sidebar__line {
   display: flex;
   align-items: baseline;
@@ -558,15 +577,14 @@ kbd {
 .sidebar__line .live-count {
   flex: none;
   align-self: center;
+  font-size: 13px;
 }
 
-@media (width < 1760px) {
-  .sidebar__category {
+/* Con la columna por debajo de 200 px, la cifra va sin el punto rojo, que aquí no distingue nada (todos emiten), y
+   esos 12 px son dos letras más de categoría. */
+@media (width < 1600px) {
+  .sidebar__line .live-count i {
     display: none;
-  }
-
-  .placeholder .sidebar__category {
-    display: block;
   }
 }
 
@@ -638,6 +656,104 @@ kbd {
 .page__note {
   margin: 0;
   color: var(--muted);
+}
+
+/* El directorio (D49): una lista en columnas, de más a menos espectadores. Cada fila, el puesto, la carátula pequeña,
+   el nombre y sus cifras: lo que se viene a mirar son las cifras, no las carátulas. */
+.categories {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 4px 16px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.category {
+  display: grid;
+  grid-template-columns: 26px 45px minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
+  min-height: 76px;
+  padding: 8px 10px 8px 4px;
+  border-radius: var(--radius);
+}
+
+.category:hover {
+  background: var(--hover);
+}
+
+.category__rank {
+  color: var(--dim);
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.category__art {
+  grid-column: 2; /* también en el hueco de mientras carga, que no lleva puesto */
+  display: block;
+  width: 45px;
+  aspect-ratio: 3 / 4;
+  border-radius: 4px;
+  background: var(--surface-2);
+  object-fit: cover;
+}
+
+.category__text {
+  display: grid;
+  gap: 1px;
+  min-width: 0;
+}
+
+.category__name {
+  overflow: hidden;
+  font-size: 16px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.category__channels {
+  color: var(--dim);
+  font-size: 13px;
+}
+
+.category-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 18px;
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.category-back:hover {
+  color: var(--text);
+}
+
+.category-head {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  margin-bottom: 26px;
+}
+
+.category__art--large {
+  width: 72px;
+}
+
+.category-head__name {
+  margin: 0 0 6px;
+  font-size: 28px;
+  line-height: 1.15;
+  letter-spacing: -0.015em;
+}
+
+.category-head__counts {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin: 0;
 }
 
 .notice-block {
@@ -1713,16 +1829,6 @@ kbd {
   margin-top: 12px;
 }
 
-/* Aviso de «ya está abierto en otra pestaña» (goodttv.tsx). */
-.busy {
-  display: grid;
-  place-content: center;
-  justify-items: center;
-  gap: 16px;
-  height: 100%;
-  font-size: 16px;
-}
-
 /* Estados de la ventana, después de las reglas que cambian. Modo teatro: fuera la barra y la columna; el vídeo y el
  * chat se quedan con la ventana. Columna plegada: solo avatares. En la búsqueda y la columna, lo elegido va en blanco. */
 .desktop--collapsed {
@@ -2228,18 +2334,6 @@ kbd {
 }
 
 /* Reanudado donde se dejó: lo dice abajo a la izquierda, sobre los controles, unos segundos. */
-.sound-elsewhere {
-  position: absolute;
-  top: 12px;
-  left: 12px;
-  z-index: 1;
-  padding: 5px 10px;
-  border-radius: var(--radius);
-  background: rgb(23 23 27 / 0.85);
-  font-size: 13px;
-  pointer-events: none;
-}
-
 .resumed {
   position: absolute;
   left: 16px;
@@ -2365,9 +2459,10 @@ kbd {
 .sidebar__list li:hover .sidebar__add {
   opacity: 1;
 }
-/* El nombre ocupa todo el ancho: cuando sale el +, se corta antes de llegar a él en vez de quedar tapado. */
-.sidebar__list li:hover:has(.sidebar__add) .sidebar__name,
-.sidebar__list li:has(.sidebar__add:focus-visible) .sidebar__name {
+/* El nombre y la línea de debajo ocupan todo el ancho: cuando sale el +, acaban antes de llegar a él en vez de quedar
+   tapados. */
+.sidebar__list li:hover:has(.sidebar__add) :is(.sidebar__name, .sidebar__line),
+.sidebar__list li:has(.sidebar__add:focus-visible) :is(.sidebar__name, .sidebar__line) {
   padding-right: 30px;
 }
 .grid-view__area {
@@ -2542,7 +2637,7 @@ kbd {
   .sidebar__add {
     opacity: 1;
   }
-  .sidebar__list li:has(.sidebar__add) .sidebar__name {
+  .sidebar__list li:has(.sidebar__add) :is(.sidebar__name, .sidebar__line) {
     padding-right: 30px;
   }
   .grid-cell__actions {

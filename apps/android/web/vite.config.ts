@@ -14,6 +14,12 @@ export default defineConfig({
     minify: false,
     rolldownOptions: {
       input: { index: `${root}index.html`, motor: `${root}motor.html` },
+      // hls.js no se usa en Android (el vídeo es Media3, D21), pero llegaba al paquete por el índice de
+      // @goodttv/interfaz, que exporta el reproductor de la extensión y la TV: hls.js no declara que no tiene efectos
+      // al importarlo, así que se conservaba entero (1,1 MB) aunque nada lo llame. Si algo de Android lo usa, entra.
+      treeshake: {
+        moduleSideEffects: [{ sideEffects: false, test: /[\\/]node_modules[\\/]hls\.js[\\/]/ }],
+      },
     },
   },
   plugins: [react()],

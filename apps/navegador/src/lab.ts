@@ -6,10 +6,15 @@ import {
   readableUserColor,
   tokenizeFragments,
 } from "@goodttv/servicios"
-import { type DirectoOptions, type EmpalmeEvent, parseSimulatedPause } from "@goodttv/sin-anuncios"
+import {
+  type DirectoOptions,
+  parseSimulatedPause,
+  type SafeEmpalmeEvent,
+  safeEmpalmeEvent,
+} from "@goodttv/sin-anuncios"
 import Hls from "hls.js"
+import { WAITS } from "./escritorio/cuadricula"
 import { parseRoute } from "./escritorio/routes"
-import { WAITS } from "./escritorio/sonido"
 
 // Lo del laboratorio en las páginas de la extensión, por la dirección (como GOODTTV_PAUSA_SIMULADA y
 // GOODTTV_REGISTRO_EMPALME en la TV): ?pausa=cada,duración[,arranque] simula pausas globales para probar el relleno
@@ -17,38 +22,9 @@ import { WAITS } from "./escritorio/sonido"
 // además, la prueba de rendimiento lee el hls.js del reproductor (window.hlsPrueba) y sus hitos de arranque
 // (window.marcasPrueba). ?sinred: comprobar la cuenta falla como sin red hasta que la prueba ponga
 // window.redPrueba = true, o hasta cerrar sesión (sin sesión no hace falta la red); desde entonces, lo que diga la
-// cuenta de verdad (EXT-4). ?esperas=s,s acorta las esperas de una pestaña sin sonido (sonido.ts), para medir cuánto se
-// tarda en volver a ella desde cada escalón. ?twitchfalso[=ms]: una cuenta y un Helix falsos, con esa espera por
+// cuenta de verdad (EXT-4). ?esperas=s acorta lo que tarda una cuadrícula oculta en parar las celdas que no se oyen
+// (cuadricula.ts). ?twitchfalso[=ms]: una cuenta y un Helix falsos, con esa espera por
 // petición, para medir el arranque de Inicio con cuenta (twitch-falso.ts); no guarda recientes, como el chat de abajo.
-
-// Campos del empalme que se pueden guardar (los mismos que registra la TV, más los de nueva-numeracion y
-// url-distinta): los errores y las URL pueden llevar el token de Twitch.
-const SAFE_FIELDS = new Set([
-  "ahora",
-  "antes",
-  "canal",
-  "celda",
-  "duracionS",
-  "ev",
-  "fragmentosVod",
-  "index",
-  "motivo",
-  "ms",
-  "otra",
-  "publicados",
-  "saltoS",
-  "segundos",
-  "seq",
-  "type",
-])
-
-export type SafeEvent = Readonly<Record<string, unknown>> & { readonly s: number }
-
-// El evento sin lo que no se puede guardar, con los segundos desde que se abrió la página.
-export const safeEvent = (event: EmpalmeEvent): SafeEvent => ({
-  s: Math.round(performance.now() / 100) / 10,
-  ...Object.fromEntries(Object.entries(event).filter(([name]) => SAFE_FIELDS.has(name))),
-})
 
 // Hitos del arranque de cada reproductor, en ms desde que se abrió la página: lista, primer fragmento pedido, cargado y
 // en el búfer. Los del <video> (primer fotograma, reproduciendo) los toma la prueba.
@@ -75,19 +51,16 @@ const instrumentHls = (): void => {
 
 export const labOptions = (search: string): Pick<DirectoOptions, "log" | "simulatedPause"> => {
   const params = new URLSearchParams(search)
-  const events: SafeEvent[] = []
-  // ?esperas=s,s: cuánto espera una pestaña sin sonido antes de pararse y con el empalme caliente (sonido.ts).
-  const waits = (params.get("esperas") ?? "").split(",").map(Number)
-  if (waits.length === 2 && waits.every((seconds) => Number.isFinite(seconds) && seconds > 0)) {
-    WAITS.silentMs = (waits[0] ?? 0) * 1000
-    WAITS.warmMs = (waits[1] ?? 0) * 1000
-  }
+  const events: SafeEmpalmeEvent[] = []
+  // ?esperas=s: cuánto tarda una cuadrícula oculta en parar las celdas que no se oyen (cuadricula.ts).
+  const hidden = Number(params.get("esperas") ?? "")
+  if (Number.isFinite(hidden) && hidden > 0) WAITS.hiddenMs = hidden * 1000
   if (params.has("registro")) {
     Object.assign(globalThis, { registroEmpalme: events })
     instrumentHls()
   }
   return {
-    log: params.has("registro") ? (event) => events.push(safeEvent(event)) : () => undefined,
+    log: params.has("registro") ? (event) => events.push(safeEmpalmeEvent(event)) : () => undefined,
     simulatedPause: parseSimulatedPause(params.get("pausa") ?? ""),
   }
 }
@@ -325,7 +298,6 @@ export const labApi = (base: AppApi, search: string): AppApi => {
               category: "Prueba",
               id: "1",
               startedAt: new Date().toISOString(),
-              tags: [],
               thumbnailUrl:
                 "https://static-cdn.jtvnw.net/previews-ttv/live_user_x-{width}x{height}.jpg",
               title: "Chat del laboratorio",

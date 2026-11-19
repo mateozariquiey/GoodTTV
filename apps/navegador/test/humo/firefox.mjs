@@ -1,7 +1,8 @@
 // Firefox sin ventana controlado por WebDriver BiDi, sin dependencias: instala la extensión como temporal, con un
 // UUID fijo para conocer la dirección de sus páginas, y evalúa código en ellas.
+import { existsSync } from "node:fs"
 import { mkdtemp, writeFile } from "node:fs/promises"
-import { tmpdir } from "node:os"
+import { homedir, tmpdir } from "node:os"
 import { join } from "node:path"
 import { connect, launch } from "./proceso.mjs"
 
@@ -9,7 +10,12 @@ const EXTENSION_ID = "goodttv@mateozariquiey.github.io"
 const UUID = "7d1c4c2e-5b1a-4a0e-9a7e-3f0c1b2a9e11"
 
 // wayland: en vez de sin ventana, en el compositor del laboratorio con ese socket (GPU y decodificación por hardware).
-export const launchFirefox = async ({ extension, firefox = "/usr/bin/firefox", wayland }) => {
+// Sin `firefox`, el descomprimido en ~/.cache/firefox-release si existe: donde el del sistema es el snap, este no
+// abre los perfiles de /tmp (docs/desarrollo.md).
+const UNPACKED = join(homedir(), ".cache/firefox-release/firefox/firefox")
+const defaultFirefox = () => (existsSync(UNPACKED) ? UNPACKED : "/usr/bin/firefox")
+
+export const launchFirefox = async ({ extension, firefox = defaultFirefox(), wayland }) => {
   const profile = await mkdtemp(join(tmpdir(), "goodttv-humo-firefox-"))
   const prefs = {
     "browser.shell.checkDefaultBrowser": false,
@@ -79,12 +85,12 @@ export const launchFirefox = async ({ extension, firefox = "/usr/bin/firefox", w
       evaluate,
       // Otra pestaña con una página de la extensión, para leerla (la abre la propia página: BiDi no navega a ellas).
       // inWindow: en su propia ventana, a la vista junto a la primera.
-      openTab: async (path, { inWindow = false } = {}) => {
+      openTab: async (path, { background = false, inWindow = false } = {}) => {
         const url = JSON.stringify(path)
         const id = await evaluate(
           inWindow
             ? `chrome.windows.create({ url: ${url} }).then((created) => created.tabs[0].id)`
-            : `chrome.tabs.create({ url: ${url} }).then((tab) => tab.id)`,
+            : `chrome.tabs.create({ active: ${!background}, url: ${url} }).then((tab) => tab.id)`,
         )
         let other
         for (let i = 0; i < 50 && other === undefined; i++) {
@@ -101,6 +107,7 @@ export const launchFirefox = async ({ extension, firefox = "/usr/bin/firefox", w
         opened.add(other)
         return {
           close: () => evaluate(`chrome.tabs.remove(${id})`),
+          show: () => evaluate(`chrome.tabs.update(${id}, { active: true }).then(() => 0)`),
           evaluate: (expression) => evaluateIn(other, expression),
         }
       },

@@ -33,10 +33,8 @@ export const EN = {
   "Tu sesión de Twitch ha caducado. Vuelve a vincular la cuenta":
     "Your Twitch session expired. Link your account again",
   "Vincula tu cuenta de Twitch para ver los directos": "Link your Twitch account to browse streams",
-  "Esta compilación no tiene Client ID de Twitch": "This build has no Twitch Client ID",
   "El código para vincular la cuenta ha caducado": "The account link code expired",
   "Has rechazado el permiso en Twitch": "You declined the permission on Twitch",
-  "Sin el reproductor de Twitch en la página": "The Twitch player isn't on the page",
   "vídeo no válido": "invalid video",
   "Vuelve a vincular la cuenta en Ajustes para escribir en el chat.":
     "Link your account again in Settings to write in the chat.",
@@ -117,6 +115,15 @@ export const EN = {
   "En directo": "Live",
   Desconectado: "Offline",
   "{n} espectadores": "{n} viewers",
+  "{n} canales": "{n} channels",
+  Categorías: "Categories",
+  "No se pudieron cargar las categorías ({error}).": "Couldn't load the categories ({error}).",
+  "Twitch no ha dado ninguna categoría.": "Twitch returned no categories.",
+  "Esa categoría no existe en Twitch.": "That category doesn't exist on Twitch.",
+  "Nadie la emite ahora.": "Nobody is streaming it right now.",
+  "Cargando categorías…": "Loading categories…",
+  "No se pudieron cargar las categorías": "Couldn't load the categories",
+  "para ver sus directos": "to see its streams",
   espectadores: "viewers",
   Espectadores: "Viewers",
   "No se pudo comprobar tu cuenta ({error}).": "Couldn't check your account ({error}).",
@@ -240,8 +247,6 @@ export const EN = {
   "Retroceder {n} s (←)": "Back {n} s (←)",
   "{n} visualizaciones": "{n} views",
   "Más vídeos": "More videos",
-  "Suena en otra ventana · clic para oír esta":
-    "Sound is playing in another window · click to hear this one",
   "Ir al canal de {displayName}": "Go to {displayName}'s channel",
   "Ir al canal": "Go to the channel",
   "Más vídeos de {displayName}": "More videos from {displayName}",
@@ -297,7 +302,6 @@ export const EN = {
   // La cuadrícula (EXT-6)
   "Pausar o seguir": "Pause or resume",
   Escuchar: "Listen to",
-  "Escuchar aquí": "Listen here",
   "Ver solo": "Watch only",
   Quitar: "Remove",
   "Añadir canal": "Add a channel",
@@ -308,7 +312,7 @@ export const EN = {
   "Hasta 4 canales en una pestaña, con un + en la columna y un botón en el canal. Suena el que eliges, y su chat es el que se ve.":
     "Up to 4 channels in one tab, with a + in the column and a button on the channel. The one you pick plays sound, and its chat is the one shown.",
 
-  // La TV (sus pantallas, en @goodttv/interfaz)
+  // La TV (sus pantallas, en apps/tv/src/renderer/src)
   Secciones: "Sections",
   "EN DIRECTO": "LIVE",
   "{displayName}, desconectado": "{displayName}, offline",
@@ -352,14 +356,14 @@ export const EN = {
   "Ver qué tecla envía cada botón": "See which key each button sends",
   "GoodTTV {version}. Basado en VacuumStream de Eliott Bouhana (licencia MIT).":
     "GoodTTV {version}. Based on VacuumStream by Eliott Bouhana (MIT license).",
-  "No está afiliado a Twitch. La reproducción usa un reproductor propio sin anuncios; si falla, el reproductor oficial de Twitch.":
-    "Not affiliated with Twitch. Playback uses its own ad-free player, and the official Twitch player if that fails.",
+  "No está afiliado a Twitch. La reproducción usa un reproductor propio sin anuncios.":
+    "Not affiliated with Twitch. Playback uses its own ad-free player.",
   "Aceleración de vídeo disponible:": "Video acceleration available:",
   sí: "yes",
   "Este sistema no tiene un almacén de secretos: la sesión se guarda sin cifrar, solo legible por tu usuario.":
     "This system has no secret store: the session is saved unencrypted, readable only by your user.",
-  "La cuenta sirve para la lista de seguidos y el chat. El reproductor de Twitch no recibe esta sesión: Turbo y las ventajas de suscriptor no se aplican aquí.":
-    "The account is used for your follow list and the chat. The Twitch player doesn't get this session, so Turbo and subscriber perks don't apply here.",
+  "La cuenta sirve para la lista de seguidos y el chat. El reproductor no usa esta sesión: Turbo y las ventajas de suscriptor no se aplican aquí.":
+    "The account is used for your follow list and the chat. The player doesn't use this session, so Turbo and subscriber perks don't apply here.",
   "Escanea el código con el móvil": "Scan the code with your phone",
   "o entra en": "or go to",
   "y escribe:": "and enter:",
@@ -376,17 +380,8 @@ export const EN = {
   Reanudar: "Resume",
   "Activar sonido": "Unmute",
   "Ocultar chat": "Hide chat",
-  "Controles de Twitch": "Twitch controls",
-  "Controles de Twitch: ↑ ↓ para moverte, OK para elegir y Atrás para volver.":
-    "Twitch controls: ↑ ↓ to move, OK to choose and Back to return.",
-  "Usar el reproductor de Twitch": "Use the Twitch player",
-  "No se pudo cargar el reproductor de Twitch. Comprueba la conexión.":
-    "Couldn't load the Twitch player. Check your connection.",
   "{displayName} no está en directo ahora.": "{displayName} isn't live right now.",
   "Twitch ha bloqueado el arranque.": "Twitch blocked playback from starting.",
-  "Abrir controles de Twitch": "Open Twitch controls",
-  "Twitch puede estar pidiendo que confirmes el contenido («Start Watching»).":
-    "Twitch may be asking you to confirm the content (“Start Watching”).",
   "Conectando con Twitch…": "Connecting to Twitch…",
   "↪ a @{nombre}": "↪ to @{nombre}",
   "Solo lectura · a la par de la imagen (−{delay} s)":

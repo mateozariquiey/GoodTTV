@@ -2,42 +2,41 @@ import type { LatencyMode } from "@goodttv/contratos"
 import Hls from "hls.js"
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react"
 import { usePlatform } from "../platform"
-import type { PlayerState } from "./useTwitchPlayer"
+import { chooseQuality, chosenLiveQuality } from "./live-quality"
+import { aheadOf, nextMediaRecovery, playedMeter, STUCK_WATCH, watchStuck } from "./stuck"
 import { chooseVolume, chosenVolume, type Volume } from "./volume"
 
 // Reproductor propio: un <video> con hls.js que lee el directo sin anuncios que prepara el proceso principal en
-// /stream/<canal>/ (src/main/stream). Mismo contrato que useTwitchPlayer, para que PlayerScreen no dependa de cuál
-// se usa. No hay puerta de contenido de Twitch (gateHint siempre falso).
+// /stream/<canal>/ (src/main/stream).
+
+export type PlayerPhase = "loading" | "ready" | "offline" | "error" | "stalled"
+
+export type PlayerState = {
+  // El navegador no ha dejado arrancar el vídeo (autoplay): hace falta pulsar Reproducir.
+  readonly blocked: boolean
+  readonly muted: boolean
+  readonly phase: PlayerPhase
+  readonly playing: boolean
+  readonly qualities: readonly { readonly id: string; readonly label: string }[]
+  readonly quality: string
+  // El directo, ya reproduciendo, lleva parado más de lo que dura una parada normal (stuck.ts): se ofrece «Reintentar».
+  // La fase sigue en «ready», porque no se para nada y puede volver solo: la barra del directo, el chat y la
+  // cuadrícula siguen como estaban.
+  readonly stuck: boolean
+}
 
 const INITIAL: PlayerState = {
   blocked: false,
-  gateHint: false,
   muted: false,
   phase: "loading",
   playing: false,
   qualities: [],
   quality: "auto",
+  stuck: false,
 }
 
 const STALL_MS = 20_000
 const END_WATCH_MS = 5000
-// Retraso típico de un espectador de Twitch respecto al emisor (embed oficial, medido: ~2,7 s). Quien escribe en el
-// chat lo hace viendo el directo con ese retraso.
-export const TWITCH_VIEWER_LATENCY = 3
-
-// Cuánto va la imagen por detrás de lo que ve un espectador normal de Twitch, en segundos enteros: el precio de no ver
-// anuncios. null mientras no se sabe. Se mira cada segundo; el chat se retrasa lo mismo.
-export const useBehind = (latency: { readonly current: number | null }): number | null => {
-  const [behind, setBehind] = useState<number | null>(null)
-  useEffect(() => {
-    const timer = setInterval(() => {
-      const seconds = latency.current
-      setBehind(seconds === null ? null : Math.max(0, Math.round(seconds - TWITCH_VIEWER_LATENCY)))
-    }, 1000)
-    return () => clearInterval(timer)
-  }, [latency])
-  return behind
-}
 // Margen hasta el final de la lista, en fragmentos del directo. Con la carga progresiva, el último (PREFETCH, que se
 // descarga mientras se codifica) se añade a medida que llega: con 2,5 quedan 1-2 s de búfer.
 const SYNC_SEGMENTS = 2.5
@@ -86,62 +85,6 @@ const streamQuery = (
   if (quality !== null) query.set("q", quality)
   if (hueco > 0) query.set("hueco", String(hueco))
   return `?${query}`
-}
-
-// Calidad elegida a mano (null: automática, la mejor que dé el canal). Se queda hasta que se elija otra: el canal
-// siguiente se pide con ella, también tras retroceder al VOD y volver al directo (otro reproductor) o abrirlo desde
-// Inicio, y se precalienta con ella. Como el volumen (volume.ts) y en twitch.tv, se guarda en el localStorage de la
-// página: una pestaña nueva, o GoodTTV al volver a abrirlo, empieza con la última que se eligió. Una pestaña abierta
-// sigue con la suya aunque se elija otra en otra.
-const QUALITY_KEY = "calidad-directo"
-const QUALITY_ID = /^\d+x\d+@\d+$/ // como la pide el directo: resolución@fps
-
-const qualityStorage = (): Storage | undefined => {
-  try {
-    return globalThis.localStorage
-  } catch {
-    return undefined
-  }
-}
-
-let chosenQuality: string | null | undefined // la de esta pestaña; undefined hasta leerla
-
-export const chosenLiveQuality = (storage = qualityStorage()): string | null => {
-  if (chosenQuality === undefined) {
-    const saved = storage?.getItem(QUALITY_KEY) ?? null
-    chosenQuality = saved !== null && QUALITY_ID.test(saved) ? saved : null
-  }
-  return chosenQuality
-}
-
-const chooseQuality = (quality: string | null, storage = qualityStorage()): void => {
-  chosenQuality = quality
-  try {
-    if (quality === null) storage?.removeItem(QUALITY_KEY)
-    else storage?.setItem(QUALITY_KEY, quality)
-  } catch {
-    // Sin sitio: vale para esta pestaña.
-  }
-}
-
-// Precalentar: pide al directo que abra ya el empalme de un canal que probablemente se va a abrir, sin parar el que
-// suena. Al abrirlo, el arranque lleva ya ese adelanto (abrir las sesiones de Twitch, a veces el directo publicado).
-// Con la calidad que se va a pedir: con otra, el directo abriría el canal otra vez.
-export const prewarmStream = (login: string, mode: LatencyMode, hueco = 0): void => {
-  const query = new URLSearchParams({ modo: mode })
-  const quality = chosenLiveQuality()
-  if (quality !== null) query.set("q", quality)
-  if (hueco > 0) query.set("hueco", String(hueco))
-  void fetch(`/stream/${login}/precalentar?${query}`).catch(() => undefined)
-}
-
-// Precalienta un canal cuando lleva «dwellMs» señalado (el ratón encima, el foco en él); null: ninguno.
-export const usePrewarm = (login: string | null, mode: LatencyMode, dwellMs: number): void => {
-  useEffect(() => {
-    if (login === null) return undefined
-    const timer = setTimeout(() => prewarmStream(login, mode), dwellMs)
-    return () => clearTimeout(timer)
-  }, [dwellMs, login, mode])
 }
 
 const readInfo = async (
@@ -367,6 +310,28 @@ export const useHlsPlayer = (
     let hls: Hls | undefined
     let catchup: ReturnType<typeof setInterval> | undefined
     let endWatch: ReturnType<typeof setInterval> | undefined
+    let everPlayed = false // el directo ya llegó a verse: desde entonces vigila endWatch, abajo
+    // Esta visita ha acabado en error o sin directo. Un «playing» tardío del <video> (pausar y seguir con lo que queda
+    // en el búfer) no la devuelve a «ready»: hace falta «Reintentar».
+    let over = false
+    const finish = (phase: "error" | "offline"): void => {
+      over = true
+      visit.owner.patch({ phase, playing: false, stuck: false })
+    }
+    // Lo reproducido de verdad desde la última vez que se miró, sin los saltos (playedMeter, en stuck.ts): un vídeo
+    // parado que salta al directo no pasa por uno que reproduce, y volver a ver un tramo ya visto sí cuenta.
+    const meter = playedMeter(video.currentTime)
+    // Sin datos del medio (readyState 0, al conectarlo o reconectarlo tras un error), currentTime ya puede marcar el
+    // sitio donde hls.js va a empezar, sin haber reproducido nada y sin «seeking»: tampoco se cuenta.
+    const sampleMeter = (): void =>
+      meter.sample(video.currentTime, video.seeking || video.readyState === 0)
+    video.addEventListener("timeupdate", sampleMeter)
+    for (const jump of ["seeking", "seeked", "emptied", "loadedmetadata"])
+      video.addEventListener(jump, () => meter.jumped(video.currentTime))
+    const playedSince = (): number => {
+      sampleMeter()
+      return meter.take()
+    }
 
     const start = (): void => {
       if (!active) return
@@ -376,10 +341,11 @@ export const useHlsPlayer = (
         }
       })
     }
-    video.addEventListener(
-      "playing",
-      () => active && visit.owner.patch({ blocked: false, phase: "ready", playing: true }),
-    )
+    video.addEventListener("playing", () => {
+      if (!active || over) return
+      everPlayed = true
+      visit.owner.patch({ blocked: false, phase: "ready", playing: true })
+    })
     video.addEventListener("pause", () => active && visit.owner.patch({ playing: false }))
     video.addEventListener(
       "volumechange",
@@ -417,6 +383,10 @@ export const useHlsPlayer = (
         const maxLatency = target + (mode === "directo" ? LIVE_MAX_BEHIND : MAX_BEHIND)
         const player = new Hls({
           autoStartLoad: false, // empieza a cargar en el objetivo (LEVEL_LOADED, abajo)
+          // Lo ya visto se suelta a los 30 s, como en los VOD. Sin límite (hls.js lo trae en Infinity), el navegador
+          // guardaba hasta ~200 s por reproductor: unos 160 MB de más con un canal a 1080p60 y 630 MB con cuatro
+          // (D52). Retroceder más de 30 s vuelve a pedir esos fragmentos a Twitch, y tarda lo mismo.
+          backBufferLength: 30,
           // Sin subtítulos ni pistas de metadatos (la interfaz no los usa): hls.js crearía pistas data: que la
           // CSP bloquea.
           enableCEA708Captions: false,
@@ -472,31 +442,64 @@ export const useHlsPlayer = (
             pausedFor = Math.max(pausedFor, (performance.now() - pausedAt) / 1000)
           pausedAt = null
         })
+        // Los errores fatales de medios se recuperan unas pocas veces seguidas, no para siempre (stuck.ts).
+        let recoveries = 0
+        let watch = STUCK_WATCH // lo que lleva visto el vigilante (endWatch, abajo)
         player.on(Hls.Events.ERROR, (_event, data) => {
           if (!data.fatal) return
-          if (data.type === Hls.ErrorTypes.MEDIA_ERROR) {
+          // Con lo reproducido hasta este momento, no hasta la última vuelta del vigilante.
+          const recovery =
+            data.type === Hls.ErrorTypes.MEDIA_ERROR
+              ? nextMediaRecovery(recoveries, watch.advancedMs + playedSince() * 1000)
+              : null
+          if (recovery !== null) {
+            recoveries = recovery
+            watch = { ...watch, advancedMs: 0 }
             // Al darlo por fatal, hls.js ya ha parado la carga, y recoverMediaError solo vuelve a conectar el <video>
             // (sin autoStartLoad no la reanuda): se reanuda aquí, donde iba.
             const time = video.currentTime
             player.recoverMediaError()
             player.startLoad(time > 0 ? time : -1)
-          } else if (active) visit.owner.patch({ phase: "error", playing: false })
+          } else if (active) finish("error")
         })
         // Si la emisión termina con el canal abierto, la lista se queda como estaba, sin error, y hls.js seguiría
         // esperando: parado STALL_MS y sin pausa, se pregunta si sigue (el empalme lo sabe, y contesta enseguida).
-        let lastTime = -1
-        let stuckSince = performance.now()
+        // Si sigue y el vídeo lleva parado más de lo que dura una parada normal (watchStuck), se ofrece «Reintentar»
+        // (state.stuck), sin parar nada: si el vídeo vuelve a reproducir solo, el aviso se va.
+        let stuckSince = performance.now() // desde la última vez que se preguntó si sigue
+        let lastTick = performance.now()
         endWatch = setInterval(() => {
-          if (video.paused || video.currentTime !== lastTime) {
-            lastTime = video.currentTime
+          if (over) return
+          // Con tope: el rato con el equipo suspendido o con los temporizadores frenados no cuenta como parado.
+          const elapsedMs = Math.min(performance.now() - lastTick, 2 * END_WATCH_MS)
+          lastTick = performance.now()
+          const before = watch
+          watch = watchStuck(watch, {
+            aheadS: aheadOf(video.buffered, video.currentTime),
+            elapsedMs,
+            paused: video.paused,
+            playedS: playedSince(),
+            started: everPlayed,
+          })
+          if (watch.notice !== before.notice) {
+            const stuck = watch.notice
+            visit.owner.setState((current) =>
+              current.phase === "ready" && current.stuck !== stuck
+                ? { ...current, stuck }
+                : current,
+            )
+          }
+          if (watch.frozenMs === 0) {
             stuckSince = performance.now()
-          } else if (performance.now() - stuckSince >= STALL_MS) {
+            return
+          }
+          if (performance.now() - stuckSince >= STALL_MS) {
             stuckSince = performance.now()
             readInfo(channel, info.quality, mode, visitId, hueco, abort.signal)
               .then((now) => {
                 if (active && now.offline) {
                   hls?.destroy()
-                  visit.owner.patch({ phase: "offline", playing: false })
+                  finish("offline")
                 }
               })
               .catch(() => undefined) // no se sabe: sigue esperando
@@ -675,15 +678,6 @@ export const useHlsPlayer = (
     chooseVolume(video)
     patch({ muted: video.muted })
   }, [patch])
-  const setMuted = useCallback(
-    (muted: boolean) => {
-      const video = videoRef.current
-      if (video === undefined || video.muted === muted) return
-      video.muted = muted
-      patch({ muted })
-    },
-    [patch],
-  )
   // El sonido que le toca a una celda de la cuadrícula, sin guardarlo como elección de la persona.
   const applySound = useCallback(
     (sound: Volume) => {
@@ -722,7 +716,6 @@ export const useHlsPlayer = (
       void document.exitPictureInPicture().catch(() => undefined)
     else void video.requestPictureInPicture?.().catch(() => undefined)
   }, [])
-  const syncIntent = useCallback(() => undefined, [])
   // Mueve la imagen «seconds» dentro de la lista del directo; hacia delante, como mucho hasta el objetivo del modo.
   // Devuelve lo que se ha movido (s), o null si no llega tan atrás: no se mueve, salvo con orStart, que la deja al
   // principio de la lista.
@@ -742,11 +735,9 @@ export const useHlsPlayer = (
     pictureInPicture,
     rewound,
     seekBy,
-    setMuted,
     setQuality,
     setVolume,
     state,
-    syncIntent,
     toggle,
     toggleMuted,
     togglePictureInPicture,

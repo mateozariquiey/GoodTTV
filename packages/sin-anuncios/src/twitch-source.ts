@@ -1,6 +1,7 @@
 // Red con Twitch para el reproductor propio: token de reproducción como invitado, lista maestra, VOD en curso y
 // lectura del tiempo del contenido de un fragmento. API privada del reproductor web (sin Client-Integrity). Cada
 // petición sale por el fetch que se le dé (en Android, la red nativa); si no, por el global.
+import { globalFetch } from "./comun"
 import {
   type Bytes,
   firstVideoPts,
@@ -27,9 +28,8 @@ const VOD_TOKEN_QUERY = `query($id: ID!) {
   videoPlaybackAccessToken(id: $id, params: {platform: "web", playerBackend: "mediaplayer", playerType: "site"}) { value signature }
 }`
 
-// Por dónde salen las peticiones a Twitch. Por defecto, el fetch global en el momento de pedir.
+// Por dónde salen las peticiones a Twitch. Por defecto, el fetch global en el momento de pedir (globalFetch).
 export type Fetch = typeof fetch
-const globalFetch: Fetch = (input, init) => fetch(input, init)
 
 export const deviceId = (): string =>
   Array.from(crypto.getRandomValues(new Uint8Array(16)), (byte) =>
@@ -121,6 +121,30 @@ export const tokenOf = (value: unknown): TokenData | null => {
   return typeof signature === "string" && typeof tokenValue === "string"
     ? { signature, value: tokenValue }
     : null
+}
+
+// El token de invitado de un VOD, para pedir su lista a usher; null si Twitch no lo da. Lo piden el relleno del empalme
+// (Vod) y los VOD que se ven (vods.ts).
+export const vodToken = async (
+  id: string,
+  device: string,
+  red: Fetch = globalFetch,
+): Promise<TokenData | null> =>
+  tokenOf(pick(await gql(VOD_TOKEN_QUERY, { id }, device, red), "data", "videoPlaybackAccessToken"))
+
+// La lista maestra de un VOD en usher, con su token de invitado: usher no les inserta anuncios.
+export const vodMasterOf = (id: string, token: TokenData): string => {
+  const params = new URLSearchParams({
+    allow_source: "true",
+    p: String(Math.floor(Math.random() * 1e7)),
+    platform: "web",
+    player_backend: "mediaplayer",
+    playlist_include_framerate: "true",
+    sig: token.signature,
+    supported_codecs: "h264",
+    token: token.value,
+  })
+  return `https://usher.ttvnw.net/vod/${id}.m3u8?${params}`
 }
 
 export type OpenedVariant = Variant & {
@@ -237,28 +261,9 @@ export class Vod implements VodSource {
     const id = pick(video, "id")
     if (typeof id !== "string") throw new Error("el canal no tiene VOD en curso")
     const recordedAt = Date.parse(String(pick(video, "recordedAt")))
-    const token = tokenOf(
-      pick(
-        await gql(VOD_TOKEN_QUERY, { id }, device, this.red),
-        "data",
-        "videoPlaybackAccessToken",
-      ),
-    )
+    const token = await vodToken(id, device, this.red)
     if (token === null) throw new Error("sin token del VOD")
-    const params = new URLSearchParams({
-      allow_source: "true",
-      p: String(Math.floor(Math.random() * 1e7)),
-      platform: "web",
-      player_backend: "mediaplayer",
-      playlist_include_framerate: "true",
-      sig: token.signature,
-      supported_codecs: "h264",
-      token: token.value,
-    })
-    const variant = pickVariant(
-      await getText(`https://usher.ttvnw.net/vod/${id}.m3u8?${params}`, {}, this.red),
-      this.want,
-    )
+    const variant = pickVariant(await getText(vodMasterOf(id, token), {}, this.red), this.want)
     if (variant === undefined) throw new Error("el VOD no tiene vídeo")
     this.url = variant.url
     this.id = id

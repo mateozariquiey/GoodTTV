@@ -6,17 +6,7 @@ import {
   resolveClientId,
   TWITCH_CHAT_SCOPES,
 } from "@goodttv/servicios"
-import {
-  channelByLogin,
-  commentsFrom,
-  liveArchive,
-  popularStreams,
-  searchChannels,
-  storyboardOf,
-  videoById,
-  videosOf,
-  vodMasterUrl,
-} from "@goodttv/sin-anuncios"
+import { guestChannels, guestVods } from "@goodttv/sin-anuncios"
 import { storageText, storageTokens } from "./storage"
 import { createWakeLock } from "./wake-lock"
 
@@ -28,11 +18,7 @@ export const createExtensionApi = (
 ): AppApi =>
   createPageApi({
     // Buscar canales con la relevancia de twitch.tv y sin cuenta, como invitado.
-    channels: {
-      byLogin: (login) => channelByLogin(login),
-      popular: (language) => popularStreams({ language }),
-      search: (query, first) => searchChannels(query, { first }),
-    },
+    channels: guestChannels,
     // Un fork compila con VITE_TWITCH_CLIENT_ID; si no, el del proyecto.
     clientId: resolveClientId(undefined, import.meta.env["VITE_TWITCH_CLIENT_ID"]),
     homeStorage: pageStorage(),
@@ -43,13 +29,6 @@ export const createExtensionApi = (
     tokens: storageTokens(chrome.storage.local, "twitch-token"),
     version: chrome.runtime.getManifest().version,
     // Los VOD (VOD-1), como invitado: la página no está sujeta a CORS con los permisos de la extensión.
-    vods: {
-      archive: (login) => liveArchive(login),
-      comments: (videoId, offset) => commentsFrom(videoId, offset),
-      get: (id) => videoById(id),
-      list: (login) => videosOf(login),
-      playback: (id) => vodMasterUrl(id),
-      storyboard: (url) => storyboardOf(url),
-    },
+    vods: guestVods,
     ...lab,
   })

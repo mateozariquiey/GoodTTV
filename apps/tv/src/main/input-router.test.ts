@@ -64,28 +64,6 @@ describe("createInputRouter", () => {
     expect(sent()).toEqual(["ok"])
   })
 
-  it("swallows the rest of a press that changed mode", () => {
-    const { press, router, sent } = setup()
-    router.swallowUntilRelease("Escape")
-    expect(press(key("Escape", { isAutoRepeat: true }))).toBe(true)
-    expect(press(key("Escape", { type: "keyUp" }))).toBe(true)
-    expect(sent()).toEqual([])
-    press(key("Escape"))
-    expect(sent()).toEqual(["back"])
-  })
-
-  it("gives an interaction mode the first chance to consume a key", () => {
-    const { press, router, sent } = setup()
-    const handle = vi.fn((action: string | undefined) => action === "down")
-    router.setInteraction({ handle })
-    expect(press(key("ArrowDown"))).toBe(true)
-    expect(press(key("ArrowUp"))).toBe(true)
-    expect(sent()).toEqual(["up"])
-    router.setInteraction(undefined)
-    press(key("ArrowDown"))
-    expect(sent()).toEqual(["up", "down"])
-  })
-
   it("reports raw keys only while the remote test is open", () => {
     const { contents, press, router } = setup()
     press(key("BrowserBack"))

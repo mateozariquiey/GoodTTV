@@ -1,7 +1,5 @@
-// Los VOD (VOD-1; la extensión y Android, D24). Los da @goodttv/sin-anuncios (vods.ts), como invitado; aquí, la forma
-// con la que llegan a la interfaz por window.api.vods.
-
-export type VideoKind = "archive" | "highlight" | "upload"
+// Los VOD (VOD-1; la extensión y Android, D24). Los da @goodttv/sin-anuncios (vods.ts), como invitado, ya con esta
+// forma, que es con la que llegan a la interfaz por window.api.vods.
 
 export type VideoCard = {
   readonly id: string
@@ -9,7 +7,6 @@ export type VideoCard = {
   readonly seconds: number
   readonly createdAt: string // ISO
   readonly views: number
-  readonly kind: VideoKind
   readonly category: string | null
   readonly thumbnail: string | null // 320 × 180
   readonly storyboard: string | null // las miniaturas de la barra (info.json)
@@ -44,7 +41,7 @@ export type ReplayInput = {
 
 // La emisión en curso y su VOD (DVR-1); null si no emite.
 export type LiveArchive = {
-  readonly startedAt: string // ISO
-  readonly archiveId: string | null // null si el canal no guarda sus emisiones
-  readonly recordedAt: string | null // ISO
+  readonly startedAt: string // ISO, cuándo empezó la emisión
+  readonly archiveId: string | null // null si el canal no guarda sus emisiones o son solo para suscriptores
+  readonly recordedAt: string | null // ISO, cuándo empezó a grabarse el VOD
 }

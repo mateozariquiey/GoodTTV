@@ -1,5 +1,14 @@
 import { afterEach, describe, expect, it, vi } from "vitest"
-import { HttpError, NotLiveError, openVariant, sessionKind, Vod, vodHour } from "./twitch-source"
+import {
+  HttpError,
+  NotLiveError,
+  openVariant,
+  sessionKind,
+  Vod,
+  vodHour,
+  vodMasterOf,
+  vodToken,
+} from "./twitch-source"
 
 afterEach(() => {
   vi.unstubAllGlobals()
@@ -101,6 +110,34 @@ describe("red inyectada", () => {
       "usher.ttvnw.net",
     ])
     expect(global).not.toHaveBeenCalled()
+  })
+})
+
+describe("el token y la lista maestra de un VOD", () => {
+  it("pide el token de invitado del vídeo y arma la lista de usher con él, como el reproductor web", async () => {
+    const red = vi.fn(async () =>
+      Response.json({ data: { videoPlaybackAccessToken: { signature: "firma", value: "{}" } } }),
+    ) as unknown as typeof fetch
+    const token = await vodToken("2904365699", "d", red)
+    expect(token).toEqual({ signature: "firma", value: "{}" })
+    if (token === null) throw new Error("sin token")
+    const url = new URL(vodMasterOf("2904365699", token))
+    expect(url.origin + url.pathname).toBe("https://usher.ttvnw.net/vod/2904365699.m3u8")
+    expect(Object.fromEntries(url.searchParams)).toEqual({
+      allow_source: "true",
+      p: expect.stringMatching(/^\d+$/),
+      platform: "web",
+      player_backend: "mediaplayer",
+      playlist_include_framerate: "true",
+      sig: "firma",
+      supported_codecs: "h264",
+      token: "{}",
+    })
+  })
+
+  it("sin token en la respuesta, null", async () => {
+    const red = vi.fn(async () => Response.json({ data: { videoPlaybackAccessToken: null } }))
+    expect(await vodToken("1", "d", red as unknown as typeof fetch)).toBeNull()
   })
 })
 

@@ -24,7 +24,6 @@ const stream = (login: string): StreamCard => ({
   category: "Just Chatting",
   id: `s-${login}`,
   startedAt: "2026-10-16T14:00:00Z",
-  tags: [],
   thumbnailUrl: `https://static-cdn.jtvnw.net/previews-ttv/live_user_${login}-{width}x{height}.jpg`,
   title: `Directo de ${login}`,
   userId: "123",
@@ -72,8 +71,8 @@ const following = (): readonly string[] =>
 const api = {
   auth: { snapshot: vi.fn(async (): Promise<AuthState> => MATEO) },
   catalog: {
-    followed: vi.fn(async () => ({ cursor: undefined, items: [stream("carola")] })),
-    live: vi.fn(async () => ({ cursor: undefined, items: [] })),
+    followed: vi.fn(async () => [stream("carola")]),
+    popular: vi.fn(async () => []),
     streamsByLogin: vi.fn(async () => []),
   },
   home: {
@@ -161,13 +160,13 @@ describe("Inicio al abrir", () => {
 
   it("si la cuenta resulta ser otra, lo pedido al abrir no vale: se pide otra vez y no se guarda como suyo", async () => {
     api.home.saved.mockImplementation(async () => recent())
-    let first: (page: { cursor: undefined; items: StreamCard[] }) => void = () => undefined
+    let first: (streams: StreamCard[]) => void = () => undefined
     api.catalog.followed.mockImplementationOnce(() => new Promise((done) => (first = done)))
     await show(undefined)
     const OTRA = { displayName: "Otra", kind: "authenticated", login: "otra" } as const
     await show(OTRA)
     expect(api.catalog.followed).toHaveBeenCalledTimes(2)
-    await act(async () => first({ cursor: undefined, items: [stream("de-la-primera")] }))
+    await act(async () => first([stream("de-la-primera")]))
     expect(following()).toEqual(["carola"])
     expect(api.home.save).not.toHaveBeenCalledWith(
       expect.objectContaining({ following: [stream("de-la-primera")] }),

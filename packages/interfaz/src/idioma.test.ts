@@ -151,9 +151,11 @@ describe("pantallas de las tres versiones", () => {
   const CARPETAS = [
     "apps/navegador/src/escritorio",
     "apps/android/web/pantallas",
-    // La TV: sus pantallas son las de @goodttv/interfaz
+    "apps/tv/src/renderer/src",
+    "apps/tv/src/renderer/src/screens",
+    "apps/tv/src/renderer/src/player",
+    // Lo común que pinta algo (el chat de la TV, en player/ChatPanel.tsx)
     "packages/interfaz/src",
-    "packages/interfaz/src/screens",
     "packages/interfaz/src/player",
   ]
   // Igual en los dos idiomas: marcas y palabras que no se traducen.

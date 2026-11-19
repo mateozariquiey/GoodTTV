@@ -70,6 +70,23 @@ export const toRecent = (channel: Channel): RecentChannel => ({
 export const previewAt = (url: string | undefined, width: number, height: number) =>
   url?.replace(/-\d+x\d+\.(jpg|png|webp)$/, `-${width}x${height}.$1`)
 
+// Las fotos de perfil de Twitch acaban en -profile_image-300x300.png, y existen en estos tamaños. Se pide la menor que
+// cubre lo que ocupa en pantalla (cssPx por la densidad del aparato): una foto de la columna, de 32 px, pesa y ocupa
+// en memoria la décima parte a 50 px que a 300.
+const AVATAR_SIZES = [28, 50, 70, 150, 300] as const
+
+export const avatarAt = (
+  url: string,
+  cssPx: number,
+  density = globalThis.devicePixelRatio ?? 1,
+) => {
+  const size = AVATAR_SIZES.find((each) => each >= cssPx * density) ?? 300
+  return url.replace(
+    /-profile_image-\d+x\d+\.(png|jpe?g|webp)$/,
+    `-profile_image-${size}x${size}.$1`,
+  )
+}
+
 export const initials = (name: string): string =>
   name
     .replace(/[^\p{L}\p{N} _]/gu, "")

@@ -1,63 +1,60 @@
-import type { LiveArchive, Preferences, PreferencesPatch } from "@goodttv/contratos"
+import type { Preferences, PreferencesPatch } from "@goodttv/contratos"
 import {
+  archiveMoment,
   type Channel,
-  chosenVolume,
+  chatDelayOf,
   formatClock,
   formatUptime,
   formatViewers,
-  fromSearch,
-  fromStream,
-  prefetchVod,
+  liveBar,
   prefetchVodMaster,
-  prewarmStream,
-  renewVod,
-  TWITCH_VIEWER_LATENCY,
   t,
-  toRecent,
   useBehind,
+  useChannelDetails,
   useChat,
+  useFollowing,
   useHlsPlayer,
   useIdioma,
+  useLiveArchive,
+  useRecentChannel,
   useWatchTime,
-  VOD_WARM_MS,
 } from "@goodttv/interfaz"
 import {
   ArrowSquareOutIcon,
-  ArrowsInLineHorizontalIcon,
-  ArrowsOutLineHorizontalIcon,
   CaretLeftIcon,
   CaretRightIcon,
-  ChatTextIcon,
-  CornersInIcon,
-  CornersOutIcon,
   HeartIcon,
   PauseIcon,
   PlayIcon,
-  SpeakerHighIcon,
-  SpeakerSimpleXIcon,
   SquaresFourIcon,
   UserIcon,
 } from "@phosphor-icons/react"
-import { type CSSProperties, memo, useCallback, useEffect, useRef, useState } from "react"
+import { memo, useCallback, useEffect, useRef, useState } from "react"
 import { Avatar } from "./Avatar"
 import { ChatPanel, type ChatWriting } from "./ChatPanel"
 import { huecoOf } from "./cuadricula"
 import { useFullscreen } from "./fullscreen"
 import { PictureInPictureButton } from "./PictureInPictureButton"
-import { navigate } from "./routes"
+import {
+  ChatButton,
+  ControlsMenu,
+  FullscreenButton,
+  TheaterButton,
+  useControlsAwake,
+  useSurfaceClicks,
+  useVolume,
+  VolumeControl,
+} from "./PlayerControls"
+import { navigate, routeHash } from "./routes"
 import { SeekBar } from "./SeekBar"
 import { SKIP_S, SkipButton } from "./SkipButton"
 import { contextOf, shortcutFor } from "./shortcuts"
-import { SoundElsewhere, useSoleSound } from "./sonido"
 import { ChannelVideos } from "./Videos"
+import { usePageSeen, usePageVisible } from "./visibilidad"
 
 // Un canal: el vídeo manda. Los controles salen al mover el ratón sobre él y se ocultan solos, con el cursor, mientras
 // se reproduce. Debajo, la ficha del canal; al lado, el chat de solo lectura, retrasado como la imagen.
 
-const IDLE_MS = 3000
-const DOUBLE_CLICK_MS = 220
-const UNDO_CLICK_MS = 600 // más que el doble clic más lento habitual del sistema
-const WARM_PING_MS = 20_000 // en espera, mantiene caliente el empalme (el directo lo para a los 30 s sin uso)
 // DVR-1: retroceder menos que esto no lleva al VOD (que va unos segundos por detrás del directo); reanudar tras una
 // pausa más larga sigue donde se pausó, en el VOD, en vez de saltar al directo.
 const DVR_MIN_BACK_S = 15
@@ -93,109 +90,39 @@ export const ChannelView = ({
   // A pantalla completa va la vista: solo el vídeo o, en modo teatro, también el chat (desktop.css).
   const view = useRef<HTMLDivElement>(null)
   const surface = useRef<HTMLDivElement>(null)
-  // Con varias pestañas, suena una sola (sonido.ts): las demás se silencian y, ocultas un rato, se paran.
-  const [stoppable, setStoppable] = useState(true)
-  const sole = useSoleSound(channel.login, stoppable)
+  // Cada pestaña suena por su cuenta (D48). Abierta sin verse, espera a que se mire (visibilidad.ts).
+  const visible = usePageVisible()
+  const seen = usePageSeen()
   const hueco = onGrid === undefined ? 0 : huecoOf(channel.login)
   const player = useHlsPlayer(
     surface,
     channel.login,
-    preferencesLoaded && sole.standby !== "parado",
+    preferencesLoaded && seen,
     preferences.latencyMode,
     true,
     // Con la cuadrícula activada (EXT-6), el vídeo puede seguir al pasar a ella.
     onGrid === undefined ? undefined : { hueco, inCell: false, silent: false },
   )
   const { latency, state } = player
-  // Los minutos que suena (en la pestaña que suena), para ordenar tus seguidos por los que más ves.
-  useWatchTime(channel.login, state.playing && sole.standby === "no")
-  // Pausado por la persona: al esperar no se para, y al volver no arranca solo.
-  useEffect(
-    () => setStoppable(!(state.phase === "ready" && !state.playing)),
-    [state.phase, state.playing],
-  )
-  // En silencio sin tocar lo que eligió la persona: al volver a sonar, como estaba.
-  const { setMuted } = player
-  const mutedNow = useRef(state.muted)
-  mutedNow.current = state.muted
-  const mutedBefore = useRef<boolean | null>(null)
-  useEffect(() => {
-    if (sole.standby === "silencio") {
-      mutedBefore.current ??= mutedNow.current
-      setMuted(true)
-    } else if (mutedBefore.current !== null) {
-      setMuted(mutedBefore.current)
-      mutedBefore.current = null
-    }
-  }, [setMuted, sole.standby])
-  // Parada, el empalme sigue caliente un rato: volver tarda lo de un canal precalentado.
-  const { latencyMode } = preferences
-  useEffect(() => {
-    if (sole.standby !== "parado" || !sole.warm || !preferencesLoaded) return undefined
-    const ping = (): void => prewarmStream(channel.login, latencyMode, hueco)
-    ping()
-    const timer = setInterval(ping, WARM_PING_MS)
-    return () => clearInterval(timer)
-  }, [channel.login, hueco, latencyMode, preferencesLoaded, sole.standby, sole.warm])
-  // Tocar el reproductor de una pestaña en silencio (otra ventana a la vista) la hace sonar. Con el silencio o el
-  // volumen (choosing), lo que haga la persona manda: no se vuelve a como estaba antes de silenciarla.
-  const { claim, standby } = sole
-  const takeSound = useCallback(
-    (choosing = false) => {
-      if (standby === "no") return
-      if (choosing) mutedBefore.current = null
-      claim()
-    },
-    [claim, standby],
-  )
+  // Los minutos que suena, para ordenar tus seguidos por los que más ves.
+  useWatchTime(channel.login, state.playing)
 
-  // DVR-1: la emisión en curso y el VOD que la graba. Con él, la barra va desde que empezó la emisión: retroceder lleva
-  // a ese VOD en el momento elegido, con «Ir al directo» para volver. Sin VOD público, no se puede retroceder.
-  const [archive, setArchive] = useState<LiveArchive | null>(null)
+  // DVR-1: la emisión en curso y el VOD que la graba (live-archive.ts). Con él, la barra va desde que empezó la emisión:
+  // retroceder lleva a ese VOD en el momento elegido, con «Ir al directo» para volver. Sin VOD público, no se puede
+  // retroceder.
   const onAir = state.phase === "ready"
+  const rewind = useLiveArchive(channel.login, onAir)
+  const { archive } = rewind
+  const archiveId = archive?.archiveId
+  // Además de su lista y sus datos, la lista ya descargada: solo en la extensión, que se la da a hls.js (vod-cache.ts).
   useEffect(() => {
-    setArchive(null)
-    const vods = window.api.vods
-    if (!onAir || vods === undefined) return undefined
-    let active = true
-    vods
-      .archive(channel.login)
-      .then((value) => {
-        if (active) setArchive(value)
-      })
-      .catch(() => undefined)
-    return () => {
-      active = false
-    }
-  }, [channel.login, onAir])
-  const [now, setNow] = useState(Date.now())
-  useEffect(() => {
-    const id = archive?.archiveId
-    if (id == null) return undefined
-    // Retroceder no espera a pedir su lista ni sus datos, ni a descargar la lista. Valen 5 min (vod-cache.ts): mientras
-    // se ve, se renuevan.
-    prefetchVod(id)
-    prefetchVodMaster(id)
-    const warm = setInterval(() => renewVod(id), VOD_WARM_MS)
-    const timer = setInterval(() => setNow(Date.now()), 1000)
-    return () => {
-      clearInterval(warm)
-      clearInterval(timer)
-    }
-  }, [archive])
-  // Un momento de la emisión (ms, en hora real) en el VOD: su segundo, contando desde que empezó a grabarse.
+    if (archiveId != null) prefetchVodMaster(archiveId)
+  }, [archiveId])
+  // Un momento de la emisión (ms, en hora real), en el VOD.
   const openRewind = useCallback(
     (wallMs: number) => {
-      const archiveId = archive?.archiveId
-      if (archiveId == null) return
-      const origin = Date.parse(archive?.recordedAt ?? archive?.startedAt ?? "")
-      if (!Number.isFinite(origin)) return
-      navigate({
-        at: Math.max(0, (wallMs - origin) / 1000),
-        id: archiveId,
-        live: channel.login,
-        view: "vod",
-      })
+      const moment = archiveMoment(archive, wallMs)
+      if (moment !== null) navigate({ ...moment, live: channel.login, view: "vod" })
     },
     [archive, channel.login],
   )
@@ -212,7 +139,7 @@ export const ChannelView = ({
   // ← → y los botones: dentro de la lista del directo (~100 s), al momento; más atrás, en el VOD de la emisión. Sin
   // él, hasta el principio de la lista.
   const { play, seekBy } = player
-  const canRewind = archive?.archiveId != null
+  const canRewind = archiveId != null
   // Moverse en pausa mueve también lo que se veía al pausar: al reanudar tras más de un minuto, el VOD abre donde se
   // dejó la imagen, no donde se pausó.
   const seekPaused = useCallback(
@@ -240,104 +167,22 @@ export const ChannelView = ({
     play()
   }, [play, seekBy])
 
-  // Abierto por su nombre (la dirección, o el atajo de la búsqueda): se completan su nombre, su foto y su id (que el
-  // chat necesita también sin directo) sin cuenta, y con cuenta, los datos del directo (cuánto lleva).
-  const [details, setDetails] = useState(channel)
-  useEffect(() => {
-    setDetails(channel)
-    // Con su id, ya se sabe todo, salvo que su nombre sea solo el login: un reciente guardado mientras llegaban sus datos
-    // (antes podía quedarse así), que se corrige.
-    if (channel.userId !== undefined && channel.displayName !== channel.login) return undefined
-    let active = true
-    window.api.catalog
-      .channel?.(channel.login)
-      .then((card) => {
-        // Lo del directo, si ha llegado antes, se queda.
-        if (active && card !== null)
-          setDetails((current) =>
-            current.userId === undefined
-              ? fromSearch(card)
-              : {
-                  ...current,
-                  displayName:
-                    current.displayName === current.login ? card.displayName : current.displayName,
-                  profileImageUrl: current.profileImageUrl ?? card.thumbnailUrl,
-                },
-          )
-      })
-      .catch(() => undefined)
-    if (signedIn)
-      window.api.catalog
-        .streamsByLogin([channel.login])
-        .then(([stream]) => {
-          if (active && stream !== undefined)
-            setDetails((current) => {
-              const live = fromStream(stream)
-              const picture = live.profileImageUrl ?? current.profileImageUrl
-              return picture === undefined ? live : { ...live, profileImageUrl: picture }
-            })
-        })
-        .catch(() => undefined)
-    return () => {
-      active = false
-    }
-  }, [channel, signedIn])
-  const latest = useRef(details)
-  latest.current = details
-
-  // SEG-1: si sigues el canal. Seguir y dejar de seguir, en twitch.tv (D24); al volver a esta pestaña se mira otra vez.
-  const [following, setFollowing] = useState<boolean | null>(null)
-  const broadcasterId = details.userId
-  useEffect(() => {
-    setFollowing(null)
-    const follows = window.api.catalog.follows
-    if (!signedIn || broadcasterId === undefined || follows === undefined) return undefined
-    let active = true
-    const check = (): void => {
-      follows(broadcasterId)
-        .then((value) => {
-          if (active) setFollowing(value)
-        })
-        .catch(() => undefined)
-    }
-    check()
-    const onVisible = (): void => {
-      if (document.visibilityState === "visible") check()
-    }
-    document.addEventListener("visibilitychange", onVisible)
-    return () => {
-      active = false
-      document.removeEventListener("visibilitychange", onVisible)
-    }
-  }, [broadcasterId, signedIn])
-  // A recientes al abrirlo, y otra vez cuando se completan sus datos (con su nombre, su foto e id).
-  const recentKey = `${details.login}|${details.userId ?? ""}|${details.displayName}`
-  // biome-ignore lint/correctness/useExhaustiveDependencies: se guarda al cambiar recentKey, con los datos de ese momento.
-  useEffect(() => {
-    void window.api.recents.add(toRecent(latest.current))
-  }, [recentKey])
+  // Abierto por su nombre (la dirección, o el atajo de la búsqueda), se completan sus datos (channel-details.ts), y va a
+  // recientes. SEG-1: si lo sigues; seguir y dejar de seguir, en twitch.tv (D24).
+  const details = useChannelDetails(channel, signedIn)
+  const following = useFollowing(details.userId, signedIn)
+  useRecentChannel(details)
 
   // Cuánto va por detrás de un espectador normal de Twitch; el chat se retrasa lo mismo.
   const behind = useBehind(latency)
   const phase = state.phase
-  const chatDelay = useCallback((): number | null => {
-    const seconds = latency.current
-    if (seconds !== null) return Math.max(0, seconds - TWITCH_VIEWER_LATENCY)
-    return phase === "loading" || phase === "ready" ? null : 0
-  }, [latency, phase])
+  const chatDelay = useCallback(
+    () => chatDelayOf(latency.current, phase === "loading" || phase === "ready"),
+    [latency, phase],
+  )
 
-  // Controles a la vista: al mover el ratón, y siempre en pausa o con el menú de calidad abierto.
-  const [awake, setAwake] = useState(true)
-  const idleTimer = useRef<ReturnType<typeof setTimeout>>(undefined)
-  const wake = useCallback(() => {
-    setAwake(true)
-    clearTimeout(idleTimer.current)
-    idleTimer.current = setTimeout(() => setAwake(false), IDLE_MS)
-  }, [])
-  useEffect(() => {
-    wake()
-    return () => clearTimeout(idleTimer.current)
-  }, [wake])
+  // Controles a la vista: al mover el ratón, y siempre en pausa o con el menú de calidad abierto (PlayerControls.tsx).
+  const { awake, sleep, wake } = useControlsAwake()
   const [qualityOpen, setQualityOpen] = useState(false)
   const showControls = awake || !state.playing || qualityOpen
 
@@ -351,22 +196,10 @@ export const ChannelView = ({
     onWindowChat,
   )
 
-  const [volume, setVolume] = useState(() => chosenVolume().volume)
-  const { setVolume: applyVolume } = player
-  const changeVolume = useCallback(
-    (next: number) => {
-      takeSound(true) // subir el volumen quita el silencio: esta pasa a sonar
-      const value = Math.min(1, Math.max(0, next))
-      setVolume(value)
-      applyVolume(value)
-    },
-    [applyVolume, takeSound],
-  )
+  const [volume, changeVolume] = useVolume(player.setVolume)
 
-  // Un clic pausa; dos, pantalla completa. El primero espera por si llega el segundo; si el doble clic del sistema es
-  // más lento y el primero ya pausó, se deshace. Un clic pendiente no pasa a otro canal.
-  const clickTimer = useRef<ReturnType<typeof setTimeout>>(undefined)
-  const toggledAt = useRef(0)
+  // Un clic pausa (o, tras una pausa larga, retrocede: DVR-1); dos, pantalla completa. Un clic pendiente no pasa a otro
+  // canal.
   const { toggle: togglePlayback } = player
   const toggle = useCallback(() => {
     const paused = pausedAt.current
@@ -374,22 +207,10 @@ export const ChannelView = ({
       openRewind(paused.shown)
     else togglePlayback()
   }, [canRewind, openRewind, togglePlayback])
-  const clickTookSound = useRef(false)
-  const onSurfaceClick = (): void => {
-    if (clickTookSound.current) return // ver onPointerDownCapture
-    clearTimeout(clickTimer.current)
-    clickTimer.current = setTimeout(() => {
-      toggledAt.current = performance.now()
-      toggle()
-    }, DOUBLE_CLICK_MS)
-  }
-  const onSurfaceDoubleClick = (): void => {
-    clearTimeout(clickTimer.current)
-    if (performance.now() - toggledAt.current < UNDO_CLICK_MS) toggle()
-    toggleFullscreen()
-  }
-  // biome-ignore lint/correctness/useExhaustiveDependencies: al cambiar de canal (y al salir) se cancela el clic pendiente.
-  useEffect(() => () => clearTimeout(clickTimer.current), [channel.login])
+  const surfaceClicks = useSurfaceClicks(toggle, toggleFullscreen)
+  const { cancel: cancelClick } = surfaceClicks
+  // biome-ignore lint/correctness/useExhaustiveDependencies: al cambiar de canal se cancela el clic pendiente.
+  useEffect(() => cancelClick, [cancelClick, channel.login])
 
   const position = lineup.findIndex((each) => each.login === channel.login)
   const canStep = position >= 0 && lineup.length > 1
@@ -403,23 +224,10 @@ export const ChannelView = ({
   )
 
   const { toggleMuted } = player
-  // Esc con el menú de calidad abierto solo lo cierra: en captura, antes que el Esc general de la ventana (Desktop).
-  useEffect(() => {
-    if (!qualityOpen) return undefined
-    const onEscape = (event: KeyboardEvent): void => {
-      if (event.key !== "Escape") return
-      event.preventDefault()
-      setQualityOpen(false)
-    }
-    addEventListener("keydown", onEscape, { capture: true })
-    return () => removeEventListener("keydown", onEscape, { capture: true })
-  }, [qualityOpen])
   useEffect(() => {
     const onKey = (event: KeyboardEvent): void => {
       if (event.defaultPrevented) return
       const shortcut = shortcutFor(event, contextOf(event.target))
-      if (shortcut === "play-pause") takeSound()
-      else if (shortcut === "mute") takeSound(true)
       if (shortcut === "play-pause") toggle()
       else if (shortcut === "mute") toggleMuted()
       else if (shortcut === "fullscreen") toggleFullscreen()
@@ -443,7 +251,6 @@ export const ChannelView = ({
     onTheater,
     skip,
     step,
-    takeSound,
     theater,
     toggle,
     toggleChat,
@@ -459,16 +266,7 @@ export const ChannelView = ({
       ? `Auto${playingQuality === undefined ? "" : ` (${qualityLabel(playingQuality)})`}`
       : qualityLabel(playingQuality ?? "Auto")
   // La barra del directo (DVR-1): desde que empezó la emisión hasta ahora; lo que se ve, la latencia antes de ahora.
-  const startedAtMs = Date.parse(archive?.startedAt ?? "")
-  const dvr =
-    archive?.archiveId == null || !Number.isFinite(startedAtMs) || phase !== "ready"
-      ? null
-      : {
-          duration: Math.max(0, (now - startedAtMs) / 1000),
-          position: Math.max(0, (now - startedAtMs) / 1000 - (latency.current ?? 0)),
-          start: startedAtMs,
-        }
-  const muted = state.muted || volume === 0
+  const dvr = liveBar(rewind, latency.current, phase === "ready")
   const live = phase === "ready"
   const twitchUrl = `https://www.twitch.tv/${channel.login}`
 
@@ -477,34 +275,23 @@ export const ChannelView = ({
       <div className="watch__main">
         <div
           className={`stage${showControls ? "" : " stage--idle"}${phase === "offline" ? " stage--offline" : ""}`}
-          onPointerDownCapture={(event) => {
-            // Un clic en el vídeo de una ventana en silencio le da el sonido, sin pausarla.
-            clickTookSound.current =
-              standby !== "no" &&
-              event.target instanceof Node &&
-              surface.current?.contains(event.target) === true
-            // En el silencio o el volumen, lo que elija la persona; en lo demás, como estaba.
-            takeSound(
-              event.target instanceof Element && event.target.closest("[data-sonido]") !== null,
-            )
-          }}
-          onPointerLeave={() => setAwake(false)}
+          onPointerLeave={sleep}
           onPointerMove={wake}
         >
           {/* biome-ignore lint/a11y/noStaticElementInteractions: clic y doble clic en el vídeo son atajos del ratón; con el teclado, Espacio y F. */}
           {/* biome-ignore lint/a11y/useKeyWithClickEvents: ídem. */}
           <div
             className="stage__surface"
-            onClick={onSurfaceClick}
-            onDoubleClick={onSurfaceDoubleClick}
+            onClick={surfaceClicks.onClick}
+            onDoubleClick={surfaceClicks.onDoubleClick}
             ref={surface}
           />
-          {standby === "silencio" ? <SoundElsewhere /> : null}
           <Notice
             channel={details}
             onPlay={player.play}
             onRetry={player.retry}
-            phase={phase}
+            // Un directo que se ha quedado parado (state.stuck) se avisa como uno que no arranca, con «Reintentar».
+            phase={phase === "ready" && state.stuck ? "stalled" : phase}
             blocked={state.blocked}
             twitchUrl={twitchUrl}
           />
@@ -566,27 +353,11 @@ export const ChannelView = ({
                 </button>
                 <SkipButton forward={false} onSkip={() => skip(-SKIP_S)} />
                 <SkipButton disabled={!player.rewound} forward onSkip={() => skip(SKIP_S)} />
-                <button
-                  aria-label={muted ? t("Quitar el silencio") : t("Silenciar")}
-                  className="icon-button icon-button--light"
-                  data-sonido
-                  onClick={muted && volume === 0 ? () => changeVolume(0.5) : toggleMuted}
-                  title={muted ? t("Quitar el silencio (M)") : t("Silenciar (M)")}
-                  type="button"
-                >
-                  {muted ? <SpeakerSimpleXIcon /> : <SpeakerHighIcon />}
-                </button>
-                <input
-                  aria-label={t("Volumen")}
-                  className="volume"
-                  data-sonido
-                  max={1}
-                  min={0}
-                  onChange={(event) => changeVolume(Number(event.currentTarget.value))}
-                  step={0.01}
-                  style={{ "--level": `${(muted ? 0 : volume) * 100}%` } as CSSProperties}
-                  type="range"
-                  value={muted ? 0 : volume}
+                <VolumeControl
+                  muted={state.muted}
+                  onToggleMuted={toggleMuted}
+                  onVolume={changeVolume}
+                  volume={volume}
                 />
                 {live && player.rewound ? (
                   <button
@@ -615,51 +386,33 @@ export const ChannelView = ({
               </div>
               <div className="controls__group">
                 {state.qualities.length > 0 ? (
-                  <div className="quality">
-                    <button
-                      aria-expanded={qualityOpen}
-                      aria-haspopup="menu"
-                      className="quality__button"
-                      onClick={() => setQualityOpen((open) => !open)}
-                      title={t("Calidad")}
-                      type="button"
-                    >
-                      {quality}
-                    </button>
-                    {qualityOpen ? (
-                      <div className="quality__menu" role="menu">
-                        {[{ id: null, label: "Auto" }, ...state.qualities].map((each) => (
-                          <button
-                            aria-checked={
-                              each.id === null
-                                ? player.chosenQuality === null
-                                : player.chosenQuality !== null && each.id === state.quality
-                            }
-                            key={each.id ?? "auto"}
-                            onClick={() => {
-                              player.setQuality(each.id)
-                              setQualityOpen(false)
-                            }}
-                            role="menuitemradio"
-                            type="button"
-                          >
-                            {qualityLabel(each.label)}
-                          </button>
-                        ))}
-                      </div>
-                    ) : null}
-                  </div>
+                  <ControlsMenu
+                    label={quality}
+                    onToggle={setQualityOpen}
+                    open={qualityOpen}
+                    title={t("Calidad")}
+                  >
+                    {[{ id: null, label: "Auto" }, ...state.qualities].map((each) => (
+                      <button
+                        aria-checked={
+                          each.id === null
+                            ? player.chosenQuality === null
+                            : player.chosenQuality !== null && each.id === state.quality
+                        }
+                        key={each.id ?? "auto"}
+                        onClick={() => {
+                          player.setQuality(each.id)
+                          setQualityOpen(false)
+                        }}
+                        role="menuitemradio"
+                        type="button"
+                      >
+                        {qualityLabel(each.label)}
+                      </button>
+                    ))}
+                  </ControlsMenu>
                 ) : null}
-                <button
-                  aria-label={chatShown ? t("Ocultar el chat") : t("Mostrar el chat")}
-                  aria-pressed={chatShown}
-                  className="icon-button icon-button--light"
-                  onClick={toggleChat}
-                  title={chatShown ? t("Ocultar el chat (C)") : t("Mostrar el chat (C)")}
-                  type="button"
-                >
-                  <ChatTextIcon />
-                </button>
+                <ChatButton onToggle={toggleChat} shown={chatShown} />
                 {onGrid === undefined ? null : (
                   <button
                     aria-label={t("Añadir otro canal")}
@@ -675,31 +428,8 @@ export const ChannelView = ({
                   active={player.pictureInPicture}
                   onToggle={player.togglePictureInPicture}
                 />
-                {fullscreen ? null : (
-                  <button
-                    aria-label={t("Modo teatro")}
-                    aria-pressed={theater}
-                    className="icon-button icon-button--light icon-button--toggle"
-                    onClick={() => onTheater(!theater)}
-                    title={t("Modo teatro (T): el vídeo y el chat ocupan la ventana")}
-                    type="button"
-                  >
-                    {theater ? <ArrowsInLineHorizontalIcon /> : <ArrowsOutLineHorizontalIcon />}
-                  </button>
-                )}
-                <button
-                  aria-label={
-                    fullscreen ? t("Salir de la pantalla completa") : t("Pantalla completa")
-                  }
-                  className="icon-button icon-button--light"
-                  onClick={toggleFullscreen}
-                  title={
-                    fullscreen ? t("Salir de la pantalla completa (F)") : t("Pantalla completa (F)")
-                  }
-                  type="button"
-                >
-                  {fullscreen ? <CornersInIcon /> : <CornersOutIcon />}
-                </button>
+                <TheaterButton fullscreen={fullscreen} onTheater={onTheater} theater={theater} />
+                <FullscreenButton fullscreen={fullscreen} onToggle={toggleFullscreen} />
               </div>
             </div>
           </div>
@@ -707,6 +437,7 @@ export const ChannelView = ({
         <section className="channel-info">
           <Avatar
             className={`avatar avatar--large${live ? " avatar--live" : ""}`}
+            size={56}
             name={details.displayName}
             url={details.profileImageUrl}
           />
@@ -772,7 +503,7 @@ export const ChannelView = ({
       <ChannelChat
         broadcasterId={signedIn ? details.userId : undefined}
         canChat={canChat}
-        connected={sole.visible}
+        connected={visible}
         delay={chatDelay}
         scale={preferences.chatScale}
         signedIn={signedIn}
@@ -839,7 +570,7 @@ const Notice = ({
           {channel.displayName} {t("no está en directo ahora.")}{" "}
           {window.api.vods === undefined ? null : t("Sus emisiones anteriores, debajo.")}
         </p>
-        <a className="button" href="#/">
+        <a className="button" href={routeHash({ view: "home" })}>
           {t("Volver a Inicio")}
         </a>
       </>

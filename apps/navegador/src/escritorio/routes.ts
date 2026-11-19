@@ -1,74 +1,43 @@
-import { useSyncExternalStore } from "react"
+import {
+  type CommonRoute,
+  commonRouteHash,
+  LOGIN_PATTERN,
+  parseCommonRoute,
+  routeParts,
+  useHash,
+} from "@goodttv/interfaz"
 
-// Dónde está la persona, en la dirección de la página: #/canal/<login>, #/ajustes o Inicio. Así funcionan el botón
-// atrás del navegador y los enlaces directos a un canal (el menú «Abrir en GoodTTV» de twitch.tv).
+// Dónde está la persona, en la dirección de la página: #/canal/<login>, #/ajustes, #/categorias o Inicio. Así funcionan el botón
+// atrás del navegador y los enlaces directos a un canal (el menú «Abrir en GoodTTV» de twitch.tv). Inicio, el canal, el
+// VOD y las categorías son comunes con Android (routes.ts, en @goodttv/interfaz); aquí, lo propio de la extensión.
 export type Route =
-  | { readonly view: "home" }
-  | { readonly view: "channel"; readonly login: string }
+  | CommonRoute
   | { readonly view: "settings" }
-  // Un VOD (VOD-1): #/vod/<id>. Al retroceder un directo (DVR-1), en un segundo (?t=) y con el canal para volver al
-  // directo (?directo=).
-  | { readonly view: "vod"; readonly id: string; readonly at?: number; readonly live?: string }
   // Varios canales en una pestaña (EXT-6): #/cuadricula/<login>,<login>…
   | { readonly view: "grid"; readonly logins: readonly string[] }
 
-const LOGIN = /^[a-z0-9_]{1,25}$/
-
 export const parseRoute = (hash: string): Route => {
-  const [path = "", query = ""] = hash.replace(/^#/, "").split("?")
-  const [, view = "", login = ""] = path.split("/")
-  if (view === "canal" && LOGIN.test(login.toLowerCase())) {
-    return { login: login.toLowerCase(), view: "channel" }
-  }
+  const { segment, view } = routeParts(hash)
   if (view === "ajustes") return { view: "settings" }
   if (view === "cuadricula") {
-    const logins = login.toLowerCase().split(",")
+    const logins = segment.toLowerCase().split(",")
     return {
-      logins: [...new Set(logins.filter((each) => LOGIN.test(each)))].slice(0, 4),
+      logins: [...new Set(logins.filter((each) => LOGIN_PATTERN.test(each)))].slice(0, 4),
       view: "grid",
     }
   }
-  if (view === "vod" && /^\d{1,20}$/.test(login)) {
-    const params = new URLSearchParams(query)
-    const at = Number(params.get("t") ?? "")
-    const live = (params.get("directo") ?? "").toLowerCase()
-    return {
-      id: login,
-      view: "vod",
-      ...(params.has("t") && Number.isFinite(at) && at >= 0 ? { at } : {}),
-      ...(LOGIN.test(live) ? { live } : {}),
-    }
-  }
-  return { view: "home" }
+  return parseCommonRoute(hash)
 }
 
 export const routeHash = (route: Route): string =>
-  route.view === "channel"
-    ? `#/canal/${route.login}`
-    : route.view === "settings"
-      ? "#/ajustes"
-      : route.view === "vod"
-        ? `#/vod/${route.id}${vodQuery(route)}`
-        : route.view === "grid"
-          ? `#/cuadricula/${route.logins.join(",")}`
-          : "#/"
-
-const vodQuery = (route: Extract<Route, { view: "vod" }>): string => {
-  const params = new URLSearchParams()
-  if (route.at !== undefined) params.set("t", String(Math.floor(route.at)))
-  if (route.live !== undefined) params.set("directo", route.live)
-  const query = params.toString()
-  return query === "" ? "" : `?${query}`
-}
+  route.view === "settings"
+    ? "#/ajustes"
+    : route.view === "grid"
+      ? `#/cuadricula/${route.logins.join(",")}`
+      : commonRouteHash(route)
 
 export const navigate = (route: Route): void => {
   if (location.hash !== routeHash(route)) location.hash = routeHash(route)
 }
 
-const subscribe = (onChange: () => void): (() => void) => {
-  addEventListener("hashchange", onChange)
-  return () => removeEventListener("hashchange", onChange)
-}
-
-export const useRoute = (): Route =>
-  parseRoute(useSyncExternalStore(subscribe, () => location.hash))
+export const useRoute = (): Route => parseRoute(useHash())

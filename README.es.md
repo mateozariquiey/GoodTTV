@@ -11,13 +11,32 @@ tres comparten el código que quita los anuncios, la cuenta y el chat.
 
 | App | Para qué | Estado |
 | --- | --- | --- |
-| [Navegador](#navegador) (`apps/navegador`) | Chrome, Chromium, Firefox y Zen, con ratón y teclado | 0.5.1 |
-| [Android](#android) (`apps/android`) | Teléfonos con Android 13 o posterior | 0.5.0, experimental |
-| [TV](#tv) (`apps/tv`) | Un mini PC Linux conectado a la TV, con un mando | 0.5.1, ya no se prueba en una TV |
+| [Navegador](#navegador) (`apps/navegador`) | Chrome, Chromium, Firefox y Zen, con ratón y teclado | 0.6.0 |
+| [Android](#android) (`apps/android`) | Teléfonos con Android 13 o posterior | 0.6.0, experimental |
+| [TV](#tv) (`apps/tv`) | Un mini PC Linux conectado a la TV, con un mando | 0.6.0, ya no se prueba en una TV y de momento no recibe funciones nuevas |
 
 Las tres están en español y en inglés: siguen al sistema, y se puede cambiar en los ajustes.
 
 ![Extensión: un canal con los controles encima del vídeo, su ficha y el chat; a la izquierda, los seguidos en directo](docs/media/escritorio-canal.jpg)
+
+## Lo nuevo de la 0.6.0
+
+- **Categorías:** un directorio de las más vistas, con sus espectadores y sus directos, en las tres apps: arriba en la
+  extensión, un botón en la barra de Inicio de Android y una pestaña en la TV. En la extensión, la columna de seguidos
+  enseña la categoría de cada canal a cualquier ancho de ventana, con la cifra de espectadores abreviada.
+- **Cada pestaña suena por su cuenta** en la extensión, como en twitch.tv: una ya no calla a las demás. La que se abre
+  sin mirarla espera a que la mires.
+- **Bastante menos memoria** en la extensión y en la TV: el directo suelta lo ya visto a los 30 segundos. Con un canal
+  a 1080p60 son unos 160 MB menos, y con cuatro en la cuadrícula, unos 630 MB menos. La extensión, además, deja de
+  escribir en la caché de disco del navegador todo lo que ves (unos 3 GB por hora a 1080p60).
+- **«Reintentar» si un directo se queda parado,** en la extensión y en la TV. Antes la imagen se quedaba congelada sin
+  aviso, y había que salir del canal y volver a entrar.
+- **Android:** el chat se desconecta con la pantalla apagada y vuelve al encenderla, y la página de la app pesa la
+  mitad. Medido en el teléfono frente a la 0.5.0: los canales abren igual de rápido, sin paradas ni fotogramas perdidos.
+- **La app de la TV ya no lleva el reproductor oficial de Twitch de respaldo,** ni «Controles de Twitch». Si su
+  reproductor falla, lo dice y ofrece «Reintentar». De momento no recibe funciones nuevas.
+- **Detalles:** con un menú del reproductor abierto, Esc solo lo cierra, también en un vídeo; «Populares» sale del
+  mismo sitio con cuenta o sin ella; y las fotos de perfil se piden al tamaño al que se pintan.
 
 ## Lo nuevo de la 0.5.1
 
@@ -69,7 +88,7 @@ dura la pausa. Hay tres modos de retraso: Adaptativo (por defecto), Sin paradas 
 que la imagen, para que vayan más o menos a la par.
 
 En la extensión, con varios canales y 12 arranques, la primera imagen llega en 0,86 s (mediana) y se pierde el 0,06 %
-de los fotogramas, sin paradas ([detalle](docs/verificacion.md#rendimiento-del-reproductor-propio)).
+de los fotogramas, sin paradas ([detalle](docs/verificacion/hasta-0.2.0.md#rendimiento-del-reproductor-propio)).
 
 ## Navegador
 
@@ -91,8 +110,8 @@ Chrome y para Firefox.
 - **Los VOD**, debajo de cada canal. Se abren en la mejor calidad que aguanta tu conexión, siguen 5 s antes de donde
   los dejaste y llevan su chat a la par de la imagen.
 - **«Siguiendo»**, en un canal que sigues. Seguir y dejar de seguir abren twitch.tv: la API de Twitch ya no lo permite.
-- **Varias pestañas**, cada una con su canal. Suena solo la última que miraste; las demás esperan, y volver a ellas
-  tarda ~0,1 s los primeros minutos.
+- **Categorías:** las más vistas de Twitch ahora mismo, con sus espectadores, y los directos de cada una.
+- **Varias pestañas**, cada una con su canal y con su sonido, como en twitch.tv: siguen sonando aunque no las mires.
 - **Arranca antes** si dejas el ratón quieto sobre un canal: lo va preparando.
 - **«Abrir en GoodTTV»** en el menú contextual de los enlaces de twitch.tv.
 
@@ -100,12 +119,12 @@ Chrome y para Firefox.
 
 **Instalarla:** no está en las tiendas. Descárgala de las
 [releases](https://github.com/mateozariquiey/GoodTTV/releases).
-- **Zen** (y Firefox Developer Edition o Nightly), con `goodttv-0.5.1.xpi`: en `about:config`, pon
+- **Zen** (y Firefox Developer Edition o Nightly), con `goodttv-0.6.0.xpi`: en `about:config`, pon
   `xpinstall.signatures.required` a `false`. Después, en `about:addons`, menú del engranaje → «Instalar complemento
   desde archivo…».
 - **Firefox:** solo admite complementos sin firmar de forma temporal: `about:debugging` → «Este Firefox» → «Cargar
   complemento temporal…» y el `.xpi`. Se quita al cerrar Firefox.
-- **Chrome y Chromium,** también en Windows, con `goodttv-0.5.1-chrome.zip`:
+- **Chrome y Chromium,** también en Windows, con `goodttv-0.6.0-chrome.zip`:
   1. Descomprímelo en una carpeta que vayas a conservar.
   2. En `chrome://extensions`, activa el «Modo Desarrollador» (arriba a la derecha).
   3. Pulsa «Cargar descomprimida» y elige esa carpeta.
@@ -121,7 +140,7 @@ Para compilarla, `bun run build:navegador` (deja la extensión en `apps/navegado
 ## Android
 
 **Experimental.** Lo mismo para quitar los anuncios, la cuenta y el chat, con pantallas para el dedo: Inicio, la
-búsqueda, el canal con su chat y sus vídeos, los VOD y retroceder el directo. El vídeo va con el reproductor propio de
+búsqueda, las categorías más vistas, el canal con su chat y sus vídeos, los VOD y retroceder el directo. El vídeo va con el reproductor propio de
 Android (Media3) y sigue sonando con la pantalla apagada, en solo audio para gastar menos datos, con sus controles en
 la notificación, en la pantalla de bloqueo y en los auriculares. Como en la app de Twitch, el canal que dejas sigue en
 una esquina, deslizar hacia abajo sobre el vídeo vuelve atrás, y al salir de la app pasa a imagen en imagen.
@@ -134,11 +153,11 @@ una esquina, deslizar hacia abajo sobre el vídeo vuelve atrás, y al salir de l
 Solo se ha probado en un teléfono (un Galaxy S25 Ultra con Android 17). Que el chat vaya a la par de la imagen se ha
 comprobado a ojo, sin medirlo.
 
-**Instalarla** (Android 13 o posterior): descarga `GoodTTV-0.5.0.apk` de la
-[release 0.5.0](https://github.com/mateozariquiey/GoodTTV/releases/tag/v0.5.0) en el teléfono y ábrelo. Android te pedirá permiso para
+**Instalarla** (Android 13 o posterior): descarga `GoodTTV-0.6.0.apk` de la
+[release 0.6.0](https://github.com/mateozariquiey/GoodTTV/releases/tag/v0.6.0) en el teléfono y ábrelo. Android te pedirá permiso para
 instalar apps desde el navegador o el gestor de archivos, y Play Protect puede avisar de que no conoce al
 desarrollador. Las versiones nuevas se instalan encima de la anterior y conservan la cuenta, porque van firmadas con la
-misma clave. Desde un ordenador, `adb install -r GoodTTV-0.5.0.apk` hace lo mismo. La huella SHA-256 del certificado de
+misma clave. Desde un ordenador, `adb install -r GoodTTV-0.6.0.apk` hace lo mismo. La huella SHA-256 del certificado de
 la firma es `38:CF:EA:F9:1C:2F:8C:C4:B8:35:27:11:BD:77:7F:56:0E:A8:D5:4F:87:37:C4:91:6C:B6:BA:C8:27:32:5A:D6` (la enseña `apksigner verify --print-certs`).
 
 Para compilarla hacen falta el SDK de Android y un JDK 21: lo explica [apps/android/README.md](apps/android/README.md).
@@ -146,14 +165,14 @@ Para compilarla hacen falta el SDK de Android y un JDK 21: lo explica [apps/andr
 ## TV
 
 Pensada para usarla desde el sofá en un mini PC Linux con un mando pequeño: flechas, OK, Atrás y Reproducir/Pausa.
-Sirve para ver los directos de los canales que sigues, buscar canales (también sin cuenta) y leer el chat con los emotes
+Sirve para ver los directos de los canales que sigues, buscar canales (también sin cuenta), ver las categorías más vistas y leer el chat con los emotes
 de 7TV, BTTV, FFZ y Twitch. En español o en inglés. Los VOD, retroceder y escribir en el chat de las otras apps no están
 aquí.
 
 **Estado:** desde octubre de 2026 ya no funciona en una TV de verdad. Se sigue compilando y comprobando con las
 pruebas automáticas (unitarias y de extremo a extremo, en Electron), pero nadie la usa a diario. La 0.2.2 fue la última
 probada en el mini PC con su mando: el audio por HDMI, la decodificación de vídeo por hardware (VA-API), el mando y la
-legibilidad a 3 m ([detalle](docs/verificacion.md#en-el-mini-pc-la-tv-y-el-mando)).
+legibilidad a 3 m ([detalle](docs/verificacion/0.2.1-0.2.3.md#en-el-mini-pc-la-tv-y-el-mando)).
 
 ![Inicio de la TV: canales que sigues en directo y vista previa del enfocado](docs/media/inicio.jpg)
 
@@ -165,7 +184,7 @@ De la 0.1.0, con el reproductor oficial de Twitch: [reproducción](docs/media/re
   populares; a la derecha, una vista previa grande del enfocado.
 - **Reproductor propio, sin anuncios,** a todo el alto y con el chat a la derecha. El título y los controles aparecen
   al pulsar una tecla y se ocultan solos. ↑/↓ cambian de canal sin salir del reproductor, y Reproducir/Pausa funciona
-  siempre. Si falla, se puede cambiar al reproductor oficial de Twitch.
+  siempre. Si falla, lo dice y deja reintentar.
 - **Buscar** con un teclado en pantalla manejado con el mando. Si conectas un teclado físico, también sirve.
 - **Volver conserva tu sitio:** al salir del reproductor, el foco vuelve al canal del que venías.
 - **Vincular la cuenta con el móvil,** con un QR o un código de Twitch. Solo pide permisos de lectura: tus seguidos y
@@ -184,7 +203,7 @@ x86_64) y ejecútalo; arranca a pantalla completa y necesita `libfuse2`. Para co
 ```bash
 bun install --frozen-lockfile
 bun run build && bun run start   # en una ventana, para probar
-bun run package:appimage         # apps/tv/dist/GoodTTV-0.5.1-x86_64.AppImage
+bun run package:appimage         # apps/tv/dist/GoodTTV-0.6.0-x86_64.AppImage
 ```
 
 ## El código
@@ -216,10 +235,9 @@ La documentación de diseño está en español: [arquitectura](docs/arquitectura
 
 GoodTTV empezó como una variante de [VacuumStream](https://github.com/eliottness/VacuumStream) 0.2.1, de Eliott
 Bouhana, con licencia MIT. Este repositorio conserva su historial completo. De VacuumStream se conserva, en la TV:
-- el proceso principal y su modelo de seguridad: aislamiento, IPC verificado y servidor HTTPS local con certificado
-  fijado;
+- el proceso principal y su modelo de seguridad: aislamiento e IPC verificado;
 - el inicio de sesión por código y el almacén de tokens;
-- el adaptador de Helix y el cargador del SDK de Twitch;
+- el adaptador de Helix;
 - el algoritmo de foco espacial y el empaquetado con electron-builder.
 
 Lo demás es de GoodTTV: las interfaces de la TV, del escritorio y del teléfono, el chat con emotes de terceros, el

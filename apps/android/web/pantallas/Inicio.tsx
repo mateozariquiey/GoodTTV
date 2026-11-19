@@ -12,11 +12,16 @@ import {
   unfinishedVods,
   useGuestPopular,
 } from "@goodttv/interfaz"
-import { ArrowsDownUpIcon, MagnifyingGlassIcon, UserIcon } from "@phosphor-icons/react"
+import {
+  ArrowsDownUpIcon,
+  MagnifyingGlassIcon,
+  SquaresFourIcon,
+  UserIcon,
+} from "@phosphor-icons/react"
 import { type ReactNode, useEffect, useState } from "react"
 import { Avatar, Reintentar } from "./comun"
 import { Opciones } from "./controles"
-import { useAtrasCierra } from "./rutas"
+import { routeHash, useAtrasCierra } from "./rutas"
 import { VideoItem } from "./Videos"
 
 type Open = (channel: Channel) => void
@@ -24,7 +29,7 @@ type Open = (channel: Channel) => void
 const GUEST_PLACEHOLDERS = 8 // la forma de «Populares ahora» sin cuenta, mientras llega
 type Account = { readonly displayName: string; readonly profileImageUrl?: string | undefined }
 
-// Inicio: arriba el logo, la búsqueda y el avatar (la cuenta y los ajustes); debajo, los seguidos en directo (por
+// Inicio: arriba el logo, la búsqueda, las categorías (D49) y el avatar (la cuenta y los ajustes); debajo, los seguidos en directo (por
 // espectadores o «Recomendado para ti», como en Twitch), los canales recientes, los vídeos a medias (VOD-1) y los
 // populares, como en la extensión. Cada directo, con su miniatura pequeña y el título (la «lista
 // con miniatura», investigacion/android/interfaz/propuesta-and3.html).
@@ -32,7 +37,7 @@ type Account = { readonly displayName: string; readonly profileImageUrl?: string
 const aMedias = () => (window.api.vods === undefined ? [] : unfinishedVods().slice(0, 8))
 
 const linkProps = (channel: Channel, onOpen: Open) => ({
-  href: `#/canal/${channel.login}`,
+  href: routeHash({ login: channel.login, view: "channel" }),
   onClick: (event: { preventDefault: () => void }) => {
     event.preventDefault()
     onOpen(channel)
@@ -82,7 +87,7 @@ const Huecos = ({ count }: { readonly count: number }) => (
   </ul>
 )
 
-const Lista = ({
+export const Lista = ({
   channels,
   onOpen,
 }: {
@@ -112,7 +117,7 @@ const Recientes = ({
       return (
         <li key={channel.login}>
           <a className={`reciente${state}`} {...linkProps(channel, onOpen)}>
-            <Avatar name={channel.displayName} url={channel.profileImageUrl} />
+            <Avatar name={channel.displayName} size={56} url={channel.profileImageUrl} />
             <span className="reciente__nombre">{channel.displayName}</span>
             {known ? (
               <span className="oculto">
@@ -259,7 +264,7 @@ export const Inicio = ({
                     "Busca un canal por su nombre, o vincula tu cuenta para ver aquí a quién sigues y leer el chat.",
                   )}
                 </p>
-                <a className="boton boton--principal" href="#/cuenta">
+                <a className="boton boton--principal" href={routeHash({ view: "account" })}>
                   {t("Vincular la cuenta")}
                 </a>
               </div>
@@ -295,10 +300,25 @@ export const Inicio = ({
       <header className="barra barra--inicio">
         <span aria-hidden="true" className="logo" />
         <span className="marca">GoodTTV</span>
-        <a aria-label={t("Buscar un canal")} className="boton-icono" href="#/buscar">
+        <a
+          aria-label={t("Buscar un canal")}
+          className="boton-icono"
+          href={routeHash({ view: "search" })}
+        >
           <MagnifyingGlassIcon />
         </a>
-        <a aria-label={t("Cuenta y ajustes")} className="boton-icono" href="#/cuenta">
+        <a
+          aria-label={t("Categorías")}
+          className="boton-icono"
+          href={routeHash({ view: "categories" })}
+        >
+          <SquaresFourIcon />
+        </a>
+        <a
+          aria-label={t("Cuenta y ajustes")}
+          className="boton-icono"
+          href={routeHash({ view: "account" })}
+        >
           {account === undefined ? (
             <UserIcon />
           ) : (

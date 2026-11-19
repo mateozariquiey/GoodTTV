@@ -18,7 +18,6 @@ const deferred = <Value>() => {
 
 const setup = (ownsProfile = true) => {
   vi.resetModules()
-  vi.stubEnv("ELECTRON_RENDERER_URL", undefined)
   const activated = deferred<void>()
   const calls: string[] = []
   const ready = deferred<void>()
@@ -79,15 +78,14 @@ const setup = (ownsProfile = true) => {
   }
   const BrowserWindow = vi.fn(MockWindow)
   const server = {
-    certificateFingerprint: "fingerprint",
     close: vi.fn(async () => {
       calls.push("close")
       closing.resolve()
       await closed.promise
     }),
-    origin: "https://localhost:1234",
+    origin: "http://localhost:1234",
   }
-  const startStaticHttpsServer = vi.fn(async () => {
+  const startLocalServer = vi.fn(async () => {
     calls.push("server")
     serverStarted.resolve()
     await serving.promise
@@ -144,10 +142,6 @@ const setup = (ownsProfile = true) => {
     calls.push("input")
     return {}
   })
-  const createPlayerInteraction = vi.fn(() => {
-    calls.push("player")
-    return { windowBlurred: vi.fn() }
-  })
   const registerIpc = vi.fn(() => calls.push("ipc"))
   const showErrorBox = vi.fn(() => calls.push("error"))
   const defaultSession = {
@@ -163,10 +157,7 @@ const setup = (ownsProfile = true) => {
     safeStorage: {},
     session: { defaultSession },
   }))
-  vi.doMock("./https-server", () => ({ startStaticHttpsServer }))
-  vi.doMock("./local-certificate", () => ({
-    loadLocalCertificate: vi.fn(async () => ({ certificate: "certificate", key: "key" })),
-  }))
+  vi.doMock("./local-server", () => ({ startLocalServer }))
   vi.doMock("./input-router", () => ({ createInputRouter }))
   vi.doMock("./ipc", () => ({ registerIpc }))
   vi.doMock("@goodttv/servicios", () => ({
@@ -182,7 +173,6 @@ const setup = (ownsProfile = true) => {
     idiomaStore: vi.fn(() => ({ elegido: () => "sistema", elegir: vi.fn() })),
   }))
   vi.doMock("./local-store", () => ({ localDataFile }))
-  vi.doMock("./player-interaction", () => ({ createPlayerInteraction }))
   vi.doMock("./saved-home", () => ({ savedHomeStore }))
   vi.doMock("./settings-store", () => ({ SettingsStore }))
   vi.doMock("./token-vault", () => ({ TokenVault }))
@@ -194,7 +184,6 @@ const setup = (ownsProfile = true) => {
     closed,
     closing,
     createInputRouter,
-    createPlayerInteraction,
     defaultSession,
     EventSubChat,
     exited,
@@ -211,7 +200,7 @@ const setup = (ownsProfile = true) => {
     serving,
     SettingsStore,
     showErrorBox,
-    startStaticHttpsServer,
+    startLocalServer,
     TokenVault,
     TwitchService,
     get window() {
@@ -246,7 +235,7 @@ describe("profile ownership at the real main entry point", () => {
         fixture.TokenVault.mock.calls.length,
       quitRequests: fixture.app.quit.mock.calls.length,
       readinessCalls: fixture.app.whenReady.mock.calls.length,
-      servers: fixture.startStaticHttpsServer.mock.calls.length,
+      servers: fixture.startLocalServer.mock.calls.length,
       twitchServices: fixture.TwitchService.mock.calls.length,
       windows: fixture.BrowserWindow.mock.calls.length,
     }).toEqual({
@@ -297,7 +286,6 @@ describe("profile ownership at the real main entry point", () => {
       "emotes",
       "chat",
       "input",
-      "player",
       "local",
       "ipc",
       "permissions-check",
@@ -314,7 +302,7 @@ describe("profile ownership at the real main entry point", () => {
     }
     expect(fixture.app.whenReady).toHaveBeenCalledExactlyOnceWith()
     expect(fixture.BrowserWindow).toHaveBeenCalledTimes(1)
-    expect(fixture.startStaticHttpsServer).toHaveBeenCalledTimes(1)
+    expect(fixture.startLocalServer).toHaveBeenCalledTimes(1)
     expect(fixture.TokenVault).toHaveBeenCalledExactlyOnceWith("/profile", expect.any(Object))
     expect(fixture.localDataFile).toHaveBeenCalledExactlyOnceWith("/profile")
     expect(fixture.LocalStore).toHaveBeenCalledExactlyOnceWith({ directory: "/profile" })
@@ -353,7 +341,7 @@ describe("profile ownership at the real main entry point", () => {
         // El paquete electron exporta la ruta de su binario; así no depende de la carpeta de trabajo.
         createRequire(import.meta.url)("electron") as string,
         // Ozone headless, no `--headless`: este último sigue usando X11 y, sin servidor X, Chromium
-        // puede caer al cargar los cursores, según lo que quede en memoria (docs/verificacion.md).
+        // puede caer al cargar los cursores, según lo que quede en memoria (docs/verificacion/0.5.0.md).
         ["--ozone-platform=headless", "--no-sandbox", lockProbe],
         {
           env: {
@@ -415,7 +403,7 @@ describe("profile ownership at the real main entry point", () => {
       await import("./index")
       fixture.ready.resolve()
       await fixture.serverStarted.promise
-      // The window already exists, but HTTPS and persistence bootstrap are still deferred.
+      // The window already exists, but the server and persistence bootstrap are still deferred.
       const constructing = [...fixture.calls]
       fixture.app.emit("second-instance", {}, ["--url=https://untrusted.invalid"], "/untrusted")
       expect(fixture.calls).toEqual([...constructing, "show", "focus"])
@@ -446,7 +434,7 @@ describe("profile ownership at the real main entry point", () => {
     5000,
   )
 
-  it("reports a startup failure and awaits HTTPS cleanup before exiting", async () => {
+  it("reports a startup failure and awaits server cleanup before exiting", async () => {
     const fixture = setup()
     const failure = new Error("Renderer load failed")
     fixture.loadURL.mockRejectedValueOnce(failure)
@@ -466,9 +454,9 @@ describe("profile ownership at the real main entry point", () => {
     expect(fixture.calls.slice(-3)).toEqual(["error", "close", "exit"])
   }, 5000)
 
-  it("reports HTTPS startup failure without constructing persistence owners", async () => {
+  it("reports server startup failure without constructing persistence owners", async () => {
     const fixture = setup()
-    const failure = new Error("HTTPS startup failed")
+    const failure = new Error("Server startup failed")
     await import("./index")
     fixture.ready.resolve()
     await fixture.serverStarted.promise
@@ -483,7 +471,7 @@ describe("profile ownership at the real main entry point", () => {
     expect(fixture.server.close).not.toHaveBeenCalled()
   }, 5000)
 
-  it("quits after the window closes and closes HTTPS on shutdown without recreating a window", async () => {
+  it("quits after the window closes and closes the server on shutdown without recreating a window", async () => {
     const fixture = setup()
     await import("./index")
     fixture.ready.resolve()

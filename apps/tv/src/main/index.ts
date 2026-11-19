@@ -1,4 +1,3 @@
-import { X509Certificate } from "node:crypto"
 import { join } from "node:path"
 import {
   EmoteCatalog,
@@ -7,16 +6,14 @@ import {
   LocalStore,
   TwitchService,
 } from "@goodttv/servicios"
-import { channelByLogin, popularStreams, searchChannels } from "@goodttv/sin-anuncios"
+import { guestChannels } from "@goodttv/sin-anuncios"
 import { app, BrowserWindow, dialog, Menu, powerSaveBlocker, safeStorage, session } from "electron"
 import { CHANNELS } from "../shared/channels"
-import { type StaticHttpsServer, startStaticHttpsServer } from "./https-server"
 import { idiomaDelSistema, idiomaEfectivo, idiomaStore } from "./idioma"
 import { createInputRouter } from "./input-router"
 import { registerIpc } from "./ipc"
-import { loadLocalCertificate } from "./local-certificate"
+import { type LocalServer, startLocalServer } from "./local-server"
 import { localDataFile } from "./local-store"
-import { createPlayerInteraction } from "./player-interaction"
 import { savedHomeStore } from "./saved-home"
 import { SettingsStore } from "./settings-store"
 import { createStreamService, type StreamService } from "./stream/stream-service"
@@ -43,7 +40,7 @@ const logStreamEvent = (event: Record<string, unknown>): void => {
   console.log(JSON.stringify({ src: "empalme", t: +(Date.now() / 1000).toFixed(2), ...safe }))
 }
 
-let staticServer: StaticHttpsServer | undefined
+let staticServer: LocalServer | undefined
 let streamService: StreamService | undefined
 let primaryWindow: BrowserWindow | undefined
 let activationRequested = false
@@ -58,9 +55,6 @@ const activateWindow = (): void => {
   primaryWindow.show()
   primaryWindow.focus()
 }
-
-const isTwitchPlayerOrigin = (value: string): boolean =>
-  URL.canParse(value) && new URL(value).origin === "https://player.twitch.tv"
 
 // On the TV the app runs full screen (`--fullscreen` in the launcher); windowed for development.
 const startsFullscreen = (): boolean => process.argv.includes("--fullscreen")
@@ -91,41 +85,16 @@ const createWindow = async (): Promise<void> => {
     primaryWindow = undefined
   })
 
-  const { ELECTRON_RENDERER_URL: developmentRendererUrl } = process.env
-  const rendererUrl = app.isPackaged ? undefined : developmentRendererUrl
-  let rendererOrigin: string
-  if (rendererUrl !== undefined) {
-    rendererOrigin = new URL(rendererUrl).origin
-  } else {
-    // Directo sin anuncios del reproductor propio (docs/decisiones.md, D11), en el mismo origen que la interfaz.
-    streamService = createStreamService(
-      process.env["GOODTTV_REGISTRO_EMPALME"] === "1" ? logStreamEvent : undefined,
-    )
-    const stream = streamService
-    staticServer = await startStaticHttpsServer({
-      assetsPath: join(app.getAppPath(), "out/renderer"),
-      ...(await loadLocalCertificate(app.getPath("userData"))),
-      dynamic: (request, response, pathname) => stream.handle(request, response, pathname),
-    })
-    rendererOrigin = staticServer.origin
-
-    app.on("certificate-error", (event, webContents, url, error, certificate, callback) => {
-      const trustsCertificate =
-        webContents.id === mainWindow.webContents.id &&
-        URL.canParse(url) &&
-        new URL(url).origin === staticServer?.origin &&
-        error === "net::ERR_CERT_AUTHORITY_INVALID" &&
-        new X509Certificate(certificate.data).fingerprint256 ===
-          staticServer?.certificateFingerprint
-
-      if (trustsCertificate) {
-        event.preventDefault()
-        callback(true)
-        return
-      }
-      callback(false)
-    })
-  }
+  // Directo sin anuncios del reproductor propio (docs/decisiones.md, D11), en el mismo origen que la interfaz.
+  const stream = createStreamService(
+    process.env["GOODTTV_REGISTRO_EMPALME"] === "1" ? logStreamEvent : undefined,
+  )
+  streamService = stream
+  staticServer = await startLocalServer({
+    assetsPath: join(app.getAppPath(), "out/renderer"),
+    dynamic: (request, response, pathname) => stream.handle(request, response, pathname),
+  })
+  const rendererOrigin = staticServer.origin
 
   const tokenVault = new TokenVault(app.getPath("userData"), {
     backend: () => safeStorage.getSelectedStorageBackend(),
@@ -152,8 +121,7 @@ const createWindow = async (): Promise<void> => {
     },
   })
   const input = createInputRouter(mainWindow.webContents)
-  const player = createPlayerInteraction(mainWindow, input)
-  // Keep the TV awake while a stream plays; Twitch pauses an embed whose page gets hidden.
+  // Keep the TV awake while a stream plays.
   let displayBlocker: number | undefined
   const setWatching = (active: boolean): void => {
     if (active && displayBlocker === undefined) {
@@ -167,7 +135,6 @@ const createWindow = async (): Promise<void> => {
     chat.close()
     setWatching(false)
   }
-  mainWindow.on("blur", player.windowBlurred)
   mainWindow.on("closed", stopSessionWork)
   mainWindow.webContents.on("render-process-gone", stopSessionWork)
   mainWindow.webContents.on("did-start-navigation", (details) => {
@@ -176,11 +143,7 @@ const createWindow = async (): Promise<void> => {
   registerIpc({
     chat,
     // Como invitado, desde main (con su red, sin CORS): buscar, un canal por su nombre y los más vistos.
-    guest: guestCatalog({
-      byLogin: (login) => channelByLogin(login),
-      popular: (language) => popularStreams({ language }),
-      search: (query, first) => searchChannels(query, { first }),
-    }),
+    guest: guestCatalog(guestChannels),
     home: savedHomeStore(app.getPath("userData")),
     idioma: Object.assign(idiomaStore(app.getPath("userData")), {
       sistema: idiomaDelSistema(app.getPreferredSystemLanguages(), app.getLocale()),
@@ -188,27 +151,15 @@ const createWindow = async (): Promise<void> => {
     input,
     local: new LocalStore(localDataFile(app.getPath("userData"))),
     mainWindow,
-    player,
     rendererOrigin,
     setWatching,
     twitch,
   })
 
-  session.defaultSession.setPermissionCheckHandler(
-    (webContents, permission, requestingOrigin) =>
-      webContents !== null &&
-      webContents.id === mainWindow.webContents.id &&
-      permission === "fullscreen" &&
-      isTwitchPlayerOrigin(requestingOrigin),
-  )
-  session.defaultSession.setPermissionRequestHandler(
-    (webContents, permission, callback, details) => {
-      callback(
-        webContents.id === mainWindow.webContents.id &&
-          permission === "fullscreen" &&
-          isTwitchPlayerOrigin(details.requestingUrl),
-      )
-    },
+  // The app needs no web permission (the window itself goes full screen): every one is refused.
+  session.defaultSession.setPermissionCheckHandler(() => false)
+  session.defaultSession.setPermissionRequestHandler((_webContents, _permission, callback) =>
+    callback(false),
   )
 
   mainWindow.webContents.setWindowOpenHandler(() => ({ action: "deny" }))
@@ -219,7 +170,7 @@ const createWindow = async (): Promise<void> => {
     }
   })
 
-  await mainWindow.loadURL(rendererUrl ?? rendererOrigin)
+  await mainWindow.loadURL(rendererOrigin)
   // Keys only reach this window while it has system focus; take it once at start.
   mainWindow.show()
   mainWindow.focus()

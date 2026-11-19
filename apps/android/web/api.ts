@@ -14,17 +14,7 @@ import {
   type TokenStore,
   TWITCH_CHAT_SCOPES,
 } from "@goodttv/servicios"
-import {
-  channelByLogin,
-  commentsFrom,
-  liveArchive,
-  popularStreams,
-  searchChannels,
-  storyboardOf,
-  videoById,
-  videosOf,
-  vodMasterUrl,
-} from "@goodttv/sin-anuncios"
+import { guestChannels, guestVods } from "@goodttv/sin-anuncios"
 
 // Lo que expone MainActivity.kt a la página (addJavascriptInterface). Las llamadas son síncronas, y un null de Kotlin
 // llega como undefined. El vídeo del canal o del VOD (Media3: canal…, vod…) contesta con el evento «goodttv-reproductor»
@@ -86,11 +76,7 @@ export const createAndroidApi = (android: Android): AppApi => {
   const storage = pageStorage()
   return createPageApi({
     // Buscar canales con la relevancia de twitch.tv y sin cuenta, como invitado y por la red nativa, como la extensión.
-    channels: {
-      byLogin: (login) => channelByLogin(login),
-      popular: (language) => popularStreams({ language }),
-      search: (query, first) => searchChannels(query, { first }),
-    },
+    channels: guestChannels,
     // Un fork compila con VITE_TWITCH_CLIENT_ID; si no, el del proyecto.
     clientId: resolveClientId(undefined, import.meta.env["VITE_TWITCH_CLIENT_ID"]),
     homeStorage: storage,
@@ -101,13 +87,6 @@ export const createAndroidApi = (android: Android): AppApi => {
     tokens: sesion(android),
     version: android.version(),
     // Los VOD (VOD-1), como invitado y por la red nativa (red-nativa.ts).
-    vods: {
-      archive: (login) => liveArchive(login),
-      comments: (videoId, offset) => commentsFrom(videoId, offset),
-      get: (id) => videoById(id),
-      list: (login) => videosOf(login),
-      playback: (id) => vodMasterUrl(id),
-      storyboard: (url) => storyboardOf(url),
-    },
+    vods: guestVods,
   })
 }

@@ -1,17 +1,11 @@
 import {
   type AuthSnapshot,
-  type ChannelCard,
   type ChatBadge,
   type ChatEmote,
-  type CursorInput,
-  CursorInputSchema,
   type DeviceChallenge,
-  type LiveInput,
-  LiveInputSchema,
+  type ListInput,
+  ListInputSchema,
   LoginsInputSchema,
-  type Page,
-  type SearchInput,
-  SearchInputSchema,
   type StreamCard,
   UserIdSchema,
 } from "@goodttv/contratos"
@@ -23,11 +17,10 @@ import type { SettingsSource } from "./settings"
 import type { StoredIdentity, TokenStore } from "./tokens"
 import { TwitchAuth } from "./twitch-auth"
 import { ConfigurationError, TwitchRequestError } from "./twitch-errors"
-import { createLiveSearchParams, shouldRefreshResponse } from "./twitch-requests"
+import { shouldRefreshResponse } from "./twitch-requests"
 import {
   mergeStreamProfiles,
   parseBadgesResponse,
-  parseChannelsResponse,
   parseChatColorResponse,
   parseOwnUserResponse,
   parseSentChatMessage,
@@ -58,9 +51,9 @@ type HelixRequest = {
 type AccountRequest = HelixRequest | ((identity: StoredIdentity) => HelixRequest)
 
 export const enrichStreamProfiles = async (
-  streams: Page<StreamCard>,
+  streams: readonly StreamCard[],
   loadProfiles: ProfileLoader,
-): Promise<Page<StreamCard>> => {
+): Promise<readonly StreamCard[]> => {
   try {
     return mergeStreamProfiles(streams, await loadProfiles())
   } catch (error) {
@@ -151,10 +144,6 @@ export class TwitchService {
     this.#profile = undefined
   }
 
-  public live(input: LiveInput): Promise<Page<StreamCard>> {
-    return this.#streams(createLiveSearchParams(LiveInputSchema.parse(input)))
-  }
-
   // Si la cuenta sigue a ese canal (SEG-1). Seguir y dejar de seguir no se puede por la API oficial (D24).
   public async follows(broadcasterId: string): Promise<boolean> {
     const id = UserIdSchema.parse(broadcasterId)
@@ -166,19 +155,13 @@ export class TwitchService {
     return z.object({ data: z.array(z.unknown()) }).parse(payload).data.length > 0
   }
 
-  public async followed(input: CursorInput): Promise<Page<StreamCard>> {
-    const parsed = CursorInputSchema.parse(input)
+  public async followed(input: ListInput): Promise<readonly StreamCard[]> {
+    const parsed = ListInputSchema.parse(input)
     return this.#page((identity) => ({
       method: "get",
       path: "streams/followed",
       search: { ...parsed, user_id: identity.user_id },
     }))
-  }
-
-  public async search(input: SearchInput): Promise<Page<ChannelCard>> {
-    const parsed = SearchInputSchema.parse(input)
-    const payload = await this.#helix({ method: "get", path: "search/channels", search: parsed })
-    return parseChannelsResponse(payload)
   }
 
   // Live streams among the given channels, for the Recent shelf.
@@ -187,7 +170,7 @@ export class TwitchService {
     if (parsed.length === 0) return []
     const search = new URLSearchParams({ first: "100" })
     for (const login of new Set(parsed)) search.append("user_login", login)
-    return (await this.#streams(search)).items
+    return this.#streams(search)
   }
 
   // --- Chat support. Only main uses these; none of them is exposed over IPC directly. ---
@@ -344,10 +327,10 @@ export class TwitchService {
 
   // Con las fotos que ya se tienen (profile-pictures.ts); a Twitch solo se piden las que faltan, y esas se esperan: si no,
   // saldrían las iniciales hasta el siguiente refresco. Pasa la primera vez que sale un canal.
-  async #page(request: AccountRequest): Promise<Page<StreamCard>> {
+  async #page(request: AccountRequest): Promise<readonly StreamCard[]> {
     const session = this.#session
     const streams = parseStreamsResponse(await this.#helix(request))
-    const userIds = new Set(streams.items.map((stream) => stream.userId))
+    const userIds = new Set(streams.map((stream) => stream.userId))
     const known = this.#pictures.known(userIds)
     const withKnown = mergeStreamProfiles(streams, known)
     const missing = [...userIds].filter((userId) => !known.has(userId))
@@ -364,7 +347,7 @@ export class TwitchService {
     })
   }
 
-  #streams(search: HelixSearch): Promise<Page<StreamCard>> {
+  #streams(search: HelixSearch): Promise<readonly StreamCard[]> {
     return this.#page({ method: "get", path: "streams", search })
   }
 

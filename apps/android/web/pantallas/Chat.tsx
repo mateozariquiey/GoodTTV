@@ -1,7 +1,9 @@
 import { CHAT_MESSAGE_MAX, type ChatEmote, type ChatEmoteGroups } from "@goodttv/contratos"
 import {
   CHAT_STATUS_TEXT,
+  type ChatEmoteInfo,
   type ChatView,
+  chatEmoteOf,
   insertAt,
   Message,
   replaceWord,
@@ -22,7 +24,7 @@ import {
   useRef,
   useState,
 } from "react"
-import { type EmoteDelChat, emoteDe, FichaEmote, ListaEmotes, Sugerencias } from "./Emotes"
+import { FichaEmote, ListaEmotes, Sugerencias } from "./Emotes"
 import { useAtrasCierra } from "./rutas"
 
 // El chat de solo lectura, con los mensajes y emotes (7TV, BTTV y FFZ) de la TV (@goodttv/interfaz). Baja solo con
@@ -83,7 +85,7 @@ export const Chat = ({
   const composer = useRef<EscribirHandle>(null)
 
   // Mantener pulsado un emote: su ficha. Si el dedo se mueve, desplaza la lista (y el navegador cancela la pulsación).
-  const [ficha, setFicha] = useState<EmoteDelChat | null>(null)
+  const [ficha, setFicha] = useState<ChatEmoteInfo | null>(null)
   const pulsacion = useRef<{
     readonly x: number
     readonly y: number
@@ -99,7 +101,7 @@ export const Chat = ({
     if (element === null) return
     const timer = window.setTimeout(() => {
       pulsacion.current = null
-      setFicha(emoteDe(element))
+      setFicha(chatEmoteOf(element))
     }, LARGA_MS)
     pulsacion.current = { timer, x: event.clientX, y: event.clientY }
   }

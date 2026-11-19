@@ -22,18 +22,14 @@ export const LoginSchema = z
 
 export const UserIdSchema = z.string().regex(/^[0-9]{1,20}$/)
 
-export const CursorInputSchema = z.object({
-  after: z.string().max(512).optional(),
+// Cuántos pedir. Solo la primera página: nadie pide las siguientes.
+export const ListInputSchema = z.object({
   first: z.number().int().min(1).max(100).default(20),
 })
 
 export const LanguageSchema = z.string().regex(/^[a-z]{2}$/)
 
-export const LiveInputSchema = CursorInputSchema.extend({
-  language: LanguageSchema.optional(),
-})
-
-export const SearchInputSchema = CursorInputSchema.extend({
+export const SearchInputSchema = ListInputSchema.extend({
   query: z.string().trim().min(1).max(100),
 })
 
@@ -44,13 +40,27 @@ export const StreamCardSchema = z.object({
   id: z.string(),
   profileImageUrl: z.url().optional(),
   startedAt: z.string(),
-  tags: z.array(z.string()),
   thumbnailUrl: z.url(),
   title: z.string(),
   userId: z.string(),
   userLogin: z.string(),
   userName: z.string(),
   viewerCount: z.number().int().nonnegative(),
+})
+
+// Una categoría del directorio (D49), con lo que se ve de ella ahora.
+export const CategorySlugSchema = z.string().regex(/^[a-z0-9-]{1,120}$/)
+export const CategoryCardSchema = z.object({
+  boxArtUrl: z.url().optional(),
+  channelCount: z.number().int().nonnegative(),
+  id: z.string(),
+  name: z.string(),
+  slug: CategorySlugSchema,
+  viewerCount: z.number().int().nonnegative(),
+})
+export const CategoryStreamsSchema = z.object({
+  category: CategoryCardSchema,
+  streams: z.array(StreamCardSchema).max(100),
 })
 
 export const ChannelCardSchema = z.object({
@@ -65,14 +75,6 @@ export const ChannelCardSchema = z.object({
   title: z.string(),
   viewerCount: z.number().int().nonnegative().optional(),
 })
-
-export const PageSchema = <Item extends z.ZodType>(item: Item) =>
-  z
-    .object({
-      cursor: z.string().optional(),
-      items: z.array(item),
-    })
-    .transform((page) => ({ cursor: page.cursor, items: page.items }))
 
 export const DeviceChallengeSchema = z.object({
   expiresAt: z.string(),
@@ -174,28 +176,22 @@ export const KeyProbeSchema = z.strictObject({
   key: z.string().max(40),
 })
 
-export const PlayerInteractionEndSchema = z.enum(["back", "cancelled", "failed"])
-
 export type AppStatus = z.infer<typeof AppStatusSchema>
 export type AuthSnapshot = z.infer<typeof AuthSnapshotSchema>
 export type ChannelCard = z.infer<typeof ChannelCardSchema>
 export type ClientId = z.infer<typeof ClientIdSchema>
-export type CursorInput = z.input<typeof CursorInputSchema>
 export type DeviceChallenge = z.infer<typeof DeviceChallengeSchema>
 export type InputAction = z.infer<typeof InputActionSchema>
 export type KeyProbe = z.infer<typeof KeyProbeSchema>
-export type LiveInput = z.input<typeof LiveInputSchema>
-export type Page<Item> = {
-  readonly cursor: string | undefined
-  readonly items: readonly Item[]
-}
-export type PlayerInteractionEnd = z.infer<typeof PlayerInteractionEndSchema>
+export type ListInput = z.input<typeof ListInputSchema>
 export type Preferences = z.infer<typeof PreferencesSchema>
 export type PreferencesPatch = z.infer<typeof PreferencesPatchSchema>
 export type RecentChannel = z.infer<typeof RecentChannelSchema>
 export type SavedHome = z.infer<typeof SavedHomeSchema>
 export type SearchInput = z.input<typeof SearchInputSchema>
 export type StreamCard = z.infer<typeof StreamCardSchema>
+export type CategoryCard = z.infer<typeof CategoryCardSchema>
+export type CategoryStreams = z.infer<typeof CategoryStreamsSchema>
 
 // The only capability object the renderer receives. No tokens, URLs or generic methods.
 export interface AppApi {
@@ -208,17 +204,19 @@ export interface AppApi {
     readonly snapshot: () => Promise<AuthSnapshot>
   }
   readonly catalog: {
-    readonly followed: (input: CursorInput) => Promise<Page<StreamCard>>
-    readonly live: (input: LiveInput) => Promise<Page<StreamCard>>
-    readonly search: (input: SearchInput) => Promise<Page<ChannelCard>>
+    readonly followed: (input: ListInput) => Promise<readonly StreamCard[]>
+    readonly search: (input: SearchInput) => Promise<readonly ChannelCard[]>
     readonly streamsByLogin: (logins: readonly string[]) => Promise<readonly StreamCard[]>
     // Si la cuenta sigue a ese canal (SEG-1, con user:read:follows); solo la extensión y Android lo enseñan.
     readonly follows?: (broadcasterId: string) => Promise<boolean>
-    // Un canal por su nombre, sin cuenta (la extensión y Android): para completar uno abierto por la dirección. null
-    // si no existe.
-    readonly channel?: (login: string) => Promise<ChannelCard | null>
-    // Los directos más vistos, sin cuenta (la extensión y Android): para la primera pantalla.
-    readonly popularSinCuenta?: (language: string) => Promise<readonly StreamCard[]>
+    // Un canal por su nombre, sin cuenta: para completar uno abierto por la dirección. null si no existe.
+    readonly channel: (login: string) => Promise<ChannelCard | null>
+    // Los directos más vistos, como invitado (también con cuenta): «Populares» de Inicio.
+    readonly popular: (language: string) => Promise<readonly StreamCard[]>
+    // El directorio (D49), como invitado: las categorías con más espectadores ahora, y los directos más vistos de una
+    // por su nombre de dirección («just-chatting»); null si no existe.
+    readonly categories: () => Promise<readonly CategoryCard[]>
+    readonly category: (slug: string) => Promise<CategoryStreams | null>
   }
   readonly chat: {
     readonly close: () => Promise<void>
@@ -241,11 +239,6 @@ export interface AppApi {
     readonly setTextEntry: (active: boolean) => Promise<void>
   }
   readonly player: {
-    readonly beginInteraction: () => Promise<number>
-    readonly endInteraction: (id: number) => Promise<void>
-    readonly onInteractionEnded: (
-      listener: (id: number, reason: PlayerInteractionEnd) => void,
-    ) => () => void
     readonly setWatching: (active: boolean) => Promise<void>
   }
   // Solo la TV: lo elegido y el idioma del sistema, ya leídos al cargar la página (para pintar la primera imagen en

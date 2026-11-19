@@ -1,15 +1,21 @@
-import { type Channel, type FollowedOrder, formatViewers, t } from "@goodttv/interfaz"
+import { type Channel, type FollowedOrder, formatViewers, idiomaActual, t } from "@goodttv/interfaz"
 import { ArrowsDownUpIcon, CheckIcon, PlusIcon, SidebarSimpleIcon } from "@phosphor-icons/react"
 import { useCallback, useEffect, useRef, useState } from "react"
 import { Avatar } from "./Avatar"
+import { routeHash } from "./routes"
 
 // Tus seguidos en directo, siempre a mano para cambiar de canal. Plegada, solo avatares (el nombre, al pasar el
 // ratón). El canal que ves, en blanco: la marca de selección de GoodTTV. Se ordenan por espectadores o, como el
 // «Recomendado para ti» de Twitch, primero los que más ves (watch-time.ts).
+// Cada fila, en dos líneas (D47): el nombre entero y, debajo, la categoría con los espectadores a la derecha. La
+// cifra va abreviada («262K», «9,9 mil») para dejarle sitio a la categoría, y la exacta, al pasar el ratón.
 const orders = (): readonly (readonly [FollowedOrder, string, string])[] => [
   ["recomendado", t("Recomendado para ti"), t("Primero los que más ves en GoodTTV")],
   ["espectadores", t("Espectadores"), t("De más a menos espectadores")],
 ]
+
+const compact = (): Intl.NumberFormat =>
+  new Intl.NumberFormat(idiomaActual(), { notation: "compact" })
 
 export const Sidebar = ({
   channels,
@@ -72,7 +78,8 @@ export const Sidebar = ({
       <p className="sidebar__note">{t("No se pudo cargar.")}</p>
     ) : !signedIn ? (
       <p className="sidebar__note">
-        <a href="#/ajustes">{t("Vincula tu cuenta")}</a> {t("para ver aquí a quién sigues.")}
+        <a href={routeHash({ view: "settings" })}>{t("Vincula tu cuenta")}</a>{" "}
+        {t("para ver aquí a quién sigues.")}
       </p>
     ) : channels.length === 0 ? (
       <p className="sidebar__note">{t("Ninguno de tus seguidos está en directo.")}</p>
@@ -83,22 +90,30 @@ export const Sidebar = ({
             <a
               aria-current={channel.login === current ? "page" : undefined}
               className="sidebar__channel"
-              href={`#/canal/${channel.login}`}
+              href={routeHash({ login: channel.login, view: "channel" })}
               onClick={(event) => {
                 event.preventDefault()
                 onOpen(channel)
               }}
-              title={`${channel.displayName}: ${channel.category ?? ""}`.replace(/: $/, "")}
+              title={[
+                channel.displayName,
+                channel.category,
+                channel.viewerCount === undefined
+                  ? undefined
+                  : t("{n} espectadores", { n: formatViewers(channel.viewerCount) }),
+              ]
+                .filter((part) => part !== undefined && part !== "")
+                .join(" · ")}
             >
               <Avatar name={channel.displayName} url={channel.profileImageUrl} />
               <span className="sidebar__text">
                 <b className="sidebar__name">{channel.displayName}</b>
                 <span className="sidebar__line">
+                  <span className="sidebar__category">{channel.category}</span>
                   <span className="live-count">
                     <i aria-hidden="true" />
-                    {channel.viewerCount === undefined ? "" : formatViewers(channel.viewerCount)}
+                    {channel.viewerCount === undefined ? "" : compact().format(channel.viewerCount)}
                   </span>
-                  <span className="sidebar__category">{channel.category}</span>
                 </span>
               </span>
             </a>

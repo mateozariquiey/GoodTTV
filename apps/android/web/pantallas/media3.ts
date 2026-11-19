@@ -8,7 +8,7 @@ import {
 } from "@goodttv/interfaz"
 import { type RefObject, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react"
 import { android } from "../api"
-import { parseRoute } from "./rutas"
+import { parseRoute, routeHash } from "./rutas"
 
 // El vídeo del canal o del VOD: Media3 (Reproductor.kt), que la app pone debajo de la página, en el sitio de «zona». La
 // página es transparente ahí y pinta encima los controles. Mientras está abierto, la app manda su estado en el evento
@@ -331,9 +331,11 @@ export const useMandos = (
 // La dirección del último VOD abierto (con lo de retroceder un directo, si lo era), para volver a él desde la esquina.
 let rutaVod: string | null = null
 export const rutaDelVod = (id: string): string =>
-  rutaVod !== null && parseRoute(rutaVod).view === "vod" && rutaVod.startsWith(`#/vod/${id}`)
+  rutaVod !== null &&
+  parseRoute(rutaVod).view === "vod" &&
+  rutaVod.startsWith(routeHash({ id, view: "vod" }))
     ? rutaVod
-    : `#/vod/${id}`
+    : routeHash({ id, view: "vod" })
 
 // Por dónde va el VOD que se sigue (vod-progress.ts), también si está en la esquina o en el PiP: cada 5 s de avance, al
 // pausar y al saltar. Una sola escucha para toda la página; seguirVod dice qué vídeo es (null: ninguno, como al

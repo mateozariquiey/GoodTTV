@@ -1,16 +1,10 @@
 import type { Page } from "@playwright/test"
-import {
-  expect,
-  playerCompliance,
-  type Remote,
-  showControls,
-  test,
-  videoSample,
-} from "./support/app"
+import { expect, type Remote, showControls, test, videoSample } from "./support/app"
 
 // The critical path against real Twitch, guest mode, keys only:
 // open a channel → it plays → pause/resume → back to the list → open another channel.
-// Needs network and live channels; candidates come from E2E_CHANNELS.
+// Needs network and live channels; candidates come from E2E_CHANNELS, which the global setup
+// (support/display.ts) fills with the most watched live channels when it is not set.
 
 const CANDIDATES = (process.env["E2E_CHANNELS"] ?? "xqc,hasanabi,zackrawrr,jynxzi,summit1g,caseoh_")
   .split(",")
@@ -20,9 +14,9 @@ const CANDIDATES = (process.env["E2E_CHANNELS"] ?? "xqc,hasanabi,zackrawrr,jynxz
 test.use({ seed: { recents: CANDIDATES } })
 test.setTimeout(300_000)
 
-type Outcome = "playing" | "offline" | "gate" | "timeout"
+type Outcome = "playing" | "offline" | "timeout"
 
-// Waits until the embed reports moving video, an offline channel or Twitch's content gate.
+// Waits until the player shows moving video or an offline channel.
 const waitForPlayback = async (page: Page): Promise<Outcome> => {
   const deadline = Date.now() + 30_000
   let first: number | undefined
@@ -32,18 +26,11 @@ const waitForPlayback = async (page: Page): Promise<Outcome> => {
       () => document.querySelector(".player__notice")?.textContent ?? null,
     )
     if (notice?.includes("no está en directo") === true) return "offline"
-    if ((await page.locator('[data-nav-id="player-gate"]').count()) > 0) return "gate"
     const sample = await videoSample(page).catch((error: unknown) => {
       if (process.env["E2E_DEBUG"] !== undefined) console.log("probe failed", String(error))
       return undefined
     })
-    if (process.env["E2E_DEBUG"] !== undefined) {
-      console.log(
-        notice,
-        JSON.stringify(sample),
-        page.frames().map((frame) => frame.url().slice(0, 50)),
-      )
-    }
+    if (process.env["E2E_DEBUG"] !== undefined) console.log(notice, JSON.stringify(sample))
     if (sample !== undefined && !sample.paused) {
       if (first === undefined) first = sample.time
       else if (sample.time - first > 1) return "playing"
@@ -51,18 +38,6 @@ const waitForPlayback = async (page: Page): Promise<Outcome> => {
     await page.waitForTimeout(1_000)
   }
   return "timeout"
-}
-
-// Accepts Twitch's content gate the way a viewer would: through "Controles de Twitch".
-const acceptGate = async (page: Page, remote: Remote): Promise<void> => {
-  await remote.waitForFocus("player-gate")
-  await remote.press("Return")
-  await expect(page.locator(".player__notice")).toContainText("Controles de Twitch")
-  // Tab order in the gate: the settings link, then "Start Watching".
-  await remote.press("Down", "Down", "Return")
-  await page.waitForTimeout(2_000)
-  await remote.press("Escape")
-  await remote.waitForFocus("player-twitch")
 }
 
 // Moves focus row by row with Up/Down until it reaches the wanted row. Recents reorder after
@@ -90,11 +65,7 @@ const openNextLiveChannel = async (page: Page, remote: Remote, from: number) => 
     await goToRow(page, remote, rowId)
     await remote.press("Return")
     await expect(page.locator(".player")).toBeVisible()
-    let outcome = await waitForPlayback(page)
-    if (outcome === "gate") {
-      await acceptGate(page, remote)
-      outcome = await waitForPlayback(page)
-    }
+    const outcome = await waitForPlayback(page)
     console.log(`${login}: ${outcome}`)
     if (outcome === "playing") return { index, login, rowId }
     // A hidden band takes the first Back.
@@ -112,16 +83,6 @@ test("open, play, pause, resume, go back and open another channel with the remot
   await remote.waitForFocus("home-link")
   const first = await openNextLiveChannel(page, remote, 0)
 
-  // Nothing overlaps the official player and it keeps Twitch's minimum size, in every layout
-  // the viewer can reach: with chat, with the quality chooser open and with chat hidden.
-  const expectUnobstructed = async (layout: string) => {
-    const compliance = await playerCompliance(page)
-    if (compliance.own === true) return
-    expect(compliance, layout).toMatchObject({ overlapping: [], visible: true })
-    expect(compliance.width, layout).toBeGreaterThanOrEqual(400)
-    expect(compliance.height, layout).toBeGreaterThanOrEqual(300)
-  }
-  await expectUnobstructed("chat visible")
   await page.screenshot({ path: testInfo.outputPath("playing.png") })
 
   await showControls(remote)
@@ -130,7 +91,6 @@ test("open, play, pause, resume, go back and open another channel with the remot
   await remote.waitForFocus("player-quality")
   await remote.press("Return")
   await expect(page.locator(".player__qualities")).toBeVisible()
-  await expectUnobstructed("quality chooser open")
   // Play/Pause keeps working while the chooser is open.
   await remote.press("space")
   await expect.poll(async () => (await videoSample(page))?.paused).toBe(true)
@@ -142,7 +102,6 @@ test("open, play, pause, resume, go back and open another channel with the remot
   await showControls(remote)
   await remote.press("Right", "Return")
   await expect(page.locator(".chat")).toHaveCount(0)
-  await expectUnobstructed("chat hidden")
   await showControls(remote)
   await remote.press("Return")
   await expect(page.locator(".chat")).toHaveCount(1)
@@ -161,7 +120,7 @@ test("open, play, pause, resume, go back and open another channel with the remot
     type: "playback",
   })
 
-  // Space pauses through the official API; the shell shows it.
+  // Space pauses; the band shows it.
   await remote.press("space")
   await expect(page.locator('[data-nav-id="player-playback"]')).toContainText("Reanudar")
   const paused = await videoSample(page)

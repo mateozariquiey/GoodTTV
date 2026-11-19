@@ -22,8 +22,6 @@ browsers) and code are all welcome. Issues can be written in English or Spanish.
 - **The browser extension is mouse and keyboard first,** with its own desktop screens (`apps/navegador/src/escritorio`).
 - **Shared logic lives in `packages/`.** The ad-free splicing (`packages/sin-anuncios`) runs unchanged in Electron and
   in the extension: keep it free of Node and browser-specific APIs, and add tests for any change to it.
-- **Nothing covers Twitch's official player** when the TV app falls back to it: Twitch disables autoplay when the
-  embed is obscured.
 - **Tokens never reach the TV app's renderer.** New IPC goes through `packages/contratos/src/contracts.ts` with Zod
   validation on both sides.
 - Never commit tokens, personal profiles or logs. The Client ID in `packages/servicios/src/settings.ts` is public on

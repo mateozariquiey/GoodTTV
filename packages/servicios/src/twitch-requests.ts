@@ -4,12 +4,6 @@ export const TWITCH_SCOPES = "user:read:follows user:read:chat"
 // de Twitch de la persona más adelante sin volver a pedirle que vincule la cuenta.
 export const TWITCH_CHAT_SCOPES = `${TWITCH_SCOPES} user:write:chat user:read:emotes`
 
-type ParsedLiveInput = {
-  readonly after?: string | undefined
-  readonly first: number
-  readonly language?: string | undefined
-}
-
 export const createDeviceTokenBody = (
   clientId: string,
   deviceCode: string,
@@ -21,14 +15,6 @@ export const createDeviceTokenBody = (
     grant_type: "urn:ietf:params:oauth:grant-type:device_code",
     scopes,
   })
-
-export const createLiveSearchParams = (
-  input: ParsedLiveInput,
-): Readonly<Record<string, string | number>> => ({
-  ...(input.after === undefined ? {} : { after: input.after }),
-  first: input.first,
-  ...(input.language === undefined ? {} : { language: input.language }),
-})
 
 export const shouldRefreshResponse = (status: number): boolean => status === 401
 

@@ -14,8 +14,8 @@ no guaranteed response time, but reports are taken seriously.
 - **Twitch tokens** live only in the main process. They are encrypted with the system keyring when one is available,
   or stored owner-only (`0600`) otherwise. They never reach the interface.
 - **The interface** runs sandboxed, with context isolation and no Node.js. It can only call a small set of validated
-  IPC methods, and only from the app's own top-level page, served by a local HTTPS server with a pinned certificate.
-- **Twitch's official player**, used only as a fallback, runs in a cross-origin iframe. The app never scripts it.
+  IPC methods, and only from the app's own top-level page, served by a local server that only listens on 127.0.0.1
+  and only answers its exact `localhost` address.
 
 **Browser extension (Manifest V3):**
 - **Twitch tokens** are kept in the extension's own storage (`chrome.storage.local`), **unencrypted**, as the

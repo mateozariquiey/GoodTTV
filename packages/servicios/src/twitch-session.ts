@@ -82,7 +82,7 @@ export class TwitchSession {
     if (revision !== this.#generation) throw new SessionChangedError()
     const installed = await this.#refresh(token, revision)
     const session = await this.#usable(installed.token, installed.revision)
-    const clientId = await this.#requireClientId()
+    const { clientId } = await this.#settings.load()
     if (session.revision !== this.#generation) throw new SessionChangedError()
     return { clientId, identity: session.identity, token: session.token }
   }
@@ -122,7 +122,7 @@ export class TwitchSession {
     const token = await this.#requireToken()
     if (revision !== this.#generation) throw new SessionChangedError()
     const session = await this.#usable(token, revision)
-    const clientId = await this.#requireClientId()
+    const { clientId } = await this.#settings.load()
     if (session.revision !== this.#generation) throw new SessionChangedError()
     return { clientId, identity: session.identity, token: session.token }
   }
@@ -265,7 +265,7 @@ export class TwitchSession {
 
   async #refreshWith(token: StoredToken, revision: number): Promise<InstalledToken> {
     const body = new URLSearchParams({
-      client_id: await this.#requireClientId(),
+      client_id: (await this.#settings.load()).clientId,
       grant_type: "refresh_token",
       refresh_token: token.refreshToken,
     })
@@ -328,13 +328,5 @@ export class TwitchSession {
       throw new ConfigurationError("Vincula tu cuenta de Twitch para ver los directos")
     }
     return token
-  }
-
-  async #requireClientId(): Promise<string> {
-    const settings = await this.#settings.load()
-    if (settings.clientId === "") {
-      throw new ConfigurationError("Esta compilación no tiene Client ID de Twitch")
-    }
-    return settings.clientId
   }
 }

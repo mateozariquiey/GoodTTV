@@ -1,4 +1,4 @@
-import type { Preferences, Storyboard, VideoDetail } from "@goodttv/contratos"
+import type { Preferences, VideoDetail } from "@goodttv/contratos"
 import {
   formatAgo,
   formatClock,
@@ -6,7 +6,8 @@ import {
   idiomaActual,
   t,
   useReplayChat,
-  vodDetail,
+  useStoryboard,
+  useVodDetail,
 } from "@goodttv/interfaz"
 import {
   ArrowCounterClockwiseIcon,
@@ -32,7 +33,7 @@ import {
   useHorizontal,
 } from "./controles"
 import { seguirVod, useDeslizarParaVolver, useMandos, useMedia3Vod, vodDeCanal } from "./media3"
-import { atras, navigate } from "./rutas"
+import { atras, navigate, routeHash } from "./rutas"
 import { ChannelVideos } from "./Videos"
 
 // Un VOD (VOD-1): como un canal, con el vídeo arriba y, en horizontal, a pantalla completa. Encima, la barra para
@@ -53,41 +54,15 @@ type Props = {
   readonly preferences: Preferences
 }
 
-type Loaded =
-  | { readonly kind: "loading" }
-  | { readonly kind: "missing" }
-  | { readonly kind: "error" }
-  | { readonly kind: "ready"; readonly video: VideoDetail }
-
 export const Vod = ({ at, id, live, preferences }: Props) => {
   const stage = useRef<HTMLDivElement>(null)
   const pantalla = useRef<HTMLDivElement>(null)
   const player = useMedia3Vod(id, at ?? null, stage)
   const { estado, reanudado } = player
 
-  // Los datos del vídeo (título, canal, miniaturas, chat), a la vez que su lista (useMedia3Vod).
-  const [loaded, setLoaded] = useState<Loaded>({ kind: "loading" })
-  const [intento, setIntento] = useState(0)
-  // «intento» vuelve a pedirlo.
-  useEffect(() => {
-    if (window.api.vods === undefined) {
-      setLoaded({ kind: "error" })
-      return undefined
-    }
-    let active = true
-    setLoaded({ kind: "loading" })
-    // Retrocediendo un directo, ya pedidos al ver el canal (vod-cache.ts).
-    vodDetail(id)
-      .then((video) => {
-        if (active) setLoaded(video === null ? { kind: "missing" } : { kind: "ready", video })
-      })
-      .catch(() => {
-        if (active) setLoaded({ kind: "error" })
-      })
-    return () => {
-      active = false
-    }
-  }, [id, intento])
+  // Los datos del vídeo (título, canal, miniaturas, chat), a la vez que su lista (useMedia3Vod). Retrocediendo un
+  // directo, ya pedidos al ver el canal (vod-cache.ts).
+  const { load: loaded, retry: reintentarDatos } = useVodDetail(id)
   const video = loaded.kind === "ready" ? loaded.video : null
   // Por dónde va, también en la esquina; retrocediendo un directo, no: no es un vídeo a medias. Los minutos, sí cuentan
   // para su canal.
@@ -105,22 +80,7 @@ export const Vod = ({ at, id, live, preferences }: Props) => {
     deEste?.owner.avatar ?? undefined,
   )
 
-  const [storyboard, setStoryboard] = useState<Storyboard | null>(null)
-  useEffect(() => {
-    setStoryboard(null)
-    const url = video?.storyboard
-    if (url == null || window.api.vods === undefined) return undefined
-    let active = true
-    window.api.vods
-      .storyboard(url)
-      .then((board) => {
-        if (active) setStoryboard(board)
-      })
-      .catch(() => undefined)
-    return () => {
-      active = false
-    }
-  }, [video])
+  const storyboard = useStoryboard(video)
 
   // DVR-1: «Ir al directo» vuelve al canal, sin dejar este VOD en el historial (Atrás, a donde se estaba antes).
   const { latencyMode } = preferences
@@ -213,7 +173,7 @@ export const Vod = ({ at, id, live, preferences }: Props) => {
                   className="boton boton--principal"
                   onClick={(event) => {
                     event.stopPropagation()
-                    if (loaded.kind === "error") setIntento((value) => value + 1)
+                    if (loaded.kind === "error") reintentarDatos()
                     if (estado.fase === "error") player.reintentar()
                   }}
                   type="button"
@@ -424,7 +384,7 @@ const Ficha = ({ video }: { readonly video: VideoDetail }) => (
   <section className="ficha">
     <a
       aria-label={t("Ir al canal de {displayName}", { displayName: video.owner.displayName })}
-      href={`#/canal/${video.owner.login}`}
+      href={routeHash({ login: video.owner.login, view: "channel" })}
     >
       <Avatar
         className="avatar avatar--ficha"
@@ -434,7 +394,9 @@ const Ficha = ({ video }: { readonly video: VideoDetail }) => (
     </a>
     <div className="ficha__texto">
       <h1>
-        <a href={`#/canal/${video.owner.login}`}>{video.owner.displayName}</a>
+        <a href={routeHash({ login: video.owner.login, view: "channel" })}>
+          {video.owner.displayName}
+        </a>
       </h1>
       <p className="ficha__titulo">{video.title || t("Sin título")}</p>
       <p className="ficha__datos">

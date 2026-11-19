@@ -12,7 +12,7 @@
     },
     "apps/navegador": {
       "name": "@goodttv/navegador",
-      "version": "0.4.1",
+      "version": "0.6.0",
       "dependencies": {
         "@fontsource-variable/atkinson-hyperlegible-next": "5.3.0",
         "@fontsource-variable/inter": "5.3.0",
@@ -37,7 +37,7 @@
     },
     "apps/tv": {
       "name": "goodttv",
-      "version": "0.4.1",
+      "version": "0.6.0",
       "dependencies": {
         "@fontsource-variable/atkinson-hyperlegible-next": "5.3.0",
         "@fontsource-variable/inter": "5.3.0",
@@ -76,11 +76,8 @@
     "packages/interfaz": {
       "name": "@goodttv/interfaz",
       "dependencies": {
-        "@fontsource-variable/inter": "5.3.0",
         "@goodttv/contratos": "workspace:*",
-        "@phosphor-icons/react": "2.1.10",
         "hls.js": "^1.7.4",
-        "qrcode.react": "^4.2.0",
         "react": "19.2.8",
       },
       "devDependencies": {
@@ -92,12 +89,16 @@
       "name": "@goodttv/servicios",
       "dependencies": {
         "@goodttv/contratos": "workspace:*",
+        "@goodttv/sin-anuncios": "workspace:*",
         "ky": "2.1.0",
         "zod": "4.6.7",
       },
     },
     "packages/sin-anuncios": {
       "name": "@goodttv/sin-anuncios",
+      "dependencies": {
+        "@goodttv/contratos": "workspace:*",
+      },
     },
   },
   "packages": {

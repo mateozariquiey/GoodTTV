@@ -6,7 +6,6 @@ import {
   test as base,
   type ElectronApplication,
   _electron as electron,
-  type Frame,
   type Page,
 } from "@playwright/test"
 
@@ -148,24 +147,16 @@ export const test = base.extend<Fixtures>({
 
 export { expect } from "@playwright/test"
 
-export const playerFrame = (page: Page): Frame | undefined =>
-  page.frames().find((frame) => frame.url().startsWith("https://player.twitch.tv/"))
-
-// Test-only probe of the playing <video>: the app's own player, or Twitch's inside its frame (the app itself
-// never scripts Twitch frames).
-// Cinema mode (own player): while playing, the band hides after 4 s without input and a key
-// while it is hidden only shows it. Pausing and resuming leaves it visible for another 4 s,
-// whatever its state was. Only for a playing player.
+// Cinema mode: while playing, the band hides after 4 s without input and a key while it is hidden only shows it.
+// Pausing and resuming leaves it visible for another 4 s, whatever its state was. Only for a playing player.
 export const showControls = async (remote: Remote): Promise<void> => {
   await remote.press("space", "space")
 }
 
-export const videoSample = async (page: Page) => {
-  const frame =
-    (await page.locator(".player__video video").count()) > 0 ? page.mainFrame() : playerFrame(page)
-  if (frame === undefined) return undefined
-  return frame.evaluate(() => {
-    const video = document.querySelector("video")
+// Test-only probe of the playing <video>.
+export const videoSample = (page: Page) =>
+  page.evaluate(() => {
+    const video = document.querySelector<HTMLVideoElement>(".player__video video")
     return video === null
       ? undefined
       : {
@@ -175,49 +166,4 @@ export const videoSample = async (page: Page) => {
           time: video.currentTime,
           width: video.videoWidth,
         }
-  })
-}
-
-// Twitch disables autoplay when anything covers the embed. Check geometry and what Chromium
-// itself reports (IntersectionObserver v2) from the app's side.
-export const playerCompliance = (page: Page) =>
-  page.evaluate(async () => {
-    const iframe = document.querySelector<HTMLElement>(
-      ".player__video iframe, .player__video video",
-    )
-    if (iframe === null) return { reason: "no player" }
-    // Only Twitch's embed must stay uncovered; the band floats over the own <video> (cinema mode).
-    if (iframe.tagName === "VIDEO") return { own: true }
-    const box = iframe.getBoundingClientRect()
-    const overlapping = [...document.body.querySelectorAll<HTMLElement>("*")].filter((element) => {
-      if (element === iframe || element.contains(iframe) || iframe.contains(element)) return false
-      const rect = element.getBoundingClientRect()
-      if (rect.width === 0 || rect.height === 0) return false
-      return (
-        rect.left < box.right &&
-        rect.right > box.left &&
-        rect.top < box.bottom &&
-        rect.bottom > box.top
-      )
-    })
-    const visible = await new Promise<boolean>((resolve) => {
-      const observer = new IntersectionObserver(
-        (entries) => {
-          observer.disconnect()
-          // IntersectionObserver v2 field; not yet in TypeScript's DOM types.
-          const entry = entries.at(-1) as
-            | (IntersectionObserverEntry & { isVisible?: boolean })
-            | undefined
-          resolve(entry?.isVisible === true)
-        },
-        { delay: 100, threshold: [1], trackVisibility: true } as IntersectionObserverInit,
-      )
-      observer.observe(iframe)
-    })
-    return {
-      height: box.height,
-      overlapping: overlapping.map((element) => element.className || element.tagName),
-      visible,
-      width: box.width,
-    }
   })

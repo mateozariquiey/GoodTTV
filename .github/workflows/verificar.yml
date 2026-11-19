@@ -38,5 +38,6 @@ jobs:
         run: |
           go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.12
           "$(go env GOPATH)/bin/actionlint"
+      # verify ya ha compilado la TV en apps/tv/out: solo falta empaquetarla (bun run pack la volvería a compilar).
       - name: Check packaging
-        run: bun run pack
+        run: bun run --cwd apps/tv electron-builder --dir --publish never

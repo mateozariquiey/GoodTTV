@@ -4,9 +4,10 @@
 // en texto, el cuerpo en ArrayBuffer a trozos y el final. Si Media3 cancela, la app lo avisa y se aborta su AbortSignal.
 // La red de Twitch, como en pagina.tsx (red-nativa.ts).
 //   motor.html[?registro][&pausa=cada,duración[,arranque]]
-// Con ?registro envía a la app los eventos del empalme, solo con los campos que se pueden guardar (lab.ts), y cada 30 s
+// Con ?registro envía a la app los eventos del empalme, solo con los campos que se pueden guardar (safeEmpalmeEvent,
+// como la extensión), y cada 30 s
 // el peor retraso de un temporizador de 1 s (el empalme sondea cada 2 s: no debe frenarse por estar oculta).
-import { createDirecto, type EmpalmeEvent, parseSimulatedPause } from "@goodttv/sin-anuncios"
+import { createDirecto, parseSimulatedPause, safeEmpalmeEvent } from "@goodttv/sin-anuncios"
 import { createRedNativa } from "./red-nativa"
 
 // Lo que inyecta Motor.kt (WebViewCompat.addWebMessageListener).
@@ -22,38 +23,14 @@ type Pedido =
   | { readonly id: number; readonly ruta: string; readonly rango: string | null }
   | { readonly id: number; readonly cancelar: true }
 
-// Campos del empalme que se pueden guardar, los mismos que apps/navegador/src/lab.ts (importarlo metería hls.js en esta
-// página): los errores y las URL pueden llevar el token de Twitch.
-const SAFE_FIELDS = new Set([
-  "ahora",
-  "antes",
-  "canal",
-  "duracionS",
-  "ev",
-  "fragmentosVod",
-  "index",
-  "motivo",
-  "ms",
-  "otra",
-  "publicados",
-  "saltoS",
-  "segundos",
-  "seq",
-  "type",
-])
-const safeEvent = (event: EmpalmeEvent): Record<string, unknown> => ({
-  s: Math.round(performance.now() / 100) / 10,
-  ...Object.fromEntries(Object.entries(event).filter(([name]) => SAFE_FIELDS.has(name))),
-})
-
 const enviar = (message: object): void => puente.postMessage(JSON.stringify(message))
 
 const params = new URLSearchParams(location.search)
 const registro = params.has("registro")
 const nuevoDirecto = () =>
   createDirecto({
-    fetch: createRedNativa(globalThis.fetch.bind(globalThis), location.origin, false),
-    log: registro ? (event) => enviar({ registro: safeEvent(event) }) : () => undefined,
+    fetch: createRedNativa(globalThis.fetch.bind(globalThis), location.origin),
+    log: registro ? (event) => enviar({ registro: safeEmpalmeEvent(event) }) : () => undefined,
     simulatedPause: parseSimulatedPause(params.get("pausa") ?? ""),
   })
 let directo = nuevoDirecto()

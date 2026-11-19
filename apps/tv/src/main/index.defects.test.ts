@@ -19,7 +19,6 @@ const deferred = <Value>(): Deferred<Value> => {
 
 const setup = () => {
   vi.resetModules()
-  vi.stubEnv("ELECTRON_RENDERER_URL", undefined)
 
   const ready = deferred<void>()
   const loaded = deferred<void>()
@@ -61,13 +60,11 @@ const setup = () => {
   }
   const BrowserWindow = vi.fn(MockWindow)
   const server = {
-    certificateFingerprint: "fingerprint",
     close: vi.fn(async (): Promise<void> => undefined),
-    origin: "https://localhost:1234",
+    origin: "http://localhost:1234",
   }
-  const startStaticHttpsServer = vi.fn(async () => server)
+  const startLocalServer = vi.fn(async () => server)
   const createInputRouter = vi.fn(() => ({}))
-  const createPlayerInteraction = vi.fn(() => ({ windowBlurred: vi.fn() }))
   const registerIpc = vi.fn()
   const LocalStore = vi.fn(class {})
   const EmoteCatalog = vi.fn(class {})
@@ -98,14 +95,10 @@ const setup = () => {
     safeStorage: {},
     session: { defaultSession },
   }))
-  vi.doMock("./https-server", () => ({ startStaticHttpsServer }))
-  vi.doMock("./local-certificate", () => ({
-    loadLocalCertificate: vi.fn(async () => ({ certificate: "certificate", key: "key" })),
-  }))
+  vi.doMock("./local-server", () => ({ startLocalServer }))
   vi.doMock("./input-router", () => ({ createInputRouter }))
   vi.doMock("./ipc", () => ({ registerIpc }))
   vi.doMock("@goodttv/servicios", () => ({ EmoteCatalog, EventSubChat, LocalStore, TwitchService }))
-  vi.doMock("./player-interaction", () => ({ createPlayerInteraction }))
   vi.doMock("./settings-store", () => ({ SettingsStore }))
   vi.doMock("./token-vault", () => ({ TokenVault }))
 
@@ -131,7 +124,7 @@ describe("main shutdown defect regressions", () => {
   it.fails("D-cycle-20-2 exits after startup cleanup rejects", async () => {
     const fixture = setup()
     const rendererFailure = new Error("Renderer load failed")
-    const cleanupFailure = new Error("HTTPS cleanup failed")
+    const cleanupFailure = new Error("Server cleanup failed")
     fixture.loadURL.mockRejectedValueOnce(rendererFailure)
     fixture.server.close.mockImplementationOnce(() => {
       fixture.closeStarted.resolve()
@@ -149,7 +142,7 @@ describe("main shutdown defect regressions", () => {
 
   it.fails("D-cycle-20-3 reports a normal-shutdown cleanup rejection", async () => {
     const fixture = setup()
-    const cleanupFailure = new Error("HTTPS cleanup failed")
+    const cleanupFailure = new Error("Server cleanup failed")
     const errorLog = vi.spyOn(console, "error").mockImplementation(() => undefined)
     fixture.server.close.mockImplementationOnce(() => {
       fixture.closeStarted.resolve()

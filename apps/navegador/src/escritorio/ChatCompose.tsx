@@ -1,5 +1,7 @@
 import { CHAT_MESSAGE_MAX, type ChatEmote, type ChatEmoteGroups } from "@goodttv/contratos"
 import {
+  EMOTE_PROVIDER,
+  emoteSections,
   emoteThumb,
   insertAt,
   NO_EMOTES,
@@ -8,6 +10,7 @@ import {
   t,
   useChatCompose,
   useChatEmotes,
+  useLazyEmoteImages,
   wordAt,
 } from "@goodttv/interfaz"
 import { SmileyIcon } from "@phosphor-icons/react"
@@ -27,13 +30,6 @@ import {
 //   - «:» y dos letras sugieren los que empiezan por ellas, como en Twitch: ↑ ↓ para elegir, Tab o Enter para ponerlo;
 //   - el botón de la cara abre la lista entera, con un buscador.
 // Enter envía (useChatCompose); Esc cierra lo abierto, o sale de la caja sin dejar el canal.
-
-export const PROVIDER_LABEL: Readonly<Record<ChatEmote["provider"], string>> = {
-  "7tv": "7TV",
-  bttv: "BTTV",
-  ffz: "FFZ",
-  twitch: "Twitch",
-}
 
 // Para poner un emote desde fuera (un clic en uno del chat).
 export type ComposeHandle = { readonly insert: (name: string) => void }
@@ -170,7 +166,7 @@ export const Compose = ({
             >
               <img alt="" src={emoteThumb(emote)} />
               <span className="emote-suggestions__name">{emote.name}</span>
-              <span className="emote-suggestions__provider">{PROVIDER_LABEL[emote.provider]}</span>
+              <span className="emote-suggestions__provider">{EMOTE_PROVIDER[emote.provider]}</span>
             </div>
           ))}
         </div>
@@ -247,18 +243,6 @@ export const Compose = ({
   )
 }
 
-// Cada emote de la lista se pide tras estar un momento a la vista (o a punto): bajar deprisa no deja pedidas las
-// imágenes de las filas que pasan de largo, que en Zen retrasaban las de abajo (22 oct, knekro: 215 pedidas en una
-// bajada), y lo que sale de la vista sin haber cargado se cancela.
-const LOAD_DELAY_MS = 150
-const LOAD_MARGIN = "120px 0px"
-
-const SECTIONS = [
-  ["channel", "Del canal"],
-  ["twitch", "Tuyos de Twitch"],
-  ["global", "Globales"],
-] as const
-
 // La lista entera, encima de la caja: los del canal, los tuyos de Twitch y los globales, con un buscador. Un clic pone
 // el emote y la lista sigue abierta, para poner varios; se cierra con Esc, el botón o un clic fuera.
 const EmotePicker = ({
@@ -282,50 +266,11 @@ const EmotePicker = ({
     addEventListener("pointerdown", onPointer, { capture: true })
     return () => removeEventListener("pointerdown", onPointer, { capture: true })
   }, [])
-  const query = search.trim().toLowerCase()
   const loading = groups === NO_EMOTES
-  const sections = SECTIONS.map(([key, title]) => ({
-    emotes: groups[key].filter((emote) => emote.name.toLowerCase().includes(query)),
-    key,
-    title: t(title),
-  })).filter((section) => section.emotes.length > 0)
-  // Las imágenes, a mano (data-src → src): React no toca su src, que no lleva.
+  const sections = emoteSections(groups, search)
+  // Las imágenes, al estar un momento a la vista (data-src → src).
   const list = useRef<HTMLDivElement>(null)
-  // biome-ignore lint/correctness/useExhaustiveDependencies: con otra búsqueda, las celdas son otras.
-  useEffect(() => {
-    const root = list.current
-    if (root === null || loading) return undefined
-    const timers = new Map<Element, ReturnType<typeof setTimeout>>()
-    const imageOf = (cell: Element): HTMLImageElement | null => cell.querySelector("img[data-src]")
-    const observer = new IntersectionObserver(
-      (entries) => {
-        for (const { isIntersecting, target } of entries) {
-          const image = imageOf(target)
-          if (image === null) continue
-          if (isIntersecting) {
-            if (image.hasAttribute("src") || timers.has(target)) continue
-            timers.set(
-              target,
-              setTimeout(() => {
-                timers.delete(target)
-                image.src = image.dataset["src"] ?? ""
-              }, LOAD_DELAY_MS),
-            )
-          } else {
-            clearTimeout(timers.get(target))
-            timers.delete(target)
-            if (!image.complete) image.removeAttribute("src")
-          }
-        }
-      },
-      { root, rootMargin: LOAD_MARGIN },
-    )
-    for (const cell of root.querySelectorAll(".emote-picker__emote")) observer.observe(cell)
-    return () => {
-      observer.disconnect()
-      for (const timer of timers.values()) clearTimeout(timer)
-    }
-  }, [loading, query])
+  useLazyEmoteImages(list, ".emote-picker__emote", !loading, search)
   return (
     <div className="emote-picker">
       <input
@@ -348,7 +293,7 @@ const EmotePicker = ({
           <p className="emote-picker__note">{t("Cargando emotes…")}</p>
         ) : sections.length === 0 ? (
           <p className="emote-picker__note">
-            {query === "" ? t("No hay emotes.") : t("Ninguno se llama así.")}
+            {search.trim() === "" ? t("No hay emotes.") : t("Ninguno se llama así.")}
           </p>
         ) : (
           sections.map((section) => (
@@ -378,7 +323,7 @@ const EmotePicker = ({
           t("Pasa el ratón por un emote para ver su nombre.")
         ) : (
           <>
-            <strong>{hovered.name}</strong> · {PROVIDER_LABEL[hovered.provider]}
+            <strong>{hovered.name}</strong> · {EMOTE_PROVIDER[hovered.provider]}
           </>
         )}
       </p>

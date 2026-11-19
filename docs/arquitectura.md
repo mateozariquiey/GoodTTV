@@ -10,11 +10,11 @@ trabajo de bun y un único `node_modules` en la raíz:
 
 ```text
 apps/                     una carpeta por versión
-  tv/                     la app de Electron para la TV (casi todo lo que sigue en esta guía)
+  tv/                     la app de Electron para la TV, con sus pantallas para el mando (casi todo lo que sigue)
   navegador/              la extensión de Chrome y Firefox (D13), con su interfaz de escritorio (D14)
 packages/                 código común, sin depender de una versión concreta
   contratos/              esquemas y tipos de window.api, del chat y de las teclas (Zod); sin Node
-  interfaz/               la interfaz de React: pantallas, navegación por teclas, reproductor y chat
+  interfaz/               lo común de la interfaz de React: datos, reproductor hls.js, chat, idioma y direcciones
   servicios/              cuenta de Twitch, Helix, chat por EventSub y almacén local; sin Node
   sin-anuncios/           empalme, relleno con el VOD y recortes (D11); sin Node
 docs/                     esta documentación
@@ -22,29 +22,22 @@ docs/                     esta documentación
 
 - **Cuándo algo pasa a `packages/`:** cuando lo necesita una segunda versión, no antes. Para la
   versión de navegador (D13) salieron de `apps/tv` los contratos, los servicios y la interfaz.
-  Cada versión aporta lo suyo:
-  - **la interfaz:** `window.api` (`AppApi`), montar `App` e importar las fuentes y los estilos;
+  Las pantallas de la TV y su navegación por mando volvieron a `apps/tv` cuando dejó de recibir funciones (D50): solo
+  las usa ella. Cada versión aporta lo suyo:
+  - **la interfaz:** `window.api` (`AppApi`), sus pantallas, las fuentes y los estilos;
   - **los servicios:** dónde guardar la sesión (`TokenStore`), los recientes y las preferencias
     (`TextStorage`) y de dónde sale el Client ID (`SettingsSource`).
 - **`@goodttv/sin-anuncios`** no carga tipos de Node: solo usa `fetch`, `Response`,
   `crypto.getRandomValues` y `Uint8Array`, que existen en Electron, en una extensión y en Android. Pide a Twitch por
-  el `fetch` que se le da (`createDirecto({ fetch })`); si no, por el global.
+  el `fetch` que se le da (`createDirecto({ fetch })`); si no, por el global. De `@goodttv/contratos` solo toma tipos
+  (los de los VOD, que da ya con la forma de `window.api.vods`), y `@goodttv/servicios` toma de él los de lo que pide
+  como invitado (`guestChannels` y `guestVods`, en `invitado.ts`).
   Sus rutas `/stream/` (`directo.ts`: lista con recarga bloqueante, `info`, `precalentar` y trozos
   del VOD) responden con `Response` estándar, sin depender del transporte. En la TV las sirve el servidor
   local (`apps/tv/src/main/stream/stream-service.ts`, un adaptador HTTP); en la extensión, la
   propia página atiende sus `fetch` a `/stream/` (`directo-fetch.ts`, en el paquete). `apps/tv`
   lo declara como `devDependency` para que electron-vite lo meta en el bundle y electron-builder no
   lo empaquete aparte.
-- **Lo sin anuncios que sigue fuera de `@goodttv/sin-anuncios`.** Es lo que habría que separar
-  para una versión con solo el embed oficial (la pública lleva el reproductor sin anuncios desde D18):
-  - en `apps/tv`: el gancho `dynamic` y la CSP de `https-server.ts`, la CSP de
-    `renderer/index.html` (`connect-src https://*.ttvnw.net`, `media-src`, `worker-src blob:`), y
-    el servicio y el registro `GOODTTV_REGISTRO_EMPALME` en `main/index.ts`;
-  - en `packages/interfaz/src`: `useHlsPlayer.ts` y, en `PlayerScreen.tsx`, la elección de
-    reproductor, el retraso del chat y el modo cine; `ChatDelayQueue` y `delay` en `useChat.ts`, y
-    el texto de sincronización de `ChatPanel.tsx`; los modos de retraso de `AccountScreen.tsx`;
-  - `LatencyMode` en `packages/contratos/src/contracts.ts` y la mezcla de preferencias por
-    defecto en `packages/servicios/src/local-store.ts`.
 
 ### La extensión (`apps/navegador`)
 
@@ -58,15 +51,19 @@ datos, cuenta y los mensajes con emotes), no las pantallas. El botón de la exte
 src/goodttv.tsx        monta las pantallas de escritorio; avisa de lo que cambian otras pestañas
 ├── escritorio/        las pantallas (el texto, con t() de @goodttv/interfaz: D35)
 │   ├── Desktop.tsx    barra, columna de seguidos y la vista de la dirección; atajos generales
-│   ├── routes.ts      la vista en la dirección: #/, #/canal/<login>, #/ajustes (atrás y enlaces)
+│   ├── routes.ts      la vista en la dirección: #/, #/canal/<login>, #/categorias, #/ajustes (atrás y enlaces)
+│   │                  (Inicio, el canal, el VOD y las categorías, comunes con Android: routes.ts de la interfaz)
 │   ├── Search.tsx     búsqueda siempre arriba (/): la lista por relevancia de twitch.tv, y Enter abre el elegido
-│   ├── Sidebar.tsx    tus seguidos en directo; plegable (solo avatares)
+│   ├── Sidebar.tsx    tus seguidos en directo, con su categoría y sus espectadores (D47); plegable (solo avatares)
 │   ├── HomeView.tsx   miniaturas de tus seguidos y populares (también sin cuenta, D41), y «Seguir viendo»
+│   ├── CategoriesView.tsx  el directorio (D49): las categorías más vistas con sus cifras, y los directos de una
 │   ├── ChannelView.tsx  el vídeo con controles encima, ficha del canal (con «Siguiendo») y chat; modo teatro
+│   ├── PlayerControls.tsx  lo común a los controles del canal, del VOD y de la cuadrícula: a la vista al mover el
+│   │                    ratón, un clic pausa y dos van a pantalla completa, el volumen, los menús y sus botones
 │   ├── fullscreen.ts  la pantalla completa del canal y del VOD, con su propio chat al lado (D33)
 │   ├── ChatPanel.tsx  el chat; un emote dice su nombre al pasar el ratón, y un clic lo pone en la caja
 │   ├── ChatCompose.tsx  la caja para escribir (CHAT-1): Tab y «:» completan emotes, y la lista de emotes
-│   ├── sonido.ts      con varias pestañas, suena una sola (EXT-5), y el aviso de la ventana muda
+│   ├── visibilidad.ts si la pestaña está a la vista y si se ha mirado ya (D48): el chat y lo abierto sin verse
 │   ├── GridView.tsx   varios canales en una pestaña (EXT-6, D42, con su opción en Ajustes; cuadricula.ts)
 │   ├── VodView.tsx    un VOD (VOD-1): barra con miniaturas, velocidad, calidad y chat del vídeo; reanuda
 │   ├── SkipButton.tsx retroceder y avanzar 10 s (← →), en el directo y en un VOD
@@ -109,11 +106,13 @@ src/fondo.ts           abre GoodTTV o trae al frente la pestaña con esa vista; 
   por EventSub (con insignias) ocupa su sitio. Si Twitch no lo envía, su motivo. Los emotes para escribir
   (`window.api.chat.emotes`) son los del canal y los globales de 7TV, BTTV y FFZ (`EmoteCatalog.listForChannel`) y los
   de Twitch de la cuenta (`GET /helix/chat/emotes/user`, permiso `user:read:emotes`); se piden la primera vez que se va
-  a escribir (`useChatEmotes`), y completarlos es común (`emote-complete.ts`, en `@goodttv/interfaz`). Los de 7TV, BTTV
+  a escribir (`useChatEmotes`), y completarlos es común (`emote-complete.ts`, en `@goodttv/interfaz`), como la lista
+  por grupos con su buscador y la ficha de un emote del chat (`emote-list.ts`). Los de 7TV, BTTV
   y FFZ se envían como texto: los ve como imagen quien tenga su extensión, o GoodTTV.
 - **Los VOD (VOD-1, D24),** como invitado y sin anuncios, como el relleno del empalme: los vídeos de un canal, la lista
   maestra de usher, las miniaturas de la barra y el chat del vídeo (`vods.ts`, en `@goodttv/sin-anuncios`; a la
-  interfaz llegan por `window.api.vods`, con los emotes y las insignias que pone `createPageApi`). El chat solo se puede
+  interfaz llegan por `window.api.vods`, con los emotes y las insignias que pone `createPageApi`; las pantallas de la
+  extensión y de Android piden los datos, las miniaturas y la lista con `vod-data.ts`, en `@goodttv/interfaz`). El chat solo se puede
   pedir por posición: por cursor exige Client-Integrity (`useReplayChat` pide por delante de lo que se ve). Por dónde
   va cada vídeo se guarda en `localStorage` (`vod-progress.ts`, en `@goodttv/interfaz`): reanuda 5 s antes y lo dice;
   pasado el 97 % (o a 45 s del final) cuenta como visto. Los vídeos del canal salen debajo de su ficha (COL-2) y, sin
@@ -129,16 +128,24 @@ src/fondo.ts           abre GoodTTV o trae al frente la pestaña con esa vista; 
   sistema (`window.api.idioma`, que el preload pide sin esperar), y se lo pasa a `activarIdioma` como su fuente.
 - **Buscar canales y abrir uno por su nombre, sin cuenta** (las tres): con el buscador de twitch.tv como invitado
   (`canales.ts`, en `@goodttv/sin-anuncios`; `guestCatalog`, en `@goodttv/servicios`, lo convierte en `catalog.search`,
-  `catalog.channel` y `catalog.popularSinCuenta`): su relevancia, que corrige erratas, con la foto, los seguidores y si
-  está en directo. La extensión y Android lo usan en la página (`createPageApi`, si se le da la fuente); la TV, en el
-  proceso principal, por IPC (D44). Sin esa fuente, la búsqueda de Helix, con cuenta. Un canal abierto por la dirección
+  `catalog.channel` y `catalog.popular`, que da «Populares» en Inicio también con cuenta): su relevancia, que corrige
+  erratas, con la foto, los seguidores y si está en directo. La extensión y Android lo usan en la página (`createPageApi`); la TV, en el proceso principal, por
+  IPC (D44). Un canal abierto por la dirección
   (o, en la TV, por su nombre) se completa con `catalog.channel`: su nombre, su foto y su id, que el chat necesita
-  también sin directo.
+  también sin directo (en la extensión y Android, `useChannelDetails`, en `channel-details.ts`).
+- **El directorio de categorías (D49),** en las tres: como invitado, también con cuenta, por el GraphQL público
+  (`topCategories` y `categoryStreams`, en `canales.ts`; `guestCatalog` los convierte en `catalog.categories` y
+  `catalog.category`, que en la TV van por IPC). Las más vistas con sus espectadores y sus canales, y los directos de una
+  por su nombre en las direcciones de twitch.tv. Cada versión, con sus pantallas: en la extensión, «Categorías» arriba
+  (`CategoriesView.tsx`); en Android, un botón en la barra de Inicio y dos pantallas que siguen montadas debajo de lo que
+  se abre desde ellas (`pantallas/Categorias.tsx`, `App.tsx`); en la TV, una pestaña con dos capas de foco, la lista y los
+  directos de una (`screens/CategoriesScreen.tsx`).
 - **Tus seguidos, por espectadores o «Recomendado para ti»** (la extensión y Android): Helix solo los da por espectadores; el
   orden recomendado es propio, con los minutos que suena cada canal en GoodTTV, en directo o en sus VOD, que pesan la
   mitad cada 14 días (`watch-time.ts`, en `@goodttv/interfaz`, en `localStorage`), y luego los abiertos hace poco.
 - **Retroceder el directo (DVR-1):** con el VOD que graba la emisión en curso (`liveArchive`, en `vods.ts`; va unos
-  segundos por detrás del directo), la barra del canal va desde que empezó. Si ese VOD es solo para suscriptores
+  segundos por detrás del directo), la barra del canal va desde que empezó (`useLiveArchive` y `liveBar`, en
+  `live-archive.ts` de `@goodttv/interfaz`, comunes a la extensión y a Android). Si ese VOD es solo para suscriptores
   (su token de invitado restringe las calidades), no se ofrece: ← y la pausa se quedan en la lista del empalme
   (D34). Lo que cubre la lista del empalme (~100 s,
   menos el margen del modo), ← y la barra lo recorren en el mismo reproductor (`seekBy` de `useHlsPlayer`; ← y →, al
@@ -150,8 +157,9 @@ src/fondo.ts           abre GoodTTV o trae al frente la pestaña con esa vista; 
   grabado vuelve al canal, cuyo empalme se ha mantenido caliente. El directo y el VOD son pantallas distintas, cada una
   con su `<video>`: cada reproductor nuevo empieza con el volumen y el silencio que eligió la persona en esa pestaña
   (`volume.ts`, en `@goodttv/interfaz`), y el del directo, con la calidad elegida (`chosenLiveQuality`, en
-  `useHlsPlayer`; «Auto», la mejor), que se guarda como el volumen. El VOD al que se retrocede empieza en ella
-  (`levelFor`, en `useVodPlayer`). Como en twitch.tv, se guardan en `localStorage`: una pestaña nueva, o GoodTTV
+  `player/live-quality.ts`; «Auto», la mejor), que se guarda como el volumen. El VOD al que se retrocede empieza en ella
+  (`levelFor`, en `useVodPlayer`). Como en twitch.tv, se guardan en `localStorage` (`page-storage.ts`, que no lanza si
+  el navegador no lo deja usar): una pestaña nueva, o GoodTTV
   al volver a abrirlo, empieza con lo último que se eligió. El camino del directo no cambia: mientras no se retrocede, es el de siempre. En Android (D25), lo que cabe en la lista lo recorre Media3 dentro de su ventana del
   directo (`saltar` y `alDirecto` en `Reproductor.kt`), al fotograma clave; lo de más atrás, igual que en la extensión.
 - **Solo audio con la pantalla apagada (Android, D32 y D33):** al dejar de verse la app sin el PiP a la vista
@@ -162,7 +170,8 @@ src/fondo.ts           abre GoodTTV o trae al frente la pestaña con esa vista; 
   este llega; mientras, el motor sigue sirviendo al de antes su empalme (`outgoing`, en `directo.ts`).
 - **Imagen en imagen (la extensión, D32):** `togglePictureInPicture` de `useHlsPlayer` y `useVodPlayer` sobre su
   `<video>`, con el botón donde el navegador tiene la API (`PictureInPictureButton.tsx`).
-- **Si sigues el canal (SEG-1):** la ficha lo dice (`GET /helix/channels/followed`, con el permiso que ya había). Seguir
+- **Si sigues el canal (SEG-1):** la ficha lo dice (`GET /helix/channels/followed`, con el permiso que ya había;
+  `useFollowing`, en `channel-details.ts`, común con Android). Seguir
   y dejar de seguir no tiene API oficial desde 2021 (D24): el botón abre el canal en twitch.tv.
 - **Sin embed oficial de respaldo:** Manifest V3 no admite código remoto, y el SDK de Twitch lo es.
   Si falla el reproductor propio, «Reintentar» o «Abrir en twitch.tv».
@@ -212,12 +221,10 @@ src/fondo.ts           abre GoodTTV o trae al frente la pestaña con esa vista; 
     (`TwitchSession`). Los recientes, igual (`LocalStore`), para no perder uno;
   - **lo que cambia otra pestaña se avisa** (`chrome.storage.onChanged`, en `goodttv.tsx`): entrar o salir de la cuenta
     y las preferencias;
-  - **suena una sola** (`escritorio/sonido.ts`), la última que se miró con un canal abierto. Las demás esperan por
-    escalones, para que volver sea rápido sin gastar de más: sin sonido, siguiendo el directo (1 min oculta); paradas,
-    con el empalme caliente (5 min más); y del todo paradas. Pasar a una pestaña que no es de GoodTTV no cambia nada. Si la
-    que suena se cierra o deja el canal, avisa, y pasa a sonar otra que esté a la vista (dos ventanas), tras 300 ms para
-    que no se lo quite a la misma pestaña cuando va del canal a un VOD. Un clic en el vídeo de una en silencio le da el
-    sonido, sin pausarla;
+  - **cada una suena por su cuenta, como las de twitch.tv** (D48): ninguna calla ni para a las demás, y una que deja de
+    verse sigue sonando. Solo espera la que se abre sin verse (con el clic central, o en segundo plano): no empieza hasta
+    que se mira por primera vez (`escritorio/visibilidad.ts`), y desde entonces sigue. Hasta D48 sonaba una sola, la
+    última que se miró;
   - **el chat, solo en las pestañas a la vista:** EventSub admite tres conexiones con suscripciones por cuenta. Al
     ocultarse se cierra sin vaciarse, y al volver sigue (`useChat`, `connected`);
   - **el botón y «Abrir en GoodTTV»** llevan a la pestaña que ya muestra esa vista o abren otra junto a la actual. El
@@ -238,22 +245,23 @@ src/fondo.ts           abre GoodTTV o trae al frente la pestaña con esa vista; 
 - **Con la pestaña oculta sigue igual.** Chrome y Firefox frenan los temporizadores de las
   pestañas ocultas, y el empalme sondea cada 2 s. Con 6 min oculta, sonando o silenciada, el
   vídeo avanzó al ritmo real, sin esperas ni más retraso. En pausa, hls.js salta al directo cuando
-  la posición sale de la lista, y al volver reanuda ([verificacion.md](verificacion.md#extensión-de-navegador)).
-- **La página de prueba del reproductor** (`src/reproductor.html#canal`) admite `?modo=` y
-  `?pausa=` (como `GOODTTV_PAUSA_SIMULADA`). Expone `window.estadoPrueba` para la prueba de humo
-  ([desarrollo.md](desarrollo.md#prueba-de-humo)).
+  la posición sale de la lista, y al volver reanuda ([verificacion.md](verificacion/hasta-0.2.0.md#extensión-de-navegador)).
+- **Lo del laboratorio va por la dirección de la propia página** (`src/lab.ts`): `?pausa=` simula
+  pausas globales (como `GOODTTV_PAUSA_SIMULADA`), y `?registro` expone el registro del empalme y el
+  hls.js del reproductor para las pruebas ([desarrollo.md](desarrollo.md#prueba-de-humo)). No hay
+  otra página de reproductor: las pruebas abren `goodttv.html#/canal/<login>`.
 
 El resto de esta guía describe la TV. Las rutas de `src/main`, `src/preload` y
-`src/renderer` son relativas a `apps/tv`; las de la interfaz (pantallas, navegación, reproductor y
-chat), a `packages/interfaz/src`.
+`src/renderer` son relativas a `apps/tv`; las pantallas y la navegación están en `src/renderer/src`, y lo común
+(reproductor, chat y datos), en `packages/interfaz/src`.
 
 ## Las tres piezas de Electron
 
 ```text
 Proceso principal (src/main) ── tiene todos los permisos
-├── index.ts               ventana, servidor HTTPS local, permisos, arranque
+├── index.ts               ventana, servidor local (interfaz y /stream/), permisos, arranque
+├── local-server.ts        http://127.0.0.1:<puerto>, solo en 127.0.0.1 y con el Host exacto
 ├── input-router.ts        TODAS las teclas del mando → acciones («up», «ok», «back»…; @goodttv/contratos)
-├── player-interaction.ts  modo «Controles de Twitch»: flechas → Tab/Mayús+Tab, OK → Enter
 ├── @goodttv/servicios     cuenta (código + tokens) y Helix; chat por EventSub, emotes y tokenizador;
 │                          recientes y preferencias. La TV aporta dónde se guardan:
 ├── token-vault.ts         la sesión, cifrada con el llavero del sistema (o archivo 0600 sin él)
@@ -264,13 +272,14 @@ Proceso principal (src/main) ── tiene todos los permisos
         │  IPC validado con Zod (@goodttv/contratos)
 Preload (src/preload) ── expone window.api, valida lo que entra y lo que sale
         │
-Renderer (src/renderer: main.tsx monta @goodttv/interfaz) ── React, sin acceso a Node
-├── navigation.tsx         capas, memoria de foco, recuperación del foco perdido
-├── App.tsx                pestañas Siguiendo / Buscar / Ajustes y pila Inicio → Reproducción
-├── screens/               HomeScreen, SearchScreen, AccountScreen
-└── player/                PlayerScreen, useTwitchPlayer (SDK oficial), useChat, ChatPanel
-        │
-iframe de player.twitch.tv (otro origen; la app no lo toca por dentro)
+Renderer (src/renderer/src: main.tsx monta App) ── React, sin acceso a Node
+├── navigation.tsx         capas, memoria de foco, recuperación del foco perdido (navigation-geometry.ts)
+├── App.tsx                pestañas Siguiendo / Buscar / Categorías / Ajustes y pila Inicio → Reproducción
+├── screens/               HomeScreen, SearchScreen, CategoriesScreen (D49), AccountScreen
+├── player/                PlayerScreen
+├── ui.tsx                 las piezas de las pantallas (filas de canal, avatar, «EN DIRECTO»…)
+├── styles.css             los estilos
+└── @goodttv/interfaz      datos (useHome…), useHlsPlayer (reproductor propio), useChat, ChatPanel, el idioma
 ```
 
 **Regla de oro:** el renderer nunca ve un token. Las llamadas a Twitch con credenciales salen
@@ -286,19 +295,16 @@ primera carga tras abrir la app las pide todas.
 ## Cómo viaja una pulsación del mando
 
 1. El mando envía una tecla estándar (por ejemplo, `ArrowDown`).
-2. `input-router.ts` la recibe en `before-input-event`, *antes* de que llegue a la página o al
-   iframe de Twitch. La traduce a una acción (`down`) y anula la tecla original.
+2. `input-router.ts` la recibe en `before-input-event`, *antes* de que llegue a la página. La
+   traduce a una acción (`down`) y anula la tecla original.
 3. La acción llega por IPC a `navigation.tsx`, que se la entrega a la **capa superior**: la
    pantalla visible o el submenú abierto.
 4. La capa puede consumirla. Por ejemplo, el reproductor usa ↑/↓ para cambiar de canal. Si no la
    consume, `navigation` mueve el foco en esa dirección: primero a los controles alineados con el
    actual (su «haz») y, entre ellos, al más cercano (`navigation-geometry.ts`).
 
-Por eso da igual dónde esté el foco DOM. Aunque un clic accidental lo meta en el iframe de
-Twitch, la siguiente tecla vuelve a la interfaz. Las excepciones son dos:
-- Con un campo de texto activo, las letras, Espacio y Retroceso pasan al campo.
-- En el modo «Controles de Twitch», las flechas y OK se envían como Tab y Enter al iframe del
-  reproductor, con comprobaciones del marco y del foco antes de cada envío.
+Por eso da igual dónde esté el foco DOM. La excepción: con un campo de texto activo, las letras, Espacio y Retroceso
+pasan al campo.
 
 ## Foco y «volver a donde estaba»
 
@@ -315,28 +321,29 @@ Twitch, la siguiente tecla vuelve a la interfaz. Las excepciones son dos:
   bienvenida o, si no se pudo comprobar la cuenta, el aviso (`App.tsx`). Antes caería en las pestañas, y ahí se
   quedaría al llegar la lista. Con el aviso, el foco va a la lista guardada, con «Reintentar» justo encima; sin lista,
   a «Reintentar».
-- Si el foco se pierde (el elemento desaparece o estaba en el iframe), la primera tecla solo lo
-  recupera y no mueve nada.
+- Si el foco se pierde (el elemento desaparece), la primera tecla solo lo recupera y no mueve nada.
 
 ## Reproducción
 
-**Variante privada (D11):** por defecto reproduce `useHlsPlayer`, un `<video>` con hls.js sobre el
+**El reproductor propio (D11):** `useHlsPlayer`, un `<video>` con hls.js sobre el
 directo sin anuncios que sirve el proceso principal en `/stream/<canal>/` (`src/main/stream`, sobre
 `@goodttv/sin-anuncios`: empalme de sesiones, relleno con el VOD, recarga bloqueante). El modo de retraso (`latencyMode`
 en las preferencias) llega al proceso principal en `?modo=` y elige margen y relleno. `useChat`
 retiene los mensajes en una cola (`ChatDelayQueue`) hasta que la imagen los alcanza; los avisos de
-estado no esperan. Con el reproductor propio la pantalla va en modo cine: el vídeo ocupa todo el
-alto y la franja de título y controles flota encima y se oculta a los 4 s sin tocar el mando
-mientras se reproduce; con ella oculta, una tecla solo la muestra (↑ ↓ siguen cambiando de canal y
-Play/Pausa sigue funcionando). Si el reproductor propio falla, se ofrece el embed oficial, que
-funciona como se describe a continuación.
+estado no esperan. La pantalla va en modo cine: el vídeo ocupa todo el alto y la franja de título y
+controles flota encima y se oculta a los 4 s sin tocar el mando mientras se reproduce; con ella
+oculta, una tecla solo la muestra (↑ ↓ siguen cambiando de canal y Play/Pausa sigue funcionando).
+Si falla, la franja dice «No se pudo preparar el directo sin anuncios.» con «Reintentar» enfocado,
+como la extensión. No hay reproductor de respaldo: el oficial de Twitch (embed), con su modo
+«Controles de Twitch», se quitó tras la 0.5.1, y con él el HTTPS del servidor local, que solo
+existía porque su `parent` lo exigía.
 
 **Arranque, latencia y fluidez del reproductor propio (D16):**
 - **Las sesiones, a la vez** (`Empalme.start`): `site`, `embed`, `popout` y `mobile_feed@android`
   (`tipo@plataforma`, `sessionKind`) se abren en paralelo y cada una consulta su
   lista en cuanto abre; publica la primera que da directo. `info` contesta en cuanto hay algo
   publicado (`Empalme.changed`), sin sondear.
-- **Precalentar** (`prewarmStream`, `usePrewarm`): con el foco 400 ms en un canal en directo de
+- **Precalentar** (`prewarmStream`, `usePrewarm`, en `player/prewarm.ts`): con el foco 400 ms en un canal en directo de
   Inicio, en la TV, o con el ratón parado 150 ms encima en la extensión, el directo abre ya ese
   empalme en un hueco aparte (`/stream/<canal>/precalentar`) que no para el que suena. Al abrir el
   canal pasa a activo; si nadie lo abre, se para a los 30 s como cualquier otro.
@@ -359,7 +366,7 @@ funciona como se describe a continuación.
   saltar (`liveMaxLatencyDuration`: el objetivo más 60 s, 84 s en *Sin paradas*). *Sin paradas* y *Adaptativo* (tras
   el primer relleno) conservan el retraso que se añade, como una pausa de la persona, hasta 10 s por debajo de ese
   tope. Con 20 fragmentos (40 s) y el objetivo de 24 s, bastaban 16 s de más para que la posición se saliera de la
-  lista, y hls.js la recolocaba a saltos (15 oct, [verificacion.md](verificacion.md#sin-paradas-saltos-al-crecer-el-retraso)).
+  lista, y hls.js la recolocaba a saltos (15 oct, [verificacion.md](verificacion/0.2.1-0.2.3.md#sin-paradas-saltos-al-crecer-el-retraso)).
   Los fragmentos de Twitch se pueden descargar unos 4,5 min.
 - **Recarga bloqueante larga:** el directo retiene la petición de la lista hasta 20 s, y también la
   que llega sin `_HLS_msn` si ese reproductor (`visita`) ya tiene lo último. Tras una respuesta sin
@@ -373,9 +380,9 @@ funciona como se describe a continuación.
   - **También con fMP4** (`EXT-X-MAP`; p. ej. con *Enhanced Broadcasting*, como `illojuan`), con el mismo margen de
     2,5 fragmentos, desde hls.js 1.7.4. Hasta la 1.7.3, hls.js situaba cada trozo que llegaba respecto al principio del
     fragmento y, a partir de 1 s, lo daba por desfasado (`isInvalidInitPts`) y lo ponía encima de lo anterior
-    ([verificacion.md](verificacion.md#fmp4-saltos-con-la-carga-progresiva)), así que fMP4 se cargaba fragmento a
+    ([verificacion.md](verificacion/0.2.1-0.2.3.md#fmp4-saltos-con-la-carga-progresiva)), así que fMP4 se cargaba fragmento a
     fragmento y con 3 fragmentos de margen. La 1.7.4 lo arregla
-    ([verificacion.md](verificacion.md#hlsjs-174-ren-4)).
+    ([verificacion.md](verificacion/0.4.1.md#hlsjs-174-ren-4)).
   - **El VOD en fMP4 sigue sin carga progresiva** (`useVodPlayer`, decidido en `LEVEL_UPDATED`, porque al llegar
     `LEVEL_LOADED` hls.js ya ha pedido el primer trozo): con la 1.7.3 el primero no se veía y hls.js volvía a empezar, a
     veces en peor calidad, y con la 1.7.4 no se ha medido. El VOD va en el mismo formato que el directo.
@@ -389,16 +396,14 @@ funciona como se describe a continuación.
   - en la extensión, la lista tiene fondo opaco: así Chrome compone su desplazamiento sin perder los subpíxeles del
     texto (en pantallas a 1x, sin fondo, no lo hacía).
 
-`useTwitchPlayer` crea un `Twitch.Player` oficial por visita y usa `setChannel` para cambiar de
-canal. Separa tres hechos que los eventos de Twitch mezclan:
-- **Disponibilidad:** READY, ONLINE y OFFLINE.
-- **Reproducción:** PLAY, PLAYING, PAUSE y PLAYBACK_BLOCKED.
-- **Intención de la persona:** una pausa voluntaria se respeta; una pausa porque la página quedó
-  oculta se recupera al volver.
-
-**Nada puede tapar el iframe:** Twitch desactiva el autoplay si algo lo cubre. El CSS de
-`.player__video` garantiza 16:9 y un mínimo de 400×300, y la prueba e2e lo comprueba en cada
-ejecución.
+**Un directo que se queda parado** (`player/stuck.ts`, en la extensión y la TV): un error fatal de medios se recupera
+(`recoverMediaError`) hasta tres veces seguidas, y el cuarto deja «No se pudo preparar el directo sin anuncios.» con
+«Reintentar»; con 30 s de vídeo avanzando, el contador vuelve a cero. Y un vídeo que no avanza sin estar en pausa, ya
+reproduciendo y con la emisión en marcha, pasa a «Twitch no responde.» con «Reintentar» a los 30 s si tiene datos por
+delante en el búfer (lo para el reproductor) o a los 4 min si no los tiene (espera al directo, y una pausa global sin
+relleno dura hasta 3 min). Si después avanza solo 10 s, vuelve a `ready` y el aviso se va (no a la primera: tras un corte
+de red, el vídeo puede moverse un par de segundos y volver a pararse). Antes de esto la imagen se quedaba
+congelada sin aviso: la lista la sirve la propia página o el servidor local, así que hls.js no llega a dar un error de red.
 
 **Fallos en Android (D38):** `Reproductor.fallo` vuelve a abrir solo, con esperas crecientes y un límite, y sin red espera
 el aviso de `AvisoDeRed`. La página solo pinta las fases `reconectando` y `sin-red`. Cada intento pide antes
@@ -429,7 +434,7 @@ guarda los últimos 150.
 | --- | --- |
 | Añadir o cambiar un texto de cualquier versión | La frase en `t("…")` y su inglés en `packages/interfaz/src/idioma-en.ts`. Si es un mensaje de `@goodttv/servicios`, igual, y se pinta con `tMensaje` (D35) |
 | Añadir una tecla del mando | `packages/contratos/src/keys.ts` (`actionForKey`) y su prueba |
-| Cambiar colores, tamaños o espaciado | `packages/interfaz/src/styles.css` (variables en `:root`) |
-| Añadir una sección a Inicio | `packages/interfaz/src/data.ts` (`loadHome`, `toSavedHome` con `SavedHomeSchema` en `@goodttv/contratos` para que se guarde y, si debe tener su forma mientras carga, `HomeSketch`) y `screens/HomeScreen.tsx` |
+| Cambiar colores, tamaños o espaciado | `apps/tv/src/renderer/src/styles.css` en la TV, `apps/navegador/src/escritorio/desktop.css` en la extensión y `apps/android/web/estilos.css` en Android (variables en `:root`) |
+| Añadir una sección a Inicio | `packages/interfaz/src/data.ts` (`loadHome`, `toSavedHome` con `SavedHomeSchema` en `@goodttv/contratos` para que se guarde y, si debe tener su forma mientras carga, `HomeSketch`) y las pantallas de cada versión (en la TV, `screens/HomeScreen.tsx`) |
 | Otro proveedor de emotes | `packages/servicios/src/chat/emote-catalog.ts` y el host en `packages/contratos/src/chat.ts` y en la CSP de `src/renderer/index.html` |
 | Una llamada nueva a Twitch | `packages/servicios/src/twitch-service.ts` → `ipc.ts` → `preload/index.ts` → `packages/contratos/src/contracts.ts` |

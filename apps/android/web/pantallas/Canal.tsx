@@ -1,20 +1,21 @@
-import type { LiveArchive, Preferences } from "@goodttv/contratos"
+import type { Preferences } from "@goodttv/contratos"
 import {
+  archiveMoment,
   type Channel,
+  chatDelayOf,
   formatClock,
   formatUptime,
   formatViewers,
-  fromSearch,
-  fromStream,
-  prefetchVod,
-  renewVod,
-  TWITCH_VIEWER_LATENCY,
+  liveBar,
   t,
-  toRecent,
   useBehind,
+  useChannelDetails,
   useChat,
+  useFollowing,
   useIdioma,
-  VOD_WARM_MS,
+  useLiveArchive,
+  usePageVisible,
+  useRecentChannel,
 } from "@goodttv/interfaz"
 import {
   ArrowLeftIcon,
@@ -84,49 +85,9 @@ export const Canal = ({
   const player = useMedia3(channel.login, preferences.latencyMode, stage, preferencesLoaded)
   const { estado, latency } = player
 
-  // Abierto por su nombre (la dirección, o «Abrir el canal» de la búsqueda): se completan su nombre, su foto y su id (que
-  // el chat necesita también sin directo) sin cuenta, y con cuenta, los datos del directo (cuánto lleva), como en la
-  // extensión.
-  const [details, setDetails] = useState(channel)
-  useEffect(() => {
-    setDetails(channel)
-    // Con su id, ya se sabe todo, salvo que su nombre sea solo el login: un reciente guardado mientras llegaban sus datos
-    // (antes podía quedarse así), que se corrige.
-    if (channel.userId !== undefined && channel.displayName !== channel.login) return undefined
-    let active = true
-    window.api.catalog
-      .channel?.(channel.login)
-      .then((card) => {
-        // Lo del directo, si ha llegado antes, se queda.
-        if (active && card !== null)
-          setDetails((current) =>
-            current.userId === undefined
-              ? fromSearch(card)
-              : {
-                  ...current,
-                  displayName:
-                    current.displayName === current.login ? card.displayName : current.displayName,
-                  profileImageUrl: current.profileImageUrl ?? card.thumbnailUrl,
-                },
-          )
-      })
-      .catch(() => undefined)
-    if (signedIn)
-      window.api.catalog
-        .streamsByLogin([channel.login])
-        .then(([stream]) => {
-          if (active && stream !== undefined)
-            setDetails((current) => {
-              const live = fromStream(stream)
-              const picture = live.profileImageUrl ?? current.profileImageUrl
-              return picture === undefined ? live : { ...live, profileImageUrl: picture }
-            })
-        })
-        .catch(() => undefined)
-    return () => {
-      active = false
-    }
-  }, [channel, signedIn])
+  // Abierto por su nombre (la dirección, o «Abrir el canal» de la búsqueda), se completan sus datos como en la extensión
+  // (channel-details.ts, en @goodttv/interfaz).
+  const details = useChannelDetails(channel, signedIn)
   // En los mandos del sistema, el canal con su foto y el título del directo.
   useMandos(
     `canal/${details.login}`,
@@ -134,98 +95,31 @@ export const Canal = ({
     details.title ?? t("En directo"),
     details.profileImageUrl,
   )
-  const latest = useRef(details)
-  latest.current = details
-  // A recientes al abrirlo, y otra vez cuando se completan sus datos (con su nombre, su foto e id).
-  const recentKey = `${details.login}|${details.userId ?? ""}|${details.displayName}`
-  useEffect(() => {
-    void window.api.recents.add(toRecent(latest.current))
-  }, [recentKey])
-
+  // A recientes al abrirlo, y otra vez cuando se completan sus datos.
+  useRecentChannel(details)
   // SEG-1: si sigues el canal. Al volver a la app (tras seguirlo en twitch.tv), se mira otra vez.
-  const [following, setFollowing] = useState<boolean | null>(null)
-  const broadcasterId = details.userId
-  useEffect(() => {
-    setFollowing(null)
-    const follows = window.api.catalog.follows
-    if (!signedIn || broadcasterId === undefined || follows === undefined) return undefined
-    let active = true
-    const check = (): void => {
-      follows(broadcasterId)
-        .then((value) => {
-          if (active) setFollowing(value)
-        })
-        .catch(() => undefined)
-    }
-    check()
-    const onVisible = (): void => {
-      if (document.visibilityState === "visible") check()
-    }
-    document.addEventListener("visibilitychange", onVisible)
-    return () => {
-      active = false
-      document.removeEventListener("visibilitychange", onVisible)
-    }
-  }, [broadcasterId, signedIn])
+  const following = useFollowing(details.userId, signedIn)
 
   // Cuánto va por detrás de un espectador normal de Twitch; el chat se retrasa lo mismo, para ir a la par de la imagen
   // (como en la extensión; comprobarlo es AND-4). Mientras no se sabe, el chat espera.
   const behind = useBehind(latency)
   const { fase } = estado
   const enDirecto = fase === "reproduciendo"
-  const chatDelay = useCallback((): number | null => {
-    const seconds = latency.current
-    if (seconds !== null) return Math.max(0, seconds - TWITCH_VIEWER_LATENCY)
-    return fase === "sin-directo" || fase === "error" ? 0 : null
-  }, [latency, fase])
+  const chatDelay = useCallback(
+    () => chatDelayOf(latency.current, fase !== "sin-directo" && fase !== "error"),
+    [latency, fase],
+  )
 
-  // DVR-1: la emisión en curso y el VOD que la graba. Sin VOD público, solo se retrocede lo que cabe en la lista.
-  const [archive, setArchive] = useState<LiveArchive | null>(null)
-  useEffect(() => {
-    setArchive(null)
-    const vods = window.api.vods
-    if (!enDirecto || vods === undefined) return undefined
-    let active = true
-    vods
-      .archive(channel.login)
-      .then((value) => {
-        if (active) setArchive(value)
-      })
-      .catch(() => undefined)
-    return () => {
-      active = false
-    }
-  }, [channel.login, enDirecto])
-  const [now, setNow] = useState(Date.now())
-  useEffect(() => {
-    const id = archive?.archiveId
-    if (id == null) return undefined
-    // Retroceder no espera a pedir su lista ni sus datos. Valen 5 min (vod-cache.ts): mientras se ve, se renuevan.
-    prefetchVod(id)
-    const warm = setInterval(() => renewVod(id), VOD_WARM_MS)
-    const timer = setInterval(() => setNow(Date.now()), 1000)
-    return () => {
-      clearInterval(warm)
-      clearInterval(timer)
-    }
-  }, [archive])
-  // Un momento de la emisión (ms, en hora real) en el VOD: su segundo, contando desde que empezó a grabarse. Sin dejar el
-  // canal en el historial: retroceder es seguir viendo lo mismo, y Atrás vuelve a donde se estaba antes.
+  // DVR-1: la emisión en curso y el VOD que la graba (live-archive.ts). Sin VOD público, solo se retrocede lo que cabe en
+  // la lista.
+  const rewind = useLiveArchive(channel.login, enDirecto)
+  const { archive } = rewind
+  // Un momento de la emisión (ms, en hora real), en el VOD. Sin dejar el canal en el historial: retroceder es seguir
+  // viendo lo mismo, y Atrás vuelve a donde se estaba antes.
   const openRewind = useCallback(
     (wallMs: number) => {
-      const archiveId = archive?.archiveId
-      if (archiveId == null) return
-      const origin = Date.parse(archive?.recordedAt ?? archive?.startedAt ?? "")
-      if (!Number.isFinite(origin)) return
-      navigate(
-        {
-          at: Math.max(0, (wallMs - origin) / 1000),
-          id: archiveId,
-          live: channel.login,
-          view: "vod",
-        },
-        true,
-      )
+      const moment = archiveMoment(archive, wallMs)
+      if (moment !== null) navigate({ ...moment, live: channel.login, view: "vod" }, true)
     },
     [archive, channel.login],
   )
@@ -256,15 +150,7 @@ export const Canal = ({
     else pausar(!estado.pausado)
   }
   // La barra del directo: desde que empezó la emisión hasta ahora; lo que se ve, la latencia antes de ahora.
-  const startedAtMs = Date.parse(archive?.startedAt ?? "")
-  const dvr =
-    !canRewind || !Number.isFinite(startedAtMs) || !enDirecto
-      ? null
-      : {
-          duration: Math.max(0, (now - startedAtMs) / 1000),
-          position: Math.max(0, (now - startedAtMs) / 1000 - (latency.current ?? 0)),
-          start: startedAtMs,
-        }
+  const dvr = liveBar(rewind, latency.current, enDirecto)
 
   // En vertical, el chat o los vídeos, en pestañas: se empieza en el chat salvo que la preferencia lo oculte (Cuenta) o el
   // canal no esté en directo, y elegir la otra no cambia la preferencia (es mirar sus vídeos, no ocultar el chat). En
@@ -550,7 +436,10 @@ const CanalChat = memo(
     readonly visible: boolean
   }) => {
     useIdioma() // con memo no se vuelve a pintar solo al cambiar el idioma
-    const chat = useChat(broadcasterId, reading, delay)
+    // Con la pantalla apagada (o la app al fondo) el directo sigue sonando, pero el chat no lo lee nadie: se
+    // desconecta y vuelve al encenderla, como el de una pestaña oculta en la extensión.
+    const pageVisible = usePageVisible()
+    const chat = useChat(broadcasterId, reading, delay, pageVisible)
     const writing: Escritura =
       !signedIn || chat.send === undefined ? "no" : canChat ? "si" : "vincular"
     return visible ? <Chat chat={chat} scale={scale} writing={writing} /> : null
